@@ -1149,7 +1149,6 @@ function startRoomListener(roomId) {
 
 function renderGameRoom(data) {
 
-  // ✅ ВСТАВЛЯЕШЬ СЮДА
   if (data.gamePhase === 'results' && data.hostUid !== currentUser.uid) {
     handleResultsForMe(data);
   }
@@ -1159,7 +1158,6 @@ function renderGameRoom(data) {
     dealerRunning = false; 
   }
 
-  // 👇 твой старый код остаётся
   const uid = currentUser.uid;
   const phase = data.gamePhase || 'waiting';
   const players = data.players || [];
@@ -1169,7 +1167,8 @@ function renderGameRoom(data) {
   const activePlayer = players[activeIdx];
   const isMyTurn = activePlayer?.uid === uid && phase === 'player-turn';
 
-  // дальше остальной код БЕЗ изменений
+  // ←←← ВСЁ, что было дальше в старой функции renderGameRoom, должно остаться здесь ↓
+  // (Phase badge, renderPlayersBar, renderCards, renderPlayerHands и т.д.)
 }
 
   // Phase badge
@@ -1226,7 +1225,7 @@ function renderGameRoom(data) {
     }
   } else if (phase === 'player-turn' && isMyTurn && myPlayer && !myPlayer.handDone) {
     show('game-controls');
-    const dbl = el('btn-double');
+    const dbl = el('btn-double';
     dbl.disabled = (myPlayer.cards?.length !== 2) || (myStats.balance < (myPlayer.bet||0));
   } else if (phase === 'results') {
     // Show results
