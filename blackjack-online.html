@@ -595,7 +595,7 @@ body::before {
 <!-- AUTH GATE -->
 <div id="auth-gate" class="auth-gate">
   <div class="auth-card">
-    <h2>🃏 КАЗИНО</h2>
+    <h2>Онлайн!</h2>
     <p class="auth-sub">ОНЛАЙН · БЛЭКДЖЕК</p>
     <div id="auth-checking" style="text-align:center;padding:16px"><div class="spinner"></div></div>
     <div id="auth-form" class="hidden">
@@ -1148,6 +1148,18 @@ function startRoomListener(roomId) {
 }
 
 function renderGameRoom(data) {
+
+  // ✅ ВСТАВЛЯЕШЬ СЮДА
+  if (data.gamePhase === 'results' && data.hostUid !== currentUser.uid) {
+    handleResultsForMe(data);
+  }
+
+  if (data.gamePhase === 'betting') { 
+    resultsHandled = false; 
+    dealerRunning = false; 
+  }
+
+  // 👇 твой старый код остаётся
   const uid = currentUser.uid;
   const phase = data.gamePhase || 'waiting';
   const players = data.players || [];
@@ -1156,6 +1168,9 @@ function renderGameRoom(data) {
   const activeIdx = data.activePlayerIndex || 0;
   const activePlayer = players[activeIdx];
   const isMyTurn = activePlayer?.uid === uid && phase === 'player-turn';
+
+  // дальше остальной код БЕЗ изменений
+}
 
   // Phase badge
   const phaseMap = {
@@ -1635,15 +1650,6 @@ function handleResultsForMe(data) {
   updateMyStats(myPlayer, bjS(data.dealerCards||[]));
 }
 
-// Override renderGameRoom to handle results for non-host
-const _origRender = renderGameRoom;
-function renderGameRoom(data) {
-  if (data.gamePhase === 'results' && data.hostUid !== currentUser.uid) {
-    handleResultsForMe(data);
-  }
-  if (data.gamePhase === 'betting') { resultsHandled = false; dealerRunning = false; }
-  _origRender(data);
-}
 
 // ── CHAT ──────────────────────────────────────────────────
 function startChatListener(roomId) {
