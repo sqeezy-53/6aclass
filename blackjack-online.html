@@ -1148,6 +1148,7 @@ function startRoomListener(roomId) {
 }
 
 function renderGameRoom(data) {
+
   if (data.gamePhase === 'results' && data.hostUid !== currentUser.uid) {
     handleResultsForMe(data);
   }
@@ -1157,6 +1158,7 @@ function renderGameRoom(data) {
     dealerRunning = false; 
   }
 
+  // 👇 весь старый код функции renderGameRoom должен быть здесь
   const uid = currentUser.uid;
   const phase = data.gamePhase || 'waiting';
   const players = data.players || [];
@@ -1166,7 +1168,24 @@ function renderGameRoom(data) {
   const activePlayer = players[activeIdx];
   const isMyTurn = activePlayer?.uid === uid && phase === 'player-turn';
 
-  // дальше остальной код БЕЗ изменений
+  // Phase badge
+  const phaseMap = {
+    waiting: ['waiting','Ожидание игроков'],
+    betting: ['betting','Ставки'],
+    dealing: ['playing','Раздача'],
+    'player-turn': ['playing','Ход игроков'],
+    'dealer-turn': ['playing','Ход дилера'],
+    results: ['results','Результаты']
+  };
+  const [phaseClass, phaseLabel] = phaseMap[phase] || ['waiting','…'];
+  const pb = el('phase-badge');
+  pb.className = `phase-badge ${phaseClass}`;
+  pb.innerHTML = `<span class="phase-dot"></span> ${phaseLabel}`;
+
+  // Players bar, dealer, hands и всё остальное — оставь как было раньше
+  renderPlayersBar(players, activeIdx, uid, phase);
+  renderCards(data.dealerCards||[], 'dealer-cards', ['player-turn','betting','dealing'].includes(phase) && (data.dealerCards||[]).length > 0);
+  // ... (весь остальной код renderGameRoom, который был в оригинальном файле)
 }
 
   // Phase badge
