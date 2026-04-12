@@ -1932,6 +1932,21 @@ function renderHome(){
     if(own)d.onclick=()=>showScreen(item.id);
     g.appendChild(d);
   });
+  // ── Онлайн Блэкджек ──
+  const onlineCard=document.createElement('div');
+  onlineCard.className='game-card';
+  onlineCard.style.cssText='border-color:rgba(46,204,113,0.45);box-shadow:0 0 28px rgba(46,204,113,0.12);';
+  onlineCard.innerHTML=`
+    <span class="game-icon">🌐</span>
+    <div class="game-name" style="color:var(--gold2)">Блэкджек Онлайн</div>
+    <div class="game-desc">Мультиплеер · До 5 игроков</div>
+    <div style="margin-top:10px;font-family:'Cinzel',serif;font-size:.6em;letter-spacing:2px;color:rgba(46,204,113,.8);display:flex;align-items:center;justify-content:center;gap:5px">
+      <span style="width:6px;height:6px;border-radius:50%;background:#2ecc71;box-shadow:0 0 6px #2ecc71;display:inline-block"></span>
+      ОНЛАЙН
+    </div>
+  `;
+  onlineCard.onclick=()=>window.open('blackjack-online.html','_blank');
+  g.appendChild(onlineCard);
   checkDaily();
 }
 function renderShop(){
