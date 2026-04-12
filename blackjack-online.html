@@ -1166,9 +1166,6 @@ function renderGameRoom(data) {
   const activePlayer = players[activeIdx];
   const isMyTurn = activePlayer?.uid === uid && phase === 'player-turn';
 
-  // весь остальной оригинальный код функции (phase badge, renderPlayersBar и т.д.)
-}
-
   // Phase badge
   const phaseMap = {
     waiting: ['waiting','Ожидание игроков'],
@@ -1257,6 +1254,7 @@ function renderGameRoom(data) {
   if (phase === 'player-turn' && isHost) {
     checkAdvancePlayerTurn(data);
   }
+}
 
 function renderPlayersBar(players, activeIdx, myUid, phase) {
   const bar = el('players-bar'); bar.innerHTML = '';
