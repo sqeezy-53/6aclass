@@ -3035,9 +3035,11 @@ function spinRoulette(choice){
 
     if(win > 0){
       addCoins(win);
-      roulette-out.textContent = `Выпало ${result.n} — +${win} ⭐`;
+      document.getElementById("roulette-out").textContent =
+  `Выпало ${result.n} — +${win} ⭐`;
     } else {
-      roulette-out.textContent = `Выпало ${result.n} — проигрыш`;
+      document.getElementById("roulette-out").textContent =
+  `Выпало ${result.n} — проигрыш`;
     }
 
     rouletteSpinning = false;
