@@ -2996,27 +2996,17 @@ function spinRoulette(choice){
   }
 
   function animate(){
-    wheelAngle += wheelSpeed;
+    angle += wheelSpeed;
     wheelSpeed *= 0.985;
 
-    ballAngle -= ballSpeed;
-    ballSpeed *= 0.992;
+    drawWheel();
 
-    const radius = 130;
-    const x = 150 + Math.cos(ballAngle) * radius;
-    const y = 150 + Math.sin(ballAngle) * radius;
-
-    ball.style.left = x + "px";
-    ball.style.top = y + "px";
-
-    draw();
-
-    if(wheelSpeed > 0.01 || ballSpeed > 0.01){
-      requestAnimationFrame(animate);
+    if(wheelSpeed > 0.01){
+        requestAnimationFrame(animate);
     } else {
-      finish();
+        finish();
     }
-  }
+}
 
   function finish(){
     const step = (2*Math.PI)/sectors.length;
@@ -3079,27 +3069,11 @@ function spinRoulette(choice){
   let angle = 0;
   let speed = Math.random()*0.3 + 0.25;
 
-  function draw(){
-    ctx.clearRect(0,0,300,300);
-
-    sectors.forEach((s,i)=>{
-      const start = angle + i * (2*Math.PI/sectors.length);
-      const end = start + (2*Math.PI/sectors.length);
-
-      ctx.beginPath();
-      ctx.moveTo(150,150);
-      ctx.arc(150,150,140,start,end);
-      ctx.fillStyle = s.color;
-      ctx.fill();
-    });
-  }
 
   function animate(){
     angle += speed;
     speed *= 0.985;
-
-    draw();
-
+    drawWheel();
     if(speed > 0.01){
       requestAnimationFrame(animate);
     } else {
