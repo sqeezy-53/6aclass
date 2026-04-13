@@ -1482,6 +1482,46 @@ body::before {
   border-radius: 4px;
 }
 .btn-logout:hover { color: var(--gold); border-color: rgba(212,175,55,.45); }
+
+.closed-ribbon {
+  position: absolute;
+  top: 12px;
+  left: -40px;
+  width: 180px;
+  text-align: center;
+  transform: rotate(-25deg);
+  background: linear-gradient(90deg, #e8c547, #fff0a0, #e8c547);
+  color: #120810;
+  font-family: 'Cinzel', serif;
+  font-size: 0.7em;
+  letter-spacing: 2px;
+  padding: 6px 0;
+  box-shadow: 0 0 15px rgba(232,197,71,0.6);
+  z-index: 5;
+  overflow: hidden;
+}
+
+/* движущийся блеск */
+.closed-ribbon::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(120deg, transparent, rgba(255,255,255,0.7), transparent);
+  animation: shineMove 2s infinite;
+}
+
+@keyframes shineMove {
+  0% { left: -100%; }
+  100% { left: 150%; }
+}
+
+.game-card {
+  position: relative;
+}
+
 </style>
 </head>
 <body>
@@ -1897,7 +1937,7 @@ body::before {
 
 <script>
 // ── STATE ──────────────────────────────────────────────
-let S = { coins:1000, owned:['blackjack','lucky','slots','roulette','hilo'], lastDaily:0, pname:'Игрок',
+let S = { coins:1000, owned:['blackjack','lucky','slots','hilo'], lastDaily:0, pname:'Игрок',
   bj:{bet:25,wins:0,losses:0,draws:0,gain:0}, pk:{wins:0,losses:0},
   kosBet:50, paukBet:75, dkBet:40, luckyBet:25, slotsBet:25, rouletteBet:25, hiloBet:25 };
 
@@ -2114,6 +2154,10 @@ function paintAllBets(){
 
 // ── NAV ────────────────────────────────────────────────
 function showScreen(id){
+  if(id === 'roulette'){
+  toast('Рулетка временно закрыта');
+  return;
+}
   const scr=document.getElementById('screen-'+id);
   if(!scr){toast('Экран не найден');return;}
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
@@ -2142,7 +2186,7 @@ const ITEMS=[
   {id:'blackjack',name:'Блэкджек',icon:'🃏',price:0,desc:'До 21 против дилера'},
   {id:'lucky',name:'На удачу',icon:'🎯',price:0,desc:'Красное или чёрное - одна карта'},
   {id:'slots',name:'Слоты',icon:'🎰',price:0,desc:'Три барабана, комбо на ⭐'},
-  {id:'roulette',name:'Рулетка',icon:'🎡',price:0,desc:'Цвет: красное, чёрное, зеро'},
+  {id:'roulette',name:'Рулетка 🔒',icon:'🎡',price:0,desc:'Временно закрыта'},
   {id:'hilo',name:'Больше-меньше',icon:'📈',price:0,desc:'Следующая карта выше или ниже'},
   {id:'durak',name:'Дурак',icon:'🤡',price:300,desc:'Против компьютера, колода 36'},
   {id:'kosinka',name:'Косынка',icon:'♠',price:200,desc:'Пасьянс по классике'},
@@ -2150,14 +2194,30 @@ const ITEMS=[
   {id:'poker',name:'Покер',icon:'🎴',price:500,desc:'Пять карт и замена'},
 ];
 function renderHome(){
-  const g=document.getElementById('games-grid');g.innerHTML='';
+  const g = document.getElementById('games-grid');
+  g.innerHTML = '';
+
   ITEMS.forEach(item=>{
-    const own=S.owned.includes(item.id);
-    const d=document.createElement('div');d.className='game-card'+(own?'':' locked');
-    d.innerHTML=`<span class="game-icon">${item.icon}</span><div class="game-name">${item.name}</div><div class="game-desc">${item.desc}</div>${own?'':'<div class="lock-badge">🔒 За ⭐ откроется</div>'}`;
-    if(own)d.onclick=()=>showScreen(item.id);
+    const own = S.owned.includes(item.id);
+
+    const d = document.createElement('div');
+    d.className = 'game-card' + (own ? '' : ' locked');
+
+    d.innerHTML = `
+      <span class="game-icon">${item.icon}</span>
+      <div class="game-name">${item.name}</div>
+      <div class="game-desc">${item.desc}</div>
+      ${own ? '' : '<div class="lock-badge">🔒 За ⭐ откроется</div>'}
+      ${item.id === 'roulette' ? '<div class="closed-ribbon">ЗАКРЫТО</div>' : ''}
+    `;
+
+    if(own && item.id !== 'roulette'){
+      d.onclick = () => showScreen(item.id);
+    }
+
     g.appendChild(d);
   });
+}
   // ── Онлайн Блэкджек ──
   const onlineCard=document.createElement('div');
   onlineCard.className='game-card';
