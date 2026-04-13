@@ -326,6 +326,13 @@ body::before {
   opacity: 0.05;
   transform: rotate(15deg);
 }
+
+#roulette-wheel {
+  border-radius: 50%;
+  border: 3px solid gold;
+  box-shadow: 0 0 30px rgba(232,197,71,0.4);
+}
+
 .daily-icon { font-size: 1.8em; }
 .daily-text-wrap { flex: 1; }
 .daily-title {
@@ -1813,29 +1820,32 @@ body::before {
   <div class="bj-wrap">
     <div class="sec-title">Рулетка</div>
 
+    <!-- СТАВКА -->
+    <div class="bet-row compact">
+      <span class="bet-label">⭐ ставка:</span>
+      <button class="bet-chip" onclick="stackBet('roulette',10)">10</button>
+      <button class="bet-chip" onclick="stackBet('roulette',25)">25</button>
+      <button class="bet-chip" onclick="stackBet('roulette',50)">50</button>
+      <button class="bet-chip" onclick="stackBet('roulette',100)">100</button>
+
+      <div class="bet-total-wrap">
+        <span class="bet-total" id="roulette-bet-disp">25</span>
+      </div>
+    </div>
+
+    <!-- КОЛЕСО -->
     <div style="position:relative; width:300px; margin:auto;">
       <canvas id="roulette-wheel" width="300" height="300"></canvas>
-
-      <div id="ball" style="
-        position:absolute;
-        width:12px;
-        height:12px;
-        background:white;
-        border-radius:50%;
-        top:0;
-        left:50%;
-        transform:translate(-50%, -50%);
-        box-shadow:0 0 10px #fff;
-      "></div>
     </div>
 
+    <!-- ВЫБОР -->
     <div class="roulette-picks">
-      <button class="g-btn" onclick="spinRoulette('red')">Красное</button>
-      <button class="g-btn" onclick="spinRoulette('black')">Чёрное</button>
-      <button class="g-btn" onclick="spinRoulette('green')">Зеро</button>
+      <button class="g-btn" onclick="spinRoulette('red')">Красное x2</button>
+      <button class="g-btn" onclick="spinRoulette('black')">Чёрное x2</button>
+      <button class="g-btn" onclick="spinRoulette('green')">Зеро x14</button>
     </div>
 
-    <div id="roulette-out"></div>
+    <div class="result-box" id="roulette-out"></div>
   </div>
 </div>
 
@@ -2923,6 +2933,96 @@ function spinRoulette(choice){
 }
 
 drawWheel();
+let rouletteSpinning = false;
+
+function spinRoulette(choice){
+  if(rouletteSpinning) return;
+
+  const bet = S.rouletteBet || 25;
+
+  if(S.coins < bet){
+    toast("Недостаточно ⭐");
+    return;
+  }
+
+  rouletteSpinning = true;
+  spend(bet);
+
+  const wheel = document.getElementById("roulette-wheel");
+  const ctx = wheel.getContext("2d");
+
+  const sectors = [
+    {color:'green', val:'0'},
+    {color:'red', val:'R'},
+    {color:'black', val:'B'},
+    {color:'red', val:'R'},
+    {color:'black', val:'B'},
+    {color:'red', val:'R'},
+    {color:'black', val:'B'},
+  ];
+
+  let angle = 0;
+  let speed = Math.random()*0.3 + 0.25;
+
+  function draw(){
+    ctx.clearRect(0,0,300,300);
+
+    sectors.forEach((s,i)=>{
+      const start = angle + i * (2*Math.PI/sectors.length);
+      const end = start + (2*Math.PI/sectors.length);
+
+      ctx.beginPath();
+      ctx.moveTo(150,150);
+      ctx.arc(150,150,140,start,end);
+      ctx.fillStyle = s.color;
+      ctx.fill();
+    });
+  }
+
+  function animate(){
+    angle += speed;
+    speed *= 0.985;
+
+    draw();
+
+    if(speed > 0.01){
+      requestAnimationFrame(animate);
+    } else {
+      finish();
+    }
+  }
+
+  function finish(){
+    const index = Math.floor(
+      (sectors.length - (angle / (2*Math.PI)) % sectors.length)
+    ) % sectors.length;
+
+    const result = sectors[index].color;
+
+    let win = 0;
+
+    if(choice === result){
+      if(result === 'green'){
+        win = bet * 14;
+      } else {
+        win = bet * 2;
+      }
+    }
+
+    if(win > 0){
+      addCoins(win);
+      document.getElementById("roulette-out").textContent =
+        "Выигрыш: +" + win + " ⭐";
+    } else {
+      document.getElementById("roulette-out").textContent =
+        "Проигрыш 😢";
+    }
+
+    rouletteSpinning = false;
+  }
+
+  animate();
+}
 </script>
 
 </div><!-- /main-app -->
