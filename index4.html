@@ -329,8 +329,11 @@ body::before {
 
 #roulette-wheel {
   border-radius: 50%;
-  border: 3px solid gold;
-  box-shadow: 0 0 30px rgba(232,197,71,0.4);
+  border: 6px solid #e8c547;
+  box-shadow:
+    0 0 40px rgba(232,197,71,0.6),
+    inset 0 0 30px rgba(0,0,0,0.8);
+  background: radial-gradient(circle, #111 0%, #000 100%);
 }
 
 .daily-icon { font-size: 1.8em; }
@@ -2891,7 +2894,6 @@ const wheelNumbers = [
   {n:12,c:'red'},{n:35,c:'black'},{n:3,c:'red'},{n:26,c:'black'}
 ];
 
-let angle = 0;
 
 function drawWheel() {
   const canvas = document.getElementById("roulette-wheel");
@@ -3006,6 +3008,16 @@ function animate(){
     } else {
         finish();
     }
+    const ball = document.getElementById('ball');
+const radius = 130;
+
+let ballAngle = -angle * 1.5;
+
+const x = 150 + Math.cos(ballAngle) * radius;
+const y = 150 + Math.sin(ballAngle) * radius;
+
+ball.style.left = x + 'px';
+ball.style.top = y + 'px';
 }
 
   function finish(){
@@ -3040,33 +3052,41 @@ function animate(){
 
 drawWheel();
 
-function spinRoulette(choice){
-  if(rouletteSpinning) return;
-
-  const bet = S.rouletteBet || 25;
-
-  if(S.coins < bet){
+function spinRoulette(choice) {
+  if (S.coins < S.rouletteBet) {
     toast("Недостаточно ⭐");
     return;
   }
 
-  rouletteSpinning = true;
-  spend(bet);
+  spend(S.rouletteBet);
 
-  const wheel = document.getElementById("roulette-wheel");
-  const ctx = wheel.getContext("2d");
+  let spinAngle = Math.random() * 2000 + 2000; // сила вращения
+  let current = 0;
 
-  const sectors = [
-    {color:'green', val:'0'},
-    {color:'red', val:'R'},
-    {color:'black', val:'B'},
-    {color:'red', val:'R'},
-    {color:'black', val:'B'},
-    {color:'red', val:'R'},
-    {color:'black', val:'B'},
-  ];
+  function animate() {
+    current += 20;
 
-let angle = 0;
+    angle += current * 0.002;
+
+    ctx.clearRect(0, 0, 300, 300);
+    ctx.save();
+    ctx.translate(150, 150);
+    ctx.rotate(angle);
+    ctx.translate(-150, -150);
+    drawWheel();
+    ctx.restore();
+
+    if (current > 0.5) {
+      current *= 0.97;
+      requestAnimationFrame(animate);
+    } else {
+      finish(choice);
+    }
+  }
+
+  animate();
+}
+
 let speed = Math.random()*0.3 + 0.25;
 
 
@@ -3113,6 +3133,58 @@ let speed = Math.random()*0.3 + 0.25;
   animate();
 }
 console.log("JS работает");
+
+const wheel = document.getElementById('roulette-wheel');
+const ctx = wheel.getContext('2d');
+
+const sectors = [
+  { color: 'green', value: '0' },
+  { color: 'red', value: 'R' },
+  { color: 'black', value: 'B' },
+  { color: 'red', value: 'R' },
+  { color: 'black', value: 'B' },
+  { color: 'red', value: 'R' },
+  { color: 'black', value: 'B' },
+  { color: 'red', value: 'R' },
+];
+
+let angle = 0;
+
+function drawWheel() {
+  const arc = (Math.PI * 2) / sectors.length;
+
+  for (let i = 0; i < sectors.length; i++) {
+    const start = i * arc;
+
+    ctx.beginPath();
+    ctx.fillStyle = sectors[i].color;
+    ctx.moveTo(150, 150);
+    ctx.arc(150, 150, 150, start, start + arc);
+    ctx.fill();
+  }
+}
+
+drawWheel();
+
+function finish(choice) {
+  const index = Math.floor((angle % (Math.PI * 2)) / ((Math.PI * 2) / sectors.length));
+  const result = sectors[sectors.length - 1 - index];
+
+  let win = false;
+
+  if (choice === 'red' && result.color === 'red') win = true;
+  if (choice === 'black' && result.color === 'black') win = true;
+  if (choice === 'green' && result.color === 'green') win = true;
+
+  if (win) {
+    let mult = result.color === 'green' ? 14 : 2;
+    let reward = S.rouletteBet * mult;
+    addCoins(reward, `+${reward} ⭐`);
+    document.getElementById('roulette-out').textContent = 'ПОБЕДА';
+  } else {
+    document.getElementById('roulette-out').textContent = 'ПРОИГРЫШ';
+  }
+}
 </script>
 
 </div><!-- /main-app -->
