@@ -1576,7 +1576,7 @@ body::before {
       <div class="daily-title">Раз в день</div>
       <div class="daily-sub">Загляни сюда - немного ⭐ в копилку</div>
     </div>
-    <button type="button" class="daily-btn" id="daily-btn" onclick="claimDaily()">+200 ⭐</button>
+    <button type="button" class="daily-btn" id="daily-btn" onclick="claimDaily()">+1000 ⭐</button>
   </div>
   <div class="games-grid" id="games-grid"></div>
   <div class="spark-footer">✦ ✧ ★ ✧ ✦</div>
@@ -1591,8 +1591,6 @@ body::before {
     </div>
     <div class="shop-grid" id="shop-grid"></div>
     <div class="shop-free-banner">
-      <div class="sec-sub" style="margin-bottom:12px;">Мало ⭐ на открытие?</div>
-      <button type="button" class="g-btn" onclick="addCoins(500,'+500 ⭐')">+500 ⭐ подкинуть</button>
     </div>
   </div>
 </div>
@@ -1809,28 +1807,35 @@ body::before {
   </div>
 </div>
 
-<!-- ROULETTE (упрощённо) -->
 <div id="screen-roulette" class="screen">
-  <button type="button" class="back-btn" onclick="showScreen('home')">← Назад</button>
+  <button class="back-btn" onclick="showScreen('home')">← Назад</button>
+
   <div class="bj-wrap">
     <div class="sec-title">Рулетка</div>
-    <details class="game-help"><summary>Как играть</summary><p>Мини-рулетка: выпадет красное, чёрное или зеро (зелёное). Выбери цвет до спина - спишется выбранная ставка ⭐. Красное/чёрное дают x2, зеро x4. Это стилизация, не настоящее казино и не деньги.</p></details>
-    <div class="bet-row compact">
-      <span class="bet-label">⭐ на спин:</span>
-      <button type="button" class="bet-chip" onclick="stackBet('roulette',10)">10</button>
-      <button type="button" class="bet-chip" onclick="stackBet('roulette',25)">25</button>
-      <button type="button" class="bet-chip" onclick="stackBet('roulette',50)">50</button>
-      <div class="bet-stack-visual" id="roulette-stack-v"></div>
-      <div class="bet-total-wrap"><span class="bet-total-label">спин</span><span class="bet-total" id="roulette-bet-disp">25</span></div>
-      <button type="button" class="g-btn bet-clear" onclick="stackBet('roulette',0,true)">Сброс</button>
+
+    <div style="position:relative; width:300px; margin:auto;">
+      <canvas id="roulette-wheel" width="300" height="300"></canvas>
+
+      <div id="ball" style="
+        position:absolute;
+        width:12px;
+        height:12px;
+        background:white;
+        border-radius:50%;
+        top:0;
+        left:50%;
+        transform:translate(-50%, -50%);
+        box-shadow:0 0 10px #fff;
+      "></div>
     </div>
+
     <div class="roulette-picks">
-      <button type="button" class="g-btn" style="color:#e74c3c;border-color:rgba(231,76,60,0.45)" onclick="rouletteSpin('R')">Красное</button>
-      <button type="button" class="g-btn" onclick="rouletteSpin('B')">Чёрное</button>
-      <button type="button" class="g-btn" style="color:#2ecc71;border-color:rgba(46,204,113,0.4)" onclick="rouletteSpin('G')">Зеро</button>
+      <button class="g-btn" onclick="spinRoulette('red')">Красное</button>
+      <button class="g-btn" onclick="spinRoulette('black')">Чёрное</button>
+      <button class="g-btn" onclick="spinRoulette('green')">Зеро</button>
     </div>
-    <div class="roulette-result" id="roulette-out"></div>
-    <div class="result-box" id="roulette-result"></div>
+
+    <div id="roulette-out"></div>
   </div>
 </div>
 
@@ -2130,7 +2135,7 @@ function onEnterGame(id){
 // ── DAILY ──────────────────────────────────────────────
 function today(){const n=new Date();return n.getFullYear()*10000+n.getMonth()*100+n.getDate();}
 function checkDaily(){const b=document.getElementById('daily-btn');const ok=S.lastDaily!==today();b.disabled=!ok;b.textContent=ok?'+200 ⭐':'Уже брали ✓';}
-function claimDaily(){if(S.lastDaily===today())return;S.lastDaily=today();addCoins(200,'+200 ⭐');checkDaily();}
+function claimDaily(){if(S.lastDaily===today())return;S.lastDaily=today();addCoins(1000,'+1000 ⭐');checkDaily();}
 
 // ── HOME / SHOP ────────────────────────────────────────
 const ITEMS=[
@@ -2817,6 +2822,107 @@ if(_dkt&&!_dkt._dropInit){
   });
 }
 document.addEventListener('keydown',function(e){if(e.key==='Escape')closeCoinsPanel();});
+function passiveIncome(){
+  const now = Date.now();
+
+  if(!S.lastPassive) S.lastPassive = now;
+
+  if(now - S.lastPassive >= 30*60*1000){
+    addCoins(50, "+50 ⭐");
+    S.lastPassive = now;
+    save();
+  }
+}
+
+setInterval(passiveIncome, 10000);
+const wheelNumbers = [
+  {n:0, c:'green'},
+  {n:32,c:'red'},{n:15,c:'black'},{n:19,c:'red'},{n:4,c:'black'},
+  {n:21,c:'red'},{n:2,c:'black'},{n:25,c:'red'},{n:17,c:'black'},
+  {n:34,c:'red'},{n:6,c:'black'},{n:27,c:'red'},{n:13,c:'black'},
+  {n:36,c:'red'},{n:11,c:'black'},{n:30,c:'red'},{n:8,c:'black'},
+  {n:23,c:'red'},{n:10,c:'black'},{n:5,c:'red'},{n:24,c:'black'},
+  {n:16,c:'red'},{n:33,c:'black'},{n:1,c:'red'},{n:20,c:'black'},
+  {n:14,c:'red'},{n:31,c:'black'},{n:9,c:'red'},{n:22,c:'black'},
+  {n:18,c:'red'},{n:29,c:'black'},{n:7,c:'red'},{n:28,c:'black'},
+  {n:12,c:'red'},{n:35,c:'black'},{n:3,c:'red'},{n:26,c:'black'}
+];
+
+let angle = 0;
+
+function drawWheel() {
+  const canvas = document.getElementById("roulette-wheel");
+  if(!canvas) return;
+  const ctx = canvas.getContext("2d");
+  const size = canvas.width;
+  const arc = (2*Math.PI)/wheelNumbers.length;
+
+  ctx.clearRect(0,0,size,size);
+
+  for (let i=0;i<wheelNumbers.length;i++){
+    const w = wheelNumbers[i];
+
+    ctx.beginPath();
+    ctx.fillStyle = w.c;
+    ctx.moveTo(size/2,size/2);
+    ctx.arc(size/2,size/2,size/2, angle+i*arc, angle+(i+1)*arc);
+    ctx.fill();
+
+    ctx.fillStyle="#fff";
+    ctx.font="12px Arial";
+    ctx.fillText(w.n,
+      size/2 + Math.cos(angle+i*arc+arc/2)*110,
+      size/2 + Math.sin(angle+i*arc+arc/2)*110
+    );
+  }
+}
+
+function spinRoulette(choice){
+  if(S.coins < S.rouletteBet){ toast("Нет ⭐"); return; }
+
+  spend(S.rouletteBet);
+
+  let ball = document.getElementById("ball");
+
+  let wheelSpeed = 0.3;
+  let ballAngle = 0;
+  let ballSpeed = 0.6;
+
+  let interval = setInterval(()=>{
+    angle += wheelSpeed;
+    ballAngle -= ballSpeed;
+
+    wheelSpeed *= 0.985;
+    ballSpeed *= 0.99;
+
+    drawWheel();
+
+    const r = 130;
+    ball.style.left = (150 + Math.cos(ballAngle)*r) + "px";
+    ball.style.top  = (150 + Math.sin(ballAngle)*r) + "px";
+
+    if(ballSpeed < 0.02){
+      clearInterval(interval);
+
+      let index = Math.floor(((-angle % (2*Math.PI)) / (2*Math.PI)) * wheelNumbers.length);
+      if(index < 0) index += wheelNumbers.length;
+
+      let result = wheelNumbers[index];
+
+      document.getElementById("roulette-out").textContent =
+        `Выпало: ${result.n} (${result.c})`;
+
+      if(result.c === choice){
+        addCoins(S.rouletteBet * (choice==='green'?14:2), "Выигрыш!");
+      } else {
+        toast("Проигрыш");
+      }
+    }
+
+  },16);
+}
+
+drawWheel();
 </script>
 
 </div><!-- /main-app -->
