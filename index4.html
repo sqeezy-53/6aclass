@@ -2152,27 +2152,41 @@ function paintAllBets(){
   if(hb){hb.textContent=S.hiloBet;updateStackVis('hilo-stack-v',S.hiloBet);}
 }
 
-// ── NAV ────────────────────────────────────────────────
 function showScreen(id){
+  // блокируем рулетку
   if(id === 'roulette'){
-  toast('Рулетка временно закрыта');
-  return;
-}
-  const scr=document.getElementById('screen-'+id);
-  if(!scr){toast('Экран не найден');return;}
+    toast('Рулетка временно закрыта');
+    return;
+  }
+
+  const scr = document.getElementById('screen-'+id);
+  if(!scr){
+    toast('Экран не найден');
+    return;
+  }
+
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
   scr.classList.add('active');
-  document.querySelectorAll('.nav-tab').forEach((t,i)=>t.classList.toggle('active',['home','shop'][i]===id));
+
+  document.querySelectorAll('.nav-tab').forEach((t,i)=>
+    t.classList.toggle('active',['home','shop'][i]===id)
+  );
+
   document.body.classList.toggle('in-game',!['home','shop'].includes(id));
+
   closeCoinsPanel();
-  if(!['home','shop'].includes(id))onEnterGame(id);
+
+  if(!['home','shop'].includes(id)){
+    onEnterGame(id);
+  }
 }
+
 function onEnterGame(id){
   try{
-    if(id==='lucky')luckyRender();
-    if(id==='slots')slotsIdle();
-    if(id==='roulette')rouletteIdle();
-    if(id==='hilo')hiloEnsure();
+    if(id==='lucky') luckyRender();
+    if(id==='slots') slotsIdle();
+    // ❌ УБРАЛИ rouletteIdle
+    if(id==='hilo') hiloEnsure();
   }catch(_){}
 }
 
@@ -3038,7 +3052,7 @@ function loadUser(uid) {
   const defBj={bet:25,wins:0,losses:0,draws:0,gain:0};
   S.bj=(S.bj&&typeof S.bj==='object')?Object.assign({},defBj,S.bj):defBj;
   S.pk=(S.pk&&typeof S.pk==='object')?Object.assign({wins:0,losses:0},S.pk):{wins:0,losses:0};
-  if(!Array.isArray(S.owned))S.owned=['blackjack','lucky','slots','roulette','hilo'];
+  if(!Array.isArray(S.owned))S.owned=['blackjack','lucky','slots','hilo'];
   S.owned=[...new Set(S.owned)];
   ['blackjack','lucky','slots','roulette','hilo'].forEach(id=>{if(!S.owned.includes(id))S.owned.push(id);});
   S.bj.bet=Math.min(1000,Math.max(10,S.bj.bet==null?25:+S.bj.bet));
