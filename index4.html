@@ -1482,6 +1482,30 @@ body::before {
   border-radius: 4px;
 }
 .btn-logout:hover { color: var(--gold); border-color: rgba(212,175,55,.45); }
+/* ── BLACKJACK STYLES ── */
+.bj-container { max-width: 800px; margin: 0 auto; }
+.bj-table {
+  background: radial-gradient(circle at 50% 40%, var(--felt2) 0%, var(--felt) 100%);
+  border: 8px solid #3d2b1f;
+  border-radius: 40px;
+  padding: 40px 20px;
+  position: relative;
+  box-shadow: inset 0 0 80px rgba(0,0,0,0.8), 0 20px 50px rgba(0,0,0,0.9);
+  min-height: 480px;
+  display: flex; flex-direction: column; justify-content: space-between;
+}
+.bj-area { text-align: center; }
+.bj-label { font-family: 'Cinzel', serif; font-size: 0.75em; letter-spacing: 2px; color: rgba(212,175,55,0.4); margin-bottom: 12px; }
+.bj-hand { display: flex; justify-content: center; gap: 10px; min-height: 120px; flex-wrap: wrap; }
+.bj-score { font-family: 'Cinzel', serif; margin-top: 8px; font-weight: 700; color: var(--gold2); }
+.bj-controls { display: flex; justify-content: center; gap: 12px; margin-top: 30px; }
+.bj-card {
+  width: 80px; height: 112px; background: var(--cream); border-radius: 6px;
+  display: flex; flex-direction: column; justify-content: space-between; padding: 6px;
+  color: #111; font-weight: 700; font-size: 1.1em;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5); animation: cardDeal 0.4s cubic-bezier(0.18, 0.89, 0.32, 1.28) forwards;
+}
+.bj-card.red { color: var(--red); }
 </style>
 </head>
 <body>
@@ -1552,15 +1576,48 @@ body::before {
 
 <div id="toast"></div>
 
-<!-- HOME -->
 <div id="screen-home" class="screen active">
   <div class="home-header">
     <div class="home-title">КАРТОЧНЫЕ <span>ИГРЫ</span></div>
     <div class="home-sub">В браузере - выбери стол и играй на ⭐</div>
   </div>
+
+  <div style="text-align:center; margin: 20px 0;">
+    <button class="daily-btn" onclick="showScreen('bj')">Играть в Blackjack</button>
+  </div>
+
   <div class="home-ornament">
     <span class="home-ornament-diamond">◆ ◇ ◆</span>
   </div>
+</div> <div id="screen-bj" class="screen">
+  <div class="bj-container">
+    <div class="bj-table">
+      <div class="bj-area">
+        <div class="bj-label">Дилер</div>
+        <div id="bj-dealer-hand" class="bj-hand"></div>
+        <div id="bj-dealer-score" class="bj-score"></div>
+      </div>
+      
+      <div id="bj-msg" style="text-align:center; font-family:'Cinzel'; font-size:1.4em; min-height:1.5em; text-shadow:0 0 10px var(--gold);"></div>
+
+      <div class="bj-area">
+        <div id="bj-player-hand" class="bj-hand"></div>
+        <div id="bj-player-score" class="bj-score"></div>
+        <div class="bj-label" style="margin-top:10px;">Ваша рука</div>
+      </div>
+    </div>
+
+    <div class="bj-controls" id="bj-ctrl-bet">
+      <input type="number" id="bj-bet-input" value="10" min="1" style="width:80px; background:var(--dark3); border:1px solid var(--gold); color:var(--gold); padding:10px; border-radius:4px;">
+      <button class="daily-btn" onclick="startBJ()">Играть</button>
+    </div>
+
+    <div class="bj-controls" id="bj-ctrl-play" style="display:none;">
+      <button class="daily-btn" onclick="hitBJ()">Еще</button>
+      <button class="daily-btn" onclick="standBJ()" style="background:var(--dark4); color:var(--gold);">Хватит</button>
+    </div>
+  </div>
+</div>
 
   <div class="disclaimer-banner">
     <div class="disclaimer-icon">🚫</div>
@@ -3037,6 +3094,80 @@ function spinRouletteNew(pick){
 }
 
 drawWheelNew(rl_angle);
+
+// ── BLACKJACK LOGIC ──
+let bjDeck = [], bjPlayerHand = [], bjDealerHand = [], bjGameOver = false, bjCurrentBet = 0;
+
+function createDeck() {
+  const suits = ['♠','♥','♦','♣'], values = ['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
+  let deck = [];
+  for(let s of suits) for(let v of values) deck.push({s, v});
+  return deck.sort(() => Math.random() - 0.5);
+}
+
+function getBJScore(hand) {
+  let score = 0, aces = 0;
+  for(let c of hand) {
+    if(['J','Q','K'].includes(c.v)) score += 10;
+    else if(c.v === 'A') { score += 11; aces++; }
+    else score += parseInt(c.v);
+  }
+  while(score > 21 && aces > 0) { score -= 10; aces--; }
+  return score;
+}
+
+window.startBJ = async () => {
+  bjCurrentBet = parseInt(el('bj-bet-input').value) || 0;
+  if(bjCurrentBet > userStars) return showToast("Недостаточно звезд");
+  
+  await updateStars(-bjCurrentBet);
+  bjDeck = createDeck();
+  bjPlayerHand = [bjDeck.pop(), bjDeck.pop()];
+  bjDealerHand = [bjDeck.pop(), bjDeck.pop()];
+  bjGameOver = false;
+  
+  el('bj-ctrl-bet').style.display = 'none';
+  el('bj-ctrl-play').style.display = 'flex';
+  el('bj-msg').textContent = "";
+  renderBJ();
+};
+
+window.hitBJ = () => {
+  bjPlayerHand.push(bjDeck.pop());
+  if(getBJScore(bjPlayerHand) >= 21) standBJ();
+  else renderBJ();
+};
+
+window.standBJ = async () => {
+  bjGameOver = true;
+  while(getBJScore(bjDealerHand) < 17) bjDealerHand.push(bjDeck.pop());
+  
+  let p = getBJScore(bjPlayerHand), d = getBJScore(bjDealerHand), win = 0;
+  if(p > 21) msg = "Перебор!";
+  else if(d > 21 || p > d) { msg = "Победа!"; win = bjCurrentBet * 2; }
+  else if(p === d) { msg = "Ничья"; win = bjCurrentBet; }
+  else msg = "Дилер выиграл";
+
+  if(win > 0) await updateStars(win);
+  el('bj-msg').textContent = msg;
+  el('bj-ctrl-bet').style.display = 'flex';
+  el('bj-ctrl-play').style.display = 'none';
+  renderBJ();
+};
+
+function renderBJ() {
+  const draw = (h, id, hide) => {
+    el(id).innerHTML = h.map((c, i) => `
+      <div class="bj-card ${['♥','♦'].includes(c.s)?'red':''}">
+        <div>${hide && i===1 && !bjGameOver ? '?' : c.v + c.s}</div>
+      </div>`).join('');
+  };
+  draw(bjPlayerHand, 'bj-player-hand');
+  draw(bjDealerHand, 'bj-dealer-hand', true);
+  el('bj-player-score').textContent = getBJScore(bjPlayerHand);
+  el('bj-dealer-score').textContent = bjGameOver ? getBJScore(bjDealerHand) : "?";
+}
+
 </script>
 
 </div><!-- /main-app -->
