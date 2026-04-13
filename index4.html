@@ -1936,10 +1936,21 @@ body::before {
 </div>
 
 <script>
-// ── STATE ──────────────────────────────────────────────
-let S = { coins:1000, owned:['blackjack','lucky','slots','hilo'], lastDaily:0, pname:'Игрок',
-  bj:{bet:25,wins:0,losses:0,draws:0,gain:0}, pk:{wins:0,losses:0},
-  kosBet:50, paukBet:75, dkBet:40, luckyBet:25, slotsBet:25, rouletteBet:25, hiloBet:25 };
+let S = {
+  coins:1000,
+  owned:['blackjack','lucky','slots','hilo'], // ❌ убрали roulette
+  lastDaily:0,
+  pname:'Игрок',
+  bj:{bet:25,wins:0,losses:0,draws:0,gain:0},
+  pk:{wins:0,losses:0},
+  kosBet:50,
+  paukBet:75,
+  dkBet:40,
+  luckyBet:25,
+  slotsBet:25,
+  rouletteBet:25,
+  hiloBet:25
+};
 
 function save(){ try{localStorage.setItem('cv3',JSON.stringify(S));}catch(e){} }
 function load(){
@@ -2153,7 +2164,6 @@ function paintAllBets(){
 }
 
 function showScreen(id){
-  // блокируем рулетку
   if(id === 'roulette'){
     toast('Рулетка временно закрыта');
     return;
@@ -2185,7 +2195,6 @@ function onEnterGame(id){
   try{
     if(id==='lucky') luckyRender();
     if(id==='slots') slotsIdle();
-    // ❌ УБРАЛИ rouletteIdle
     if(id==='hilo') hiloEnsure();
   }catch(_){}
 }
@@ -2227,7 +2236,6 @@ function renderHome(){
       ${item.id === 'roulette' ? '<div class="closed-ribbon">ЗАКРЫТО</div>' : ''}
     `;
 
-    // блокируем рулетку
     if(own && item.id !== 'roulette'){
       d.onclick = () => showScreen(item.id);
     }
@@ -2235,6 +2243,7 @@ function renderHome(){
     g.appendChild(d);
   });
 }
+
   // ── Онлайн Блэкджек ──
   const onlineCard=document.createElement('div');
   onlineCard.className='game-card';
@@ -3052,7 +3061,7 @@ function loadUser(uid) {
   const defBj={bet:25,wins:0,losses:0,draws:0,gain:0};
   S.bj=(S.bj&&typeof S.bj==='object')?Object.assign({},defBj,S.bj):defBj;
   S.pk=(S.pk&&typeof S.pk==='object')?Object.assign({wins:0,losses:0},S.pk):{wins:0,losses:0};
-  if(!Array.isArray(S.owned))S.owned=['blackjack','lucky','slots','hilo'];
+  if(!Array.isArray(S.owned))S.owned=['blackjack','lucky','slots','roulette','hilo'];
   S.owned=[...new Set(S.owned)];
   ['blackjack','lucky','slots','roulette','hilo'].forEach(id=>{if(!S.owned.includes(id))S.owned.push(id);});
   S.bj.bet=Math.min(1000,Math.max(10,S.bj.bet==null?25:+S.bj.bet));
