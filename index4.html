@@ -2249,7 +2249,7 @@ function renderHome(){
     g.appendChild(d);
   });
 
-  // ✅ ВОТ ТУТ ДОЛЖЕН БЫТЬ ТВОЙ КОД
+  // ✅ онлайн карточка
   const onlineCard = document.createElement('div');
   onlineCard.className='game-card';
   onlineCard.style.cssText='border-color:rgba(46,204,113,0.45);box-shadow:0 0 28px rgba(46,204,113,0.12);';
@@ -2265,37 +2265,6 @@ function renderHome(){
 
   checkDaily();
 }
-
-  // ✅ ВСТАВИЛИ СЮДА
-  const onlineCard = document.createElement('div');
-  onlineCard.className='game-card';
-  onlineCard.style.cssText='border-color:rgba(46,204,113,0.45);box-shadow:0 0 28px rgba(46,204,113,0.12);';
-
-  onlineCard.innerHTML=`
-    <span class="game-icon">🌐</span>
-    <div class="game-name" style="color:var(--gold2)">Блэкджек Онлайн</div>
-    <div class="game-desc">Мультиплеер · До 5 игроков</div>
-  `;
-
-  onlineCard.onclick=()=>window.open('blackjack-online.html','_blank');
-  g.appendChild(onlineCard);
-
-  checkDaily();
-
-  const onlineCard = document.createElement('div');
-onlineCard.className='game-card';
-onlineCard.style.cssText='border-color:rgba(46,204,113,0.45);box-shadow:0 0 28px rgba(46,204,113,0.12);';
-
-onlineCard.innerHTML=`
-  <span class="game-icon">🌐</span>
-  <div class="game-name" style="color:var(--gold2)">Блэкджек Онлайн</div>
-  <div class="game-desc">Мультиплеер · До 5 игроков</div>
-`;
-
-onlineCard.onclick=()=>window.open('blackjack-online.html','_blank');
-g.appendChild(onlineCard);
-
-checkDaily();
 
 function renderShop(){
   const g=document.getElementById('shop-grid');g.innerHTML='';
@@ -3044,6 +3013,11 @@ function spinRoulette(choice){
 }
 
 drawWheel();
+
+load();
+renderHome();
+renderShop();
+
 </script>
 
 </div><!-- /main-app -->
