@@ -1961,7 +1961,7 @@ function load(){
   const defBj={bet:25,wins:0,losses:0,draws:0,gain:0};
   S.bj=(S.bj&&typeof S.bj==='object')?Object.assign({},defBj,S.bj):defBj;
   S.pk=(S.pk&&typeof S.pk==='object')?Object.assign({wins:0,losses:0},S.pk):{wins:0,losses:0};
-  if(!Array.isArray(S.owned))S.owned=['blackjack','lucky','slots','roulette','hilo'];
+  if(!Array.isArray(S.owned))S.owned=['blackjack','lucky','slots','hilo'];
   if(typeof S.kosBet!=='number')S.kosBet=50;
   if(typeof S.paukBet!=='number')S.paukBet=75;
   if(typeof S.dkBet!=='number')S.dkBet=40;
@@ -2260,7 +2260,7 @@ function renderHome(){
   onlineCard.onclick=()=>window.open('blackjack-online.html','_blank');
   g.appendChild(onlineCard);
   checkDaily();
-}
+  
 function renderShop(){
   const g=document.getElementById('shop-grid');g.innerHTML='';
   ITEMS.forEach(item=>{
