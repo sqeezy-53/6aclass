@@ -1952,6 +1952,13 @@ let S = {
   hiloBet:25
 };
 
+let lucky = {
+  cur:null,
+  phase:'idle',
+  deck:[],
+  stakePaid:0
+};
+
 function save(){ try{localStorage.setItem('cv3',JSON.stringify(S));}catch(e){} }
 function load(){
   try{
@@ -2216,6 +2223,7 @@ const ITEMS=[
   {id:'pauk',name:'Паук',icon:'🕷',price:400,desc:'Одна масть, десять колонок'},
   {id:'poker',name:'Покер',icon:'🎴',price:500,desc:'Пять карт и замена'},
 ];
+
 function renderHome(){
   const g = document.getElementById('games-grid');
   g.innerHTML = '';
@@ -2230,9 +2238,7 @@ function renderHome(){
       <span class="game-icon">${item.icon}</span>
       <div class="game-name">${item.name}</div>
       <div class="game-desc">${item.desc}</div>
-
       ${own ? '' : '<div class="lock-badge">🔒 За ⭐ откроется</div>'}
-
       ${item.id === 'roulette' ? '<div class="closed-ribbon">ЗАКРЫТО</div>' : ''}
     `;
 
@@ -2242,6 +2248,39 @@ function renderHome(){
 
     g.appendChild(d);
   });
+
+  // ✅ ВОТ ТУТ ДОЛЖЕН БЫТЬ ТВОЙ КОД
+  const onlineCard = document.createElement('div');
+  onlineCard.className='game-card';
+  onlineCard.style.cssText='border-color:rgba(46,204,113,0.45);box-shadow:0 0 28px rgba(46,204,113,0.12);';
+
+  onlineCard.innerHTML=`
+    <span class="game-icon">🌐</span>
+    <div class="game-name" style="color:var(--gold2)">Блэкджек Онлайн</div>
+    <div class="game-desc">Мультиплеер · До 5 игроков</div>
+  `;
+
+  onlineCard.onclick=()=>window.open('blackjack-online.html','_blank');
+  g.appendChild(onlineCard);
+
+  checkDaily();
+}
+
+  // ✅ ВСТАВИЛИ СЮДА
+  const onlineCard = document.createElement('div');
+  onlineCard.className='game-card';
+  onlineCard.style.cssText='border-color:rgba(46,204,113,0.45);box-shadow:0 0 28px rgba(46,204,113,0.12);';
+
+  onlineCard.innerHTML=`
+    <span class="game-icon">🌐</span>
+    <div class="game-name" style="color:var(--gold2)">Блэкджек Онлайн</div>
+    <div class="game-desc">Мультиплеер · До 5 игроков</div>
+  `;
+
+  onlineCard.onclick=()=>window.open('blackjack-online.html','_blank');
+  g.appendChild(onlineCard);
+
+  checkDaily();
 }
 
   // ── Онлайн Блэкджек ──
@@ -2260,7 +2299,7 @@ function renderHome(){
   onlineCard.onclick=()=>window.open('blackjack-online.html','_blank');
   g.appendChild(onlineCard);
   checkDaily();
-  
+
 function renderShop(){
   const g=document.getElementById('shop-grid');g.innerHTML='';
   ITEMS.forEach(item=>{
@@ -2287,7 +2326,6 @@ function renderShop(){
 
 // ── BLACKJACK ──────────────────────────────────────────
 let bj={deck:[],ph:[],dh:[],over:false,stake:0};
-let lucky={cur:null,phase:'idle',deck:[],stakePaid:0};
 function bjV(c){return['J','Q','K'].includes(c.v)?10:c.v==='A'?11:parseInt(c.v);}
 function bjS(h){let s=h.reduce((a,c)=>a+bjV(c),0),ac=h.filter(c=>c.v==='A').length;while(s>21&&ac-->0)s-=10;return s;}
 function bjStats(){const b=S.bj;['sw','sl','sd'].forEach((id,i)=>document.getElementById('bj-'+id).textContent=[b.wins,b.losses,b.draws][i]);const sg=document.getElementById('bj-sg');sg.textContent=(b.gain>=0?'+':'')+b.gain;sg.style.color=b.gain>0?'#2ecc71':b.gain<0?'#e57373':'var(--gold)';}
