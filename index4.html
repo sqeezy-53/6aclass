@@ -326,16 +326,6 @@ body::before {
   opacity: 0.05;
   transform: rotate(15deg);
 }
-
-#roulette-wheel {
-  border-radius: 50%;
-  border: 6px solid #e8c547;
-  box-shadow:
-    0 0 40px rgba(232,197,71,0.6),
-    inset 0 0 30px rgba(0,0,0,0.8);
-  background: radial-gradient(circle, #111 0%, #000 100%);
-}
-
 .daily-icon { font-size: 1.8em; }
 .daily-text-wrap { flex: 1; }
 .daily-title {
@@ -1492,31 +1482,6 @@ body::before {
   border-radius: 4px;
 }
 .btn-logout:hover { color: var(--gold); border-color: rgba(212,175,55,.45); }
-#roulette-pointer {
-  position:absolute;
-  top:-10px;
-  left:50%;
-  transform:translateX(-50%);
-  width:0;
-  height:0;
-  border-left:10px solid transparent;
-  border-right:10px solid transparent;
-  border-bottom:20px solid gold;
-  z-index:10;
-  filter: drop-shadow(0 0 6px gold);
-}
-
-#ball {
-  position:absolute;
-  width:10px;
-  height:10px;
-  background:white;
-  border-radius:50%;
-  top:50%;
-  left:50%;
-  transform:translate(-50%, -50%);
-  box-shadow:0 0 12px #fff;
-}
 </style>
 </head>
 <body>
@@ -1848,40 +1813,29 @@ body::before {
   <div class="bj-wrap">
     <div class="sec-title">Рулетка</div>
 
-    <!-- СТАВКА -->
-    <div class="bet-row compact">
-      <span class="bet-label">⭐ ставка:</span>
-      <button class="bet-chip" onclick="stackBet('roulette',10)">10</button>
-      <button class="bet-chip" onclick="stackBet('roulette',25)">25</button>
-      <button class="bet-chip" onclick="stackBet('roulette',50)">50</button>
-      <button class="bet-chip" onclick="stackBet('roulette',100)">100</button>
-
-      <div class="bet-total-wrap">
-        <span class="bet-total" id="roulette-bet-disp">25</span>
-      </div>
-    </div>
-
     <div style="position:relative; width:300px; margin:auto;">
+      <canvas id="roulette-wheel" width="300" height="300"></canvas>
 
-  <!-- стрелка -->
-  <div id="roulette-pointer"></div>
-
-  <!-- колесо -->
-  <canvas id="roulette-wheel" width="300" height="300"></canvas>
-
-  <!-- шарик -->
-  <div id="ball"></div>
-
-</div>
-
-    <!-- ВЫБОР -->
-    <div class="roulette-picks">
-      <button class="g-btn" onclick="spinRoulette('red')">Красное x2</button>
-      <button class="g-btn" onclick="spinRoulette('black')">Чёрное x2</button>
-      <button class="g-btn" onclick="spinRoulette('green')">Зеро x14</button>
+      <div id="ball" style="
+        position:absolute;
+        width:12px;
+        height:12px;
+        background:white;
+        border-radius:50%;
+        top:0;
+        left:50%;
+        transform:translate(-50%, -50%);
+        box-shadow:0 0 10px #fff;
+      "></div>
     </div>
 
-    <div class="result-box" id="roulette-out"></div>
+    <div class="roulette-picks">
+      <button class="g-btn" onclick="spinRoulette('red')">Красное</button>
+      <button class="g-btn" onclick="spinRoulette('black')">Чёрное</button>
+      <button class="g-btn" onclick="spinRoulette('green')">Зеро</button>
+    </div>
+
+    <div id="roulette-out"></div>
   </div>
 </div>
 
@@ -2894,6 +2848,7 @@ const wheelNumbers = [
   {n:12,c:'red'},{n:35,c:'black'},{n:3,c:'red'},{n:26,c:'black'}
 ];
 
+let angle = 0;
 
 function drawWheel() {
   const canvas = document.getElementById("roulette-wheel");
@@ -2922,269 +2877,52 @@ function drawWheel() {
   }
 }
 
-let rouletteSpinning = false;
-
 function spinRoulette(choice){
-  if(rouletteSpinning) return;
-
-  const bet = S.rouletteBet || 25;
-
-  if(S.coins < bet){
-    toast("Недостаточно ⭐");
-    return;
-  }
-
-  rouletteSpinning = true;
-  spend(bet);
-
-  const wheel = document.getElementById("roulette-wheel");
-  const ctx = wheel.getContext("2d");
-  const ball = document.getElementById("ball");
-
-  const sectors = [
-    {n:0, color:'green'},
-    {n:32, color:'red'},
-    {n:15, color:'black'},
-    {n:19, color:'red'},
-    {n:4, color:'black'},
-    {n:21, color:'red'},
-    {n:2, color:'black'},
-    {n:25, color:'red'},
-    {n:17, color:'black'},
-    {n:34, color:'red'},
-    {n:6, color:'black'},
-    {n:27, color:'red'},
-    {n:13, color:'black'},
-    {n:36, color:'red'}
-  ];
-
-  let wheelAngle = 0;
-  let wheelSpeed = Math.random()*0.3 + 0.25;
-
-  let ballAngle = 0;
-  let ballSpeed = Math.random()*0.4 + 0.35;
-
-  function draw(){
-    ctx.clearRect(0,0,300,300);
-
-    const cx = 150;
-    const cy = 150;
-    const r = 140;
-    const step = (2*Math.PI)/sectors.length;
-
-    sectors.forEach((s,i)=>{
-      const start = wheelAngle + i * step;
-      const end = start + step;
-
-      ctx.beginPath();
-      ctx.moveTo(cx,cy);
-      ctx.arc(cx,cy,r,start,end);
-      ctx.fillStyle = s.color;
-      ctx.fill();
-
-      ctx.save();
-      ctx.translate(cx,cy);
-      ctx.rotate(start + step/2);
-      ctx.fillStyle = "white";
-      ctx.font = "12px Arial";
-      ctx.fillText(s.n, 0, -120);
-      ctx.restore();
-    });
-
-    ctx.beginPath();
-    ctx.arc(cx,cy,30,0,2*Math.PI);
-    ctx.fillStyle = "#111";
-    ctx.fill();
-  }
-
-function animate(){
-    angle += wheelSpeed;
-    wheelSpeed *= 0.985;
-
-    drawWheel();
-
-    if(wheelSpeed > 0.01){
-        requestAnimationFrame(animate);
-    } else {
-        finish();
-    }
-    const ball = document.getElementById('ball');
-const radius = 130;
-
-let ballAngle = -angle * 1.5;
-
-const x = 150 + Math.cos(ballAngle) * radius;
-const y = 150 + Math.sin(ballAngle) * radius;
-
-ball.style.left = x + 'px';
-ball.style.top = y + 'px';
-}
-
-  function finish(){
-    const step = (2*Math.PI)/sectors.length;
-
-    let index = Math.floor(
-      ((2*Math.PI - (wheelAngle % (2*Math.PI))) / step)
-    ) % sectors.length;
-
-    const result = sectors[index];
-
-    let win = 0;
-
-    if(choice === result.color){
-      win = result.color === 'green' ? bet*14 : bet*2;
-    }
-
-    if(win > 0){
-      addCoins(win);
-      document.getElementById("roulette-out").textContent =
-  `Выпало ${result.n} — +${win} ⭐`;
-    } else {
-      document.getElementById("roulette-out").textContent =
-  `Выпало ${result.n} — проигрыш`;
-    }
-
-    rouletteSpinning = false;
-  }
-
-  animate();
-}
-
-drawWheel();
-
-function spinRoulette(choice) {
-  if (S.coins < S.rouletteBet) {
-    toast("Недостаточно ⭐");
-    return;
-  }
+  if(S.coins < S.rouletteBet){ toast("Нет ⭐"); return; }
 
   spend(S.rouletteBet);
 
-  let spinAngle = Math.random() * 2000 + 2000; // сила вращения
-  let current = 0;
+  let ball = document.getElementById("ball");
 
-  function animate() {
-    current += 20;
+  let wheelSpeed = 0.3;
+  let ballAngle = 0;
+  let ballSpeed = 0.6;
 
-    angle += current * 0.002;
+  let interval = setInterval(()=>{
+    angle += wheelSpeed;
+    ballAngle -= ballSpeed;
 
-    ctx.clearRect(0, 0, 300, 300);
-    ctx.save();
-    ctx.translate(150, 150);
-    ctx.rotate(angle);
-    ctx.translate(-150, -150);
+    wheelSpeed *= 0.985;
+    ballSpeed *= 0.99;
+
     drawWheel();
-    ctx.restore();
 
-    if (current > 0.5) {
-      current *= 0.97;
-      requestAnimationFrame(animate);
-    } else {
-      finish(choice);
-    }
-  }
+    const r = 130;
+    ball.style.left = (150 + Math.cos(ballAngle)*r) + "px";
+    ball.style.top  = (150 + Math.sin(ballAngle)*r) + "px";
 
-  animate();
-}
+    if(ballSpeed < 0.02){
+      clearInterval(interval);
 
-let speed = Math.random()*0.3 + 0.25;
+      let index = Math.floor(((-angle % (2*Math.PI)) / (2*Math.PI)) * wheelNumbers.length);
+      if(index < 0) index += wheelNumbers.length;
 
+      let result = wheelNumbers[index];
 
-  function animate(){
-    angle += speed;
-    speed *= 0.985;
-    drawWheel();
-    if(speed > 0.01){
-      requestAnimationFrame(animate);
-    } else {
-      finish();
-    }
-  }
+      document.getElementById("roulette-out").textContent =
+        `Выпало: ${result.n} (${result.c})`;
 
-  function finish(){
-    const index = Math.floor(
-      (sectors.length - (angle / (2*Math.PI)) % sectors.length)
-    ) % sectors.length;
-
-    const result = sectors[index].color;
-
-    let win = 0;
-
-    if(choice === result){
-      if(result === 'green'){
-        win = bet * 14;
+      if(result.c === choice){
+        addCoins(S.rouletteBet * (choice==='green'?14:2), "Выигрыш!");
       } else {
-        win = bet * 2;
+        toast("Проигрыш");
       }
     }
 
-    if(win > 0){
-      addCoins(win);
-      document.getElementById("roulette-out").textContent =
-        "Выигрыш: +" + win + " ⭐";
-    } else {
-      document.getElementById("roulette-out").textContent =
-        "Проигрыш 😢";
-    }
-
-    rouletteSpinning = false;
-  }
-
-  animate();
-}
-console.log("JS работает");
-
-const wheel = document.getElementById('roulette-wheel');
-const ctx = wheel.getContext('2d');
-
-const sectors = [
-  { color: 'green', value: '0' },
-  { color: 'red', value: 'R' },
-  { color: 'black', value: 'B' },
-  { color: 'red', value: 'R' },
-  { color: 'black', value: 'B' },
-  { color: 'red', value: 'R' },
-  { color: 'black', value: 'B' },
-  { color: 'red', value: 'R' },
-];
-
-let angle = 0;
-
-function drawWheel() {
-  const arc = (Math.PI * 2) / sectors.length;
-
-  for (let i = 0; i < sectors.length; i++) {
-    const start = i * arc;
-
-    ctx.beginPath();
-    ctx.fillStyle = sectors[i].color;
-    ctx.moveTo(150, 150);
-    ctx.arc(150, 150, 150, start, start + arc);
-    ctx.fill();
-  }
+  },16);
 }
 
 drawWheel();
-
-function finish(choice) {
-  const index = Math.floor((angle % (Math.PI * 2)) / ((Math.PI * 2) / sectors.length));
-  const result = sectors[sectors.length - 1 - index];
-
-  let win = false;
-
-  if (choice === 'red' && result.color === 'red') win = true;
-  if (choice === 'black' && result.color === 'black') win = true;
-  if (choice === 'green' && result.color === 'green') win = true;
-
-  if (win) {
-    let mult = result.color === 'green' ? 14 : 2;
-    let reward = S.rouletteBet * mult;
-    addCoins(reward, `+${reward} ⭐`);
-    document.getElementById('roulette-out').textContent = 'ПОБЕДА';
-  } else {
-    document.getElementById('roulette-out').textContent = 'ПРОИГРЫШ';
-  }
-}
 </script>
 
 </div><!-- /main-app -->
