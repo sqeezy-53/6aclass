@@ -1489,6 +1489,31 @@ body::before {
   border-radius: 4px;
 }
 .btn-logout:hover { color: var(--gold); border-color: rgba(212,175,55,.45); }
+#roulette-pointer {
+  position:absolute;
+  top:-10px;
+  left:50%;
+  transform:translateX(-50%);
+  width:0;
+  height:0;
+  border-left:10px solid transparent;
+  border-right:10px solid transparent;
+  border-bottom:20px solid gold;
+  z-index:10;
+  filter: drop-shadow(0 0 6px gold);
+}
+
+#ball {
+  position:absolute;
+  width:10px;
+  height:10px;
+  background:white;
+  border-radius:50%;
+  top:50%;
+  left:50%;
+  transform:translate(-50%, -50%);
+  box-shadow:0 0 12px #fff;
+}
 </style>
 </head>
 <body>
@@ -1833,10 +1858,18 @@ body::before {
       </div>
     </div>
 
-    <!-- КОЛЕСО -->
     <div style="position:relative; width:300px; margin:auto;">
-      <canvas id="roulette-wheel" width="300" height="300"></canvas>
-    </div>
+
+  <!-- стрелка -->
+  <div id="roulette-pointer"></div>
+
+  <!-- колесо -->
+  <canvas id="roulette-wheel" width="300" height="300"></canvas>
+
+  <!-- шарик -->
+  <div id="ball"></div>
+
+</div>
 
     <!-- ВЫБОР -->
     <div class="roulette-picks">
@@ -2887,49 +2920,130 @@ function drawWheel() {
   }
 }
 
+let rouletteSpinning = false;
+
 function spinRoulette(choice){
-  if(S.coins < S.rouletteBet){ toast("Нет ⭐"); return; }
+  if(rouletteSpinning) return;
 
-  spend(S.rouletteBet);
+  const bet = S.rouletteBet || 25;
 
-  let ball = document.getElementById("ball");
+  if(S.coins < bet){
+    toast("Недостаточно ⭐");
+    return;
+  }
 
-  let wheelSpeed = 0.3;
+  rouletteSpinning = true;
+  spend(bet);
+
+  const wheel = document.getElementById("roulette-wheel");
+  const ctx = wheel.getContext("2d");
+  const ball = document.getElementById("ball");
+
+  const sectors = [
+    {n:0, color:'green'},
+    {n:32, color:'red'},
+    {n:15, color:'black'},
+    {n:19, color:'red'},
+    {n:4, color:'black'},
+    {n:21, color:'red'},
+    {n:2, color:'black'},
+    {n:25, color:'red'},
+    {n:17, color:'black'},
+    {n:34, color:'red'},
+    {n:6, color:'black'},
+    {n:27, color:'red'},
+    {n:13, color:'black'},
+    {n:36, color:'red'}
+  ];
+
+  let wheelAngle = 0;
+  let wheelSpeed = Math.random()*0.3 + 0.25;
+
   let ballAngle = 0;
-  let ballSpeed = 0.6;
+  let ballSpeed = Math.random()*0.4 + 0.35;
 
-  let interval = setInterval(()=>{
-    angle += wheelSpeed;
-    ballAngle -= ballSpeed;
+  function draw(){
+    ctx.clearRect(0,0,300,300);
 
+    const cx = 150;
+    const cy = 150;
+    const r = 140;
+    const step = (2*Math.PI)/sectors.length;
+
+    sectors.forEach((s,i)=>{
+      const start = wheelAngle + i * step;
+      const end = start + step;
+
+      ctx.beginPath();
+      ctx.moveTo(cx,cy);
+      ctx.arc(cx,cy,r,start,end);
+      ctx.fillStyle = s.color;
+      ctx.fill();
+
+      ctx.save();
+      ctx.translate(cx,cy);
+      ctx.rotate(start + step/2);
+      ctx.fillStyle = "white";
+      ctx.font = "12px Arial";
+      ctx.fillText(s.n, 0, -120);
+      ctx.restore();
+    });
+
+    ctx.beginPath();
+    ctx.arc(cx,cy,30,0,2*Math.PI);
+    ctx.fillStyle = "#111";
+    ctx.fill();
+  }
+
+  function animate(){
+    wheelAngle += wheelSpeed;
     wheelSpeed *= 0.985;
-    ballSpeed *= 0.99;
 
-    drawWheel();
+    ballAngle -= ballSpeed;
+    ballSpeed *= 0.992;
 
-    const r = 130;
-    ball.style.left = (150 + Math.cos(ballAngle)*r) + "px";
-    ball.style.top  = (150 + Math.sin(ballAngle)*r) + "px";
+    const radius = 130;
+    const x = 150 + Math.cos(ballAngle) * radius;
+    const y = 150 + Math.sin(ballAngle) * radius;
 
-    if(ballSpeed < 0.02){
-      clearInterval(interval);
+    ball.style.left = x + "px";
+    ball.style.top = y + "px";
 
-      let index = Math.floor(((-angle % (2*Math.PI)) / (2*Math.PI)) * wheelNumbers.length);
-      if(index < 0) index += wheelNumbers.length;
+    draw();
 
-      let result = wheelNumbers[index];
+    if(wheelSpeed > 0.01 || ballSpeed > 0.01){
+      requestAnimationFrame(animate);
+    } else {
+      finish();
+    }
+  }
 
-      document.getElementById("roulette-out").textContent =
-        `Выпало: ${result.n} (${result.c})`;
+  function finish(){
+    const step = (2*Math.PI)/sectors.length;
 
-      if(result.c === choice){
-        addCoins(S.rouletteBet * (choice==='green'?14:2), "Выигрыш!");
-      } else {
-        toast("Проигрыш");
-      }
+    let index = Math.floor(
+      ((2*Math.PI - (wheelAngle % (2*Math.PI))) / step)
+    ) % sectors.length;
+
+    const result = sectors[index];
+
+    let win = 0;
+
+    if(choice === result.color){
+      win = result.color === 'green' ? bet*14 : bet*2;
     }
 
-  },16);
+    if(win > 0){
+      addCoins(win);
+      roulette-out.textContent = `Выпало ${result.n} — +${win} ⭐`;
+    } else {
+      roulette-out.textContent = `Выпало ${result.n} — проигрыш`;
+    }
+
+    rouletteSpinning = false;
+  }
+
+  animate();
 }
 
 drawWheel();
