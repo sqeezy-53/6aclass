@@ -2207,10 +2207,13 @@ function renderHome(){
       <span class="game-icon">${item.icon}</span>
       <div class="game-name">${item.name}</div>
       <div class="game-desc">${item.desc}</div>
+
       ${own ? '' : '<div class="lock-badge">🔒 За ⭐ откроется</div>'}
+
       ${item.id === 'roulette' ? '<div class="closed-ribbon">ЗАКРЫТО</div>' : ''}
     `;
 
+    // блокируем рулетку
     if(own && item.id !== 'roulette'){
       d.onclick = () => showScreen(item.id);
     }
