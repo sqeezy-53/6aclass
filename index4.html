@@ -1938,7 +1938,7 @@ body::before {
 <script>
 let S = {
   coins:1000,
-  owned:['blackjack','lucky','slots','hilo'], // ❌ убрали roulette
+  owned:['blackjack','lucky','slots','roulette','hilo'],
   lastDaily:0,
   pname:'Игрок',
   bj:{bet:25,wins:0,losses:0,draws:0,gain:0},
@@ -2171,11 +2171,6 @@ function paintAllBets(){
 }
 
 function showScreen(id){
-  if(id === 'roulette'){
-    toast('Рулетка временно закрыта');
-    return;
-  }
-
   const scr = document.getElementById('screen-'+id);
   if(!scr){
     toast('Экран не найден');
@@ -2216,7 +2211,7 @@ const ITEMS=[
   {id:'blackjack',name:'Блэкджек',icon:'🃏',price:0,desc:'До 21 против дилера'},
   {id:'lucky',name:'На удачу',icon:'🎯',price:0,desc:'Красное или чёрное - одна карта'},
   {id:'slots',name:'Слоты',icon:'🎰',price:0,desc:'Три барабана, комбо на ⭐'},
-  {id:'roulette',name:'Рулетка 🔒',icon:'🎡',price:0,desc:'Временно закрыта, извиняюсь'},
+  {id:'roulette',name:'Рулетка',icon:'🎡',price:0,desc:'Красное, чёрное или зеро'},
   {id:'hilo',name:'Больше-меньше',icon:'📈',price:0,desc:'Следующая карта выше или ниже'},
   {id:'durak',name:'Дурак',icon:'🤡',price:300,desc:'Против компьютера, колода 36'},
   {id:'kosinka',name:'Косынка',icon:'♠',price:200,desc:'Пасьянс по классике'},
@@ -2239,10 +2234,9 @@ function renderHome(){
       <div class="game-name">${item.name}</div>
       <div class="game-desc">${item.desc}</div>
       ${own ? '' : '<div class="lock-badge">🔒 За ⭐ откроется</div>'}
-      ${item.id === 'roulette' ? '<div class="closed-ribbon">ЗАКРЫТО</div>' : ''}
     `;
 
-    if(own && item.id !== 'roulette'){
+    if(own){
       d.onclick = () => showScreen(item.id);
     }
 
