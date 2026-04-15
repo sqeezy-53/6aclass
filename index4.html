@@ -3495,13 +3495,23 @@ function rlSelectChip(val){
 }
 
 // ─── BET ────────────────────────────────────────────────────
+// Пары взаимоисключающих внешних ставок
+const RL_CONFLICTS = { red:'black', black:'red', even:'odd', odd:'even', low:'high', high:'low' };
+
 function rlBet(key){
   if(rl.spinning) return;
   const chip = rl.selectedChip;
-  const cur = rl.bets[key]||0;
+
+  // Блокируем противоположную ставку
+  const conflict = RL_CONFLICTS[key];
+  if(conflict && rl.bets[conflict]){
+    toast('Нельзя ставить одновременно на ' + key + ' и ' + conflict);
+    return;
+  }
+
   const total = Object.values(rl.bets).reduce((a,b)=>a+b,0);
   if(total + chip > S.coins){ toast('Мало ⭐'); return; }
-  rl.bets[key] = cur + chip;
+  rl.bets[key] = (rl.bets[key]||0) + chip;
   rlUpdateTable();
   rlUpdateTotals();
 }
@@ -3541,7 +3551,7 @@ function rlUpdateTotals(){
   if(btn) btn.disabled = total === 0 || rl.spinning;
 }
 
-// ─── SPIN — РЕАЛИСТИЧНАЯ АНИМАЦИЯ ШАРИКА ───────────────────
+// ─── SPIN — РЕАЛИСТИЧНАЯ АНИМАЦИЯ ШАРИКА (без телепортации) ─
 function rlSpin(){
   if(rl.spinning) return;
   const totalBet = Object.values(rl.bets).reduce((a,b)=>a+b,0);
@@ -3552,11 +3562,9 @@ function rlSpin(){
   rl.spinning = true;
   rlUpdateTotals();
 
-  // Выбираем результат
   const resultIdx = Math.floor(Math.random() * RL_WHEEL.length);
   const resultNum = RL_WHEEL[resultIdx];
 
-  // Очищаем результат
   const resBox = document.getElementById('rl-result-box');
   const resNum = document.getElementById('rl-result-num');
   if(resBox){ resBox.textContent=''; resBox.className='rl-result-box'; }
@@ -3566,67 +3574,82 @@ function rlSpin(){
   const W = canvas ? canvas.width : 320;
   const R = W/2 - 4;
 
-  // Радиус трека шарика (внешний, потом падает внутрь)
-  const TRACK_R_OUTER = R - 14;   // внешний трек (быстрая фаза)
-  const TRACK_R_INNER = R - 38;   // внутренний трек (финал — на числе)
+  const TRACK_R_OUTER = R - 14;  // внешний трек (быстрая фаза)
+  const TRACK_R_INNER = R - 40;  // внутренний трек (финальная позиция)
 
-  // Целевой угол шарика: позиция числа на колесе
-  // Числа расположены начиная с -π/2 (верх), по часовой стрелке
+  // Целевой угол сегмента на неподвижном колесе
   const segArc = (2*Math.PI) / RL_WHEEL.length;
   const targetSegAngle = rl.wheelAngle + resultIdx * segArc - Math.PI/2 + segArc/2;
 
-  // Полных оборотов быстрой фазы (шарик летит против часовой)
-  const fastLaps = 5 + Math.random()*3;
-  // Начальный угол шарика (случайный, чтоб каждый спин выглядел по-разному)
-  const startBallAngle = rl.ballAngle || (Math.random()*2*Math.PI);
+  // Шарик стартует с текущей позиции и летит ПРОТИВ часовой стрелки
+  // Нужно пройти N полных кругов, чтобы финально оказаться на targetSegAngle
+  // Ключевой момент: финальный угол анимации должен ТОЧНО равняться targetSegAngle
+  // без какого-либо скачка в конце.
 
-  // Шарик идёт в противоположную сторону → угол уменьшается
-  // За время анимации пройдёт fastLaps полных кругов + выровняется с targetSegAngle
-  // Считаем через сколько нужно пройти:
-  let delta = (startBallAngle - targetSegAngle) % (2*Math.PI);
-  if(delta < 0) delta += 2*Math.PI;
-  const totalBallDelta = fastLaps * 2*Math.PI + delta; // всегда >0, шарик движется "назад"
+  const startAngle = rl.ballAngle; // текущий угол шарика
+  const fastLaps = 5 + Math.floor(Math.random()*3); // 5-7 полных оборотов
 
-  const DURATION = 5000 + Math.random()*1500; // 5-6.5 секунд
+  // Шарик движется против часовой (угол убывает).
+  // Расстояние от startAngle до targetSegAngle ПО НАПРАВЛЕНИЮ УБЫВАНИЯ:
+  let angDiff = startAngle - targetSegAngle;
+  // Нормализуем: должно быть [0, 2π)
+  angDiff = ((angDiff % (2*Math.PI)) + 2*Math.PI) % (2*Math.PI);
+  // Если diff == 0, добавим полный круг чтоб не было нулевого хода
+  if(angDiff < 0.01) angDiff += 2*Math.PI;
+
+  // Итоговое расстояние = N полных кругов + остаток до цели
+  const totalDelta = fastLaps * 2*Math.PI + angDiff;
+  // Финальный угол = startAngle - totalDelta (строго, без округления)
+  const endAngle = startAngle - totalDelta;
+
+  const DURATION = 5500 + Math.random()*1200;
   const startTime = performance.now();
 
-  // Easing: шарик разгоняется → максимум → резко тормозит в конце
-  function ballEase(t){
-    // Сначала разгоняется (cubic in), потом тормозит (quartic out)
-    if(t < 0.12) return t * t * t / (0.12*0.12*0.12) * 0.08; // 0..0.08 быстро
-    const t2 = (t - 0.12) / 0.88;
-    return 0.08 + 0.92 * (1 - Math.pow(1-t2, 4));
+  // Плавное замедление: быстрый разгон → длинное торможение
+  // Используем кубическую bezier-подобную кривую
+  function spinEase(t){
+    // Фаза 1 (0..0.15): разгон
+    if(t < 0.15){
+      return (t / 0.15) * (t / 0.15) * 0.12;
+    }
+    // Фаза 2 (0.15..1): плавное торможение (quintic out)
+    const t2 = (t - 0.15) / 0.85;
+    return 0.12 + 0.88 * (1 - Math.pow(1 - t2, 5));
   }
 
-  // Радиус: сначала на внешнем треке, потом плавно падает внутрь (в конце ~70%)
-  function ballRadius(t){
-    if(t < 0.7) return TRACK_R_OUTER;
-    const s = (t - 0.7) / 0.3;
-    // Плавное падение с небольшими "прыжками"
-    const bounce = Math.sin(s * Math.PI * 3) * (1-s) * 6;
-    return TRACK_R_OUTER + (TRACK_R_INNER - TRACK_R_OUTER) * s + bounce;
+  // Радиус: на внешнем треке, потом плавно падает в конце
+  function getBallRadius(t){
+    // Падение начинается на t=0.72, завершается на t=1.0
+    if(t < 0.72) return TRACK_R_OUTER;
+    const s = (t - 0.72) / 0.28;
+    // ease-out для падения + небольшие "подскоки" в начале
+    const easeS = 1 - Math.pow(1 - s, 2);
+    const bounce = s < 0.6 ? Math.sin(s * Math.PI * 4) * (1 - s) * 5 : 0;
+    return TRACK_R_OUTER + (TRACK_R_INNER - TRACK_R_OUTER) * easeS + bounce;
   }
 
   function animate(now){
     const elapsed = now - startTime;
     const t = Math.min(elapsed / DURATION, 1);
-    const ease = ballEase(t);
+    const ease = spinEase(t);
 
-    // Шарик идёт против часовой → угол = start - delta*ease
-    rl.ballAngle = startBallAngle - totalBallDelta * ease;
-    rl.ballRadius = ballRadius(t);
+    // Угол интерполируется от startAngle до endAngle через easing
+    // При t=1: ease=1 → angle = endAngle = startAngle - totalDelta
+    // endAngle ≡ targetSegAngle (mod 2π) по построению → нет телепортации
+    rl.ballAngle = startAngle - totalDelta * ease;
+    rl.ballRadius = getBallRadius(t);
 
     rlDrawFrame(rl.ballAngle, rl.ballRadius, true);
 
     if(t < 1){
       rl.animId = requestAnimationFrame(animate);
     } else {
-      // Финал: шарик точно на числе
-      rl.ballAngle = targetSegAngle;
+      // Финал без скачка: angle = endAngle ≡ targetSegAngle
+      rl.ballAngle = endAngle;
       rl.ballRadius = TRACK_R_INNER;
       rlDrawFrame(rl.ballAngle, rl.ballRadius, true);
       rl.spinning = false;
-      setTimeout(()=>rlShowResult(resultNum), 280);
+      setTimeout(()=>rlShowResult(resultNum), 350);
     }
   }
 
@@ -3708,12 +3731,14 @@ function rlRenderHistory(){
 function rlInit(){
   rlBuildTable();
   rlSelectChip(25);
-  // Отрисовываем статичное колесо без шарика
   const canvas = document.getElementById('rl-canvas');
   if(canvas){
     const W = canvas.width;
-    rl.ballRadius = W/2 - 18;
-    rlDrawFrame(0, 0, false);
+    const R = W/2 - 4;
+    // Начальная позиция шарика — верхняя точка внешнего трека
+    if(!rl.ballAngle) rl.ballAngle = -Math.PI/2 + Math.random()*2*Math.PI;
+    rl.ballRadius = R - 14;
+    rlDrawFrame(rl.ballAngle, rl.ballRadius, false);
   }
   rlUpdateTotals();
 }
