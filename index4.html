@@ -1478,143 +1478,6 @@ body::before {
 
 .hilo-row { display: flex; justify-content: center; gap: 16px; flex-wrap: wrap; margin: 16px 0; align-items: center; }
 
-/* ── MINES ── */
-.mines-wrap { max-width: 580px; margin: 0 auto; }
-.mines-grid {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 8px;
-  margin: 16px 0;
-  padding: 18px;
-  background: radial-gradient(ellipse at center, var(--felt2), var(--felt));
-  border: 1px solid rgba(212,175,55,0.22);
-  border-radius: 12px;
-  box-shadow: inset 0 2px 20px rgba(0,0,0,0.45);
-}
-.mine-cell {
-  aspect-ratio: 1;
-  border-radius: 8px;
-  border: 2px solid rgba(212,175,55,0.25);
-  background: linear-gradient(145deg, rgba(36,28,58,0.95), rgba(18,14,38,0.98));
-  cursor: pointer;
-  font-size: 1.5em;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.18s cubic-bezier(0.22,1,0.36,1);
-  box-shadow: 0 3px 10px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.06);
-  position: relative;
-  overflow: hidden;
-  user-select: none;
-}
-.mine-cell::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(ellipse at 35% 30%, rgba(255,255,255,0.08), transparent 60%);
-  pointer-events: none;
-}
-.mine-cell:hover:not(.revealed):not(.exploded):not(.safe-show) {
-  border-color: rgba(232,197,71,0.65);
-  background: linear-gradient(145deg, rgba(50,38,82,0.98), rgba(28,22,52,0.99));
-  transform: scale(1.06);
-  box-shadow: 0 0 18px rgba(232,197,71,0.3), 0 4px 14px rgba(0,0,0,0.5);
-}
-.mine-cell.revealed {
-  background: linear-gradient(145deg, rgba(39,174,96,0.25), rgba(20,90,50,0.3));
-  border-color: rgba(46,204,113,0.55);
-  box-shadow: 0 0 14px rgba(46,204,113,0.3), inset 0 0 10px rgba(46,204,113,0.08);
-  cursor: default;
-}
-.mine-cell.exploded {
-  background: linear-gradient(145deg, rgba(192,57,43,0.5), rgba(100,20,15,0.55));
-  border-color: rgba(231,76,60,0.7);
-  box-shadow: 0 0 22px rgba(255,45,106,0.55);
-  cursor: default;
-  animation: mineExplode 0.45s ease;
-}
-.mine-cell.safe-show {
-  background: linear-gradient(145deg, rgba(50,50,50,0.4), rgba(30,30,30,0.45));
-  border-color: rgba(231,76,60,0.4);
-  cursor: default;
-  opacity: 0.7;
-}
-@keyframes mineExplode {
-  0% { transform: scale(1); }
-  30% { transform: scale(1.28) rotate(-5deg); }
-  60% { transform: scale(0.9) rotate(3deg); }
-  100% { transform: scale(1) rotate(0); }
-}
-.mines-info-row {
-  display: flex;
-  gap: 14px;
-  justify-content: center;
-  align-items: center;
-  flex-wrap: wrap;
-  margin: 8px 0;
-  font-family: 'Cinzel', serif;
-  font-size: 0.82em;
-  color: rgba(232,197,71,0.65);
-  letter-spacing: 1px;
-}
-.mines-info-row strong { color: var(--gold2); font-size: 1.1em; }
-.mines-multiplier {
-  font-family: 'Cinzel', serif;
-  font-size: 1.55em;
-  font-weight: 700;
-  color: var(--gold2);
-  text-align: center;
-  text-shadow: 0 0 28px rgba(232,197,71,0.55);
-  min-height: 40px;
-  transition: all 0.3s;
-}
-.mines-cashout-btn {
-  padding: 12px 36px;
-  background: linear-gradient(180deg, var(--green2) 0%, var(--green) 55%, #1a7a40 100%);
-  color: #fff;
-  border: none;
-  cursor: pointer;
-  font-family: 'Cinzel', serif;
-  font-weight: 700;
-  font-size: 0.9em;
-  letter-spacing: 3px;
-  border-radius: 8px;
-  text-transform: uppercase;
-  transition: all 0.2s;
-  box-shadow: 0 0 24px rgba(46,204,113,0.4), 0 4px 14px rgba(0,0,0,0.4);
-}
-.mines-cashout-btn:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 0 40px rgba(46,204,113,0.6), 0 6px 18px rgba(0,0,0,0.4);
-}
-.mines-cashout-btn:disabled { opacity: 0.3; cursor: default; }
-.mines-count-row {
-  display: flex;
-  gap: 8px;
-  justify-content: center;
-  align-items: center;
-  flex-wrap: wrap;
-  margin: 10px 0;
-}
-.mines-count-btn {
-  padding: 7px 16px;
-  background: linear-gradient(180deg, rgba(232,197,71,0.12), rgba(232,197,71,0.04));
-  color: var(--gold2);
-  border: 1px solid rgba(232,197,71,0.35);
-  cursor: pointer;
-  font-family: 'Cinzel', serif;
-  font-size: 0.72em;
-  letter-spacing: 1px;
-  border-radius: 6px;
-  transition: all 0.18s;
-}
-.mines-count-btn:hover, .mines-count-btn.active {
-  background: linear-gradient(180deg, var(--gold2), var(--gold));
-  color: #120810;
-  border-color: var(--gold2);
-  box-shadow: 0 0 14px rgba(232,197,71,0.4);
-}
-
 @media (max-width: 900px) {
   .games-grid {
     grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
@@ -2399,49 +2262,6 @@ body::before {
   </div>
 </div>
 
-<!-- MINES -->
-<div id="screen-mines" class="screen">
-  <button type="button" class="back-btn" onclick="showScreen('home')">← Назад</button>
-  <div class="mines-wrap">
-    <div class="sec-title">Мины</div>
-    <details class="game-help"><summary>Как играть</summary><p>На поле 5×5 = 25 клеток спрятаны мины. Открывай клетки — если алмаз 💎 — множитель растёт. Если мина 💣 — теряешь ставку. Жми «Забрать» чтобы зафиксировать выигрыш в любой момент. Выбери количество мин перед игрой — больше мин = больше множитель.</p></details>
-    <div class="bet-row compact">
-      <span class="bet-label">⭐ на игру:</span>
-      <button type="button" class="bet-chip" onclick="stackBet('mines',10)">10</button>
-      <button type="button" class="bet-chip" onclick="stackBet('mines',25)">25</button>
-      <button type="button" class="bet-chip" onclick="stackBet('mines',50)">50</button>
-      <button type="button" class="bet-chip" onclick="stackBet('mines',100)">100</button>
-      <button type="button" class="bet-chip" onclick="stackBet('mines',250)">250</button>
-      <button type="button" class="bet-chip" onclick="stackBet('mines',500)">500</button>
-      <button type="button" class="bet-chip" onclick="stackBet('mines',1000)">1k</button>
-      <button type="button" class="bet-chip" onclick="stackBet('mines',5000)">5k</button>
-      <div class="bet-stack-visual" id="mines-stack-v"></div>
-      <div class="bet-total-wrap"><span class="bet-total-label">игра</span><span class="bet-total" id="mines-bet-disp">50</span></div>
-      <button type="button" class="g-btn bet-clear" onclick="stackBet('mines',0,true)">Сброс</button>
-    </div>
-    <div style="text-align:center;margin:8px 0;">
-      <span style="font-family:'Cinzel',serif;font-size:0.7em;color:rgba(212,175,55,0.5);letter-spacing:2px;text-transform:uppercase;">Количество мин:</span>
-      <div class="mines-count-row" id="mines-count-row">
-        <button class="mines-count-btn" onclick="minesSetCount(1)">1</button>
-        <button class="mines-count-btn" onclick="minesSetCount(3)">3</button>
-        <button class="mines-count-btn active" onclick="minesSetCount(5)">5</button>
-        <button class="mines-count-btn" onclick="minesSetCount(10)">10</button>
-        <button class="mines-count-btn" onclick="minesSetCount(15)">15</button>
-        <button class="mines-count-btn" onclick="minesSetCount(20)">20</button>
-        <button class="mines-count-btn" onclick="minesSetCount(24)">24</button>
-      </div>
-    </div>
-    <div class="result-box" id="mines-result"></div>
-    <div class="mines-multiplier" id="mines-mult"></div>
-    <div class="mines-info-row" id="mines-info"></div>
-    <div class="mines-grid" id="mines-grid"></div>
-    <div class="btns-row">
-      <button type="button" class="g-btn" id="mines-start-btn" onclick="minesStart()">Начать игру</button>
-      <button type="button" class="mines-cashout-btn" id="mines-cashout-btn" onclick="minesCashout()" disabled>💰 Забрать</button>
-    </div>
-  </div>
-</div>
-
 <!-- POKER -->
 <div id="screen-poker" class="screen">
   <button class="back-btn" onclick="showScreen('home')">← Назад</button>
@@ -2476,7 +2296,7 @@ body::before {
 <script>
 let S = {
   coins:1000,
-  owned:['blackjack','lucky','slots','roulette','hilo','mines'],
+  owned:['blackjack','lucky','slots','roulette','hilo'],
   lastDaily:0,
   pname:'Игрок',
   bj:{bet:25,wins:0,losses:0,draws:0,gain:0},
@@ -2487,8 +2307,7 @@ let S = {
   luckyBet:25,
   slotsBet:25,
   rouletteBet:25,
-  hiloBet:25,
-  minesBet:50
+  hiloBet:25
 };
 
 let lucky = {
@@ -2507,7 +2326,7 @@ function load(){
   const defBj={bet:25,wins:0,losses:0,draws:0,gain:0};
   S.bj=(S.bj&&typeof S.bj==='object')?Object.assign({},defBj,S.bj):defBj;
   S.pk=(S.pk&&typeof S.pk==='object')?Object.assign({wins:0,losses:0},S.pk):{wins:0,losses:0};
-  if(!Array.isArray(S.owned))S.owned=['blackjack','lucky','slots','hilo','mines'];
+  if(!Array.isArray(S.owned))S.owned=['blackjack','lucky','slots','hilo'];
   if(typeof S.kosBet!=='number')S.kosBet=50;
   if(typeof S.paukBet!=='number')S.paukBet=75;
   if(typeof S.dkBet!=='number')S.dkBet=40;
@@ -2522,9 +2341,7 @@ function load(){
   if(typeof S.rouletteBet!=='number')S.rouletteBet=25;
   S.rouletteBet=Math.min(1000,Math.max(10,+S.rouletteBet||25));
   if(typeof S.hiloBet!=='number')S.hiloBet=25;
-  S.hiloBet=Math.min(5000,Math.max(10,+S.hiloBet||25));
-  if(typeof S.minesBet!=='number')S.minesBet=50;
-  S.minesBet=Math.min(5000,Math.max(10,+S.minesBet||50));
+  S.hiloBet=Math.min(1000,Math.max(10,+S.hiloBet||25));
 }
 
 // ── HELPERS ────────────────────────────────────────────
@@ -2612,8 +2429,8 @@ function toast(msg){
 }
 
 // ── Счётчик очков за раздачу/партию (до 1000, тап по кружкам суммирует) ──
-const BET_MIN=10,BET_MAX=5000;
-const BET_DEFAULTS={bj:25,kos:50,pauk:75,dk:40,lucky:25,slots:25,roulette:25,hilo:25,mines:50};
+const BET_MIN=10,BET_MAX=1000;
+const BET_DEFAULTS={bj:25,kos:50,pauk:75,dk:40,lucky:25,slots:25,roulette:25,hilo:25};
 function updateStackVis(id,bet){
   const el=document.getElementById(id);
   if(!el)return;
@@ -2643,9 +2460,9 @@ function stackBet(game,delta,reset){
   else if(game==='slots')cur=S.slotsBet;
   else if(game==='roulette')cur=S.rouletteBet;
   else if(game==='hilo')cur=S.hiloBet;
-  else if(game==='mines')cur=S.minesBet;
   else return;
   let next;
+  if(reset)next=def;
   else next=Math.min(BET_MAX,cur+(delta|0));
   next=Math.max(BET_MIN,next);
   if(!reset&&(delta|0)>0)next=Math.min(next,S.coins);
@@ -2657,7 +2474,6 @@ function stackBet(game,delta,reset){
   else if(game==='slots')S.slotsBet=next;
   else if(game==='roulette')S.rouletteBet=next;
   else if(game==='hilo')S.hiloBet=next;
-  else if(game==='mines')S.minesBet=next;
   if(game==='bj'){
     document.getElementById('bj-bet').textContent=next;
     bumpBetEl('bj-bet');
@@ -2690,10 +2506,6 @@ function stackBet(game,delta,reset){
     document.getElementById('hilo-bet-disp').textContent=next;
     bumpBetEl('hilo-bet-disp');
     updateStackVis('hilo-stack-v',next);
-  }else if(game==='mines'){
-    document.getElementById('mines-bet-disp').textContent=next;
-    bumpBetEl('mines-bet-disp');
-    updateStackVis('mines-stack-v',next);
   }
   save();
 }
@@ -2714,8 +2526,6 @@ function paintAllBets(){
   if(rb){rb.textContent=S.rouletteBet;updateStackVis('roulette-stack-v',S.rouletteBet);}
   const hb=document.getElementById('hilo-bet-disp');
   if(hb){hb.textContent=S.hiloBet;updateStackVis('hilo-stack-v',S.hiloBet);}
-  const mb=document.getElementById('mines-bet-disp');
-  if(mb){mb.textContent=S.minesBet;updateStackVis('mines-stack-v',S.minesBet);}
 }
 
 function showScreen(id){
@@ -2762,7 +2572,6 @@ const ITEMS=[
   {id:'slots',name:'Слоты',icon:'🎰',price:0,desc:'Три барабана, комбо на ⭐'},
   {id:'roulette',name:'Рулетка',icon:'🎡',price:0,desc:'Красное, чёрное или зеро'},
   {id:'hilo',name:'Больше-меньше',icon:'📈',price:0,desc:'Следующая карта выше или ниже'},
-  {id:'mines',name:'Мины',icon:'💣',price:0,desc:'25 клеток — открывай алмазы, избегай мин'},
   {id:'durak',name:'Дурак',icon:'🤡',price:300,desc:'Против компьютера, колода 36'},
   {id:'kosinka',name:'Косынка',icon:'♠',price:200,desc:'Пасьянс по классике'},
   {id:'pauk',name:'Паук',icon:'🕷',price:400,desc:'Одна масть, десять колонок'},
@@ -3934,151 +3743,6 @@ function rlInit(){
   rlUpdateTotals();
 }
 
-// ── MINES ─────────────────────────────────────────────
-let mines = {
-  active: false,
-  board: [],       // 25 booleans: true = mine
-  revealed: [],    // 25 booleans
-  mineCount: 5,
-  safeFound: 0,
-  stake: 0,
-  multiplier: 1
-};
-
-function minesSetCount(n){
-  if(mines.active) return;
-  mines.mineCount = n;
-  document.querySelectorAll('.mines-count-btn').forEach(b=>{
-    b.classList.toggle('active', parseInt(b.textContent)===n);
-  });
-}
-
-// Multiplier formula: after k safe reveals on a board with m mines,
-// multiplier = product of (25-m-i)/(25-i) for i=0..k-1, scaled by house edge 0.97
-function minesCalcMult(safeFound, mineCount){
-  let p = 1;
-  const total = 25;
-  const safe = total - mineCount;
-  for(let i = 0; i < safeFound; i++){
-    p *= (safe - i) / (total - i);
-  }
-  // Payout = 1/p * 0.97 (97% RTP)
-  return Math.max(1, +(0.97 / p).toFixed(2));
-}
-
-function minesStart(){
-  if(S.coins < S.minesBet){ toast('Мало ⭐'); return; }
-  spend(S.minesBet);
-  mines.stake = S.minesBet;
-  mines.active = true;
-  mines.safeFound = 0;
-  mines.multiplier = 1;
-  mines.revealed = Array(25).fill(false);
-
-  // Place mines randomly
-  mines.board = Array(25).fill(false);
-  let positions = Array.from({length:25},(_,i)=>i);
-  for(let i=positions.length-1;i>0;i--){
-    const j=0|Math.random()*(i+1);
-    [positions[i],positions[j]]=[positions[j],positions[i]];
-  }
-  positions.slice(0, mines.mineCount).forEach(i=> mines.board[i]=true);
-
-  document.getElementById('mines-start-btn').textContent = 'Перезапустить';
-  document.getElementById('mines-cashout-btn').disabled = true;
-  const res = document.getElementById('mines-result');
-  res.textContent = '';
-  res.className = 'result-box';
-  document.getElementById('mines-mult').textContent = '';
-  document.getElementById('mines-info').innerHTML =
-    `Ставка: <strong>${mines.stake}</strong> ⭐ &nbsp;|&nbsp; Мин: <strong>${mines.mineCount}</strong> &nbsp;|&nbsp; Безопасных: <strong>${25-mines.mineCount}</strong>`;
-  minesRenderGrid();
-}
-
-function minesRenderGrid(){
-  const g = document.getElementById('mines-grid');
-  g.innerHTML = '';
-  for(let i=0;i<25;i++){
-    const cell = document.createElement('div');
-    cell.className = 'mine-cell';
-    cell.dataset.i = i;
-    if(mines.revealed[i]){
-      if(mines.board[i]){
-        cell.classList.add('exploded');
-        cell.textContent = '💣';
-      } else {
-        cell.classList.add('revealed');
-        cell.textContent = '💎';
-      }
-    } else {
-      cell.onclick = ()=> minesReveal(i);
-    }
-    g.appendChild(cell);
-  }
-}
-
-function minesReveal(idx){
-  if(!mines.active) return;
-  if(mines.revealed[idx]) return;
-  mines.revealed[idx] = true;
-
-  if(mines.board[idx]){
-    // BOOM — show all mines
-    mines.active = false;
-    mines.board.forEach((isMine,i)=>{
-      if(isMine) mines.revealed[i]=true;
-    });
-    minesRenderGrid();
-    const res = document.getElementById('mines-result');
-    res.textContent = `💣 Мина! Потерял ${mines.stake} ⭐`;
-    res.className = 'result-box lose';
-    document.getElementById('mines-mult').textContent = '';
-    document.getElementById('mines-cashout-btn').disabled = true;
-    document.getElementById('mines-start-btn').textContent = 'Начать игру';
-    document.getElementById('mines-info').innerHTML =
-      `Ставка была: <strong>${mines.stake}</strong> ⭐`;
-    toast('-' + mines.stake + ' ⭐');
-    save();
-  } else {
-    mines.safeFound++;
-    mines.multiplier = minesCalcMult(mines.safeFound, mines.mineCount);
-    const potentialWin = Math.round(mines.stake * mines.multiplier);
-    minesRenderGrid();
-    document.getElementById('mines-mult').textContent =
-      `×${mines.multiplier}  →  ${potentialWin} ⭐`;
-    document.getElementById('mines-cashout-btn').disabled = false;
-    document.getElementById('mines-info').innerHTML =
-      `Ставка: <strong>${mines.stake}</strong> ⭐ &nbsp;|&nbsp; Открыто: <strong>${mines.safeFound}</strong> &nbsp;|&nbsp; Осталось мин: <strong>${mines.mineCount}</strong>`;
-
-    // Check if all safe cells opened
-    const totalSafe = 25 - mines.mineCount;
-    if(mines.safeFound >= totalSafe){
-      minesCashout(true);
-    }
-  }
-}
-
-function minesCashout(auto){
-  if(!mines.active && !auto) return;
-  mines.active = false;
-  const win = Math.round(mines.stake * mines.multiplier);
-  addCoins(win);
-  const profit = win - mines.stake;
-  const res = document.getElementById('mines-result');
-  res.textContent = `💰 Забрал ${win} ⭐  (${profit>=0?'+':''}${profit} ⭐)`;
-  res.className = 'result-box win';
-  document.getElementById('mines-mult').textContent = '';
-  document.getElementById('mines-cashout-btn').disabled = true;
-  document.getElementById('mines-start-btn').textContent = 'Начать игру';
-
-  // Reveal all mines after cashout
-  mines.board.forEach((isMine,i)=>{
-    if(isMine) mines.revealed[i]=true;
-  });
-  minesRenderGrid();
-  save();
-}
-
 load();
 renderHome();
 renderShop();
@@ -4123,11 +3787,11 @@ function saveUser() {
 function loadUser(uid) {
   // Reset to defaults first
   S.coins = 1000;
-  S.owned = ['blackjack','lucky','slots','roulette','hilo','mines'];
+  S.owned = ['blackjack','lucky','slots','roulette','hilo'];
   S.lastDaily = 0;
   S.bj = {bet:25,wins:0,losses:0,draws:0,gain:0};
   S.pk = {wins:0,losses:0};
-  S.kosBet=50; S.paukBet=75; S.dkBet=40; S.luckyBet=25; S.slotsBet=25; S.rouletteBet=25; S.hiloBet=25; S.minesBet=50;
+  S.kosBet=50; S.paukBet=75; S.dkBet=40; S.luckyBet=25; S.slotsBet=25; S.rouletteBet=25; S.hiloBet=25;
   try {
     const d = localStorage.getItem(userKey(uid));
     if (d) Object.assign(S, JSON.parse(d));
@@ -4136,10 +3800,10 @@ function loadUser(uid) {
   const defBj={bet:25,wins:0,losses:0,draws:0,gain:0};
   S.bj=(S.bj&&typeof S.bj==='object')?Object.assign({},defBj,S.bj):defBj;
   S.pk=(S.pk&&typeof S.pk==='object')?Object.assign({wins:0,losses:0},S.pk):{wins:0,losses:0};
-  if(!Array.isArray(S.owned))S.owned=['blackjack','lucky','slots','roulette','hilo','mines'];
+  if(!Array.isArray(S.owned))S.owned=['blackjack','lucky','slots','roulette','hilo'];
   S.owned=[...new Set(S.owned)];
-  ['blackjack','lucky','slots','roulette','hilo','mines'].forEach(id=>{if(!S.owned.includes(id))S.owned.push(id);});
-  S.bj.bet=Math.min(5000,Math.max(10,S.bj.bet==null?25:+S.bj.bet));
+  ['blackjack','lucky','slots','roulette','hilo'].forEach(id=>{if(!S.owned.includes(id))S.owned.push(id);});
+  S.bj.bet=Math.min(1000,Math.max(10,S.bj.bet==null?25:+S.bj.bet));
 }
 
 // Patch global save() to also save per-user
