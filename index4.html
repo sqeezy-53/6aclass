@@ -3759,6 +3759,9 @@ import {
   signInWithEmailAndPassword, createUserWithEmailAndPassword,
   signOut, updateProfile
 } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
+import {
+  getFirestore, doc, getDoc, setDoc
+} from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
 
 const firebaseConfig = {
   apiKey: 'AIzaSyCtVaVgIvQot9SJpwKyUKrClNwar6xX9fo',
@@ -3772,26 +3775,33 @@ const firebaseConfig = {
 const FAKE_DOMAIN = '@6a.ru';
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
+const db = getFirestore(app);
 
 let currentUid = null;
-
-// ── PER-USER STORAGE KEY ──────────────────────────────
+// localStorage key — используется как fallback / кэш пока грузится Firestore
 function userKey(uid) { return 'cv3_u_' + uid; }
 
-// Override save/load to use per-user key
-const _origLoad = window._origLoad || null;
-function saveUser() {
+// ── СОХРАНИТЬ в Firestore + localStorage (кэш) ────────
+async function saveUser() {
   if (!currentUid) return;
+  // Сохраняем всё кроме coins в localStorage (ставки, статистика игр)
   try { localStorage.setItem(userKey(currentUid), JSON.stringify(S)); } catch(e) {}
+  // Синхронизируем ТОЛЬКО звёзды в Firestore — единый баланс для всех страниц
+  try {
+    await setDoc(doc(db, 'users', currentUid), { stars: S.coins }, { merge: true });
+  } catch(e) { console.warn('Firestore save error:', e); }
 }
-function loadUser(uid) {
-  // Reset to defaults first
+
+// ── ЗАГРУЗИТЬ из Firestore + localStorage ─────────────
+async function loadUser(uid) {
+  // 1. Сначала сбрасываем к дефолтам
   S.coins = 1000;
   S.owned = ['blackjack','lucky','slots','roulette','hilo'];
   S.lastDaily = 0;
   S.bj = {bet:25,wins:0,losses:0,draws:0,gain:0};
   S.pk = {wins:0,losses:0};
   S.kosBet=50; S.paukBet=75; S.dkBet=40; S.luckyBet=25; S.slotsBet=25; S.rouletteBet=25; S.hiloBet=25;
+  // 2. Грузим локальные данные (ставки, статы) из localStorage
   try {
     const d = localStorage.getItem(userKey(uid));
     if (d) Object.assign(S, JSON.parse(d));
@@ -3804,13 +3814,32 @@ function loadUser(uid) {
   S.owned=[...new Set(S.owned)];
   ['blackjack','lucky','slots','roulette','hilo'].forEach(id=>{if(!S.owned.includes(id))S.owned.push(id);});
   S.bj.bet=Math.min(1000,Math.max(10,S.bj.bet==null?25:+S.bj.bet));
+  // 3. ГЛАВНОЕ: перезаписываем coins из Firestore (единый баланс!)
+  try {
+    const snap = await getDoc(doc(db, 'users', uid));
+    if (snap.exists() && snap.data().stars != null) {
+      S.coins = snap.data().stars;
+    } else if (!snap.exists()) {
+      // Новый пользователь — создаём документ с начальным балансом
+      await setDoc(doc(db, 'users', uid), { stars: S.coins }, { merge: true });
+    }
+  } catch(e) { console.warn('Firestore load error:', e); }
+  // Обновляем UI
+  syncCoins(false);
+  renderHome();
+  renderShop();
+  paintAllBets();
+  bjStats();
+  luckyRender();
+  hiloEnsure();
+  try{rlInit();}catch(_){}
 }
 
-// Patch global save() to also save per-user
+// Patch global save() — теперь вызывает async saveUser
 const _origSave = window.save;
 window.save = function() {
   if (_origSave) _origSave();
-  saveUser();
+  saveUser(); // fire-and-forget async
 };
 
 // ── HELPERS ──────────────────────────────────────────
@@ -3890,7 +3919,7 @@ el('auth-pass').addEventListener('keydown', e => { if(e.key==='Enter') el('btn-l
 window.doLogout = () => signOut(auth);
 
 // ── AUTH STATE ───────────────────────────────────────
-onAuthStateChanged(auth, user => {
+onAuthStateChanged(auth, async user => {
   if (!user) {
     currentUid = null;
     el('auth-gate').style.display = 'block';
@@ -3898,26 +3927,18 @@ onAuthStateChanged(auth, user => {
     return;
   }
   currentUid = user.uid;
-  // Load this user's stars
-  loadUser(user.uid);
-  syncCoins(false);
-  renderHome();
-  renderShop();
-  paintAllBets();
-  bjStats();
-  luckyRender();
-  hiloEnsure();
-  try{rlInit();}catch(_){}
 
-  // Update nav
+  // Update nav immediately (не ждём загрузки звёзд)
   const av = el('nav-avatar');
   const nick = displayNick(user);
   av.style.background = avatarGrad(user.uid);
   av.textContent = initials(nick);
   el('nav-username').textContent = nick;
-
   el('auth-gate').style.display = 'none';
   el('main-app').style.display = 'block';
+
+  // Загружаем звёзды из Firestore (async — UI обновится внутри loadUser)
+  await loadUser(user.uid);
 });
 </script>
 </body>

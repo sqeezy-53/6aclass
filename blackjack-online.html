@@ -807,16 +807,38 @@ let roomData = null;
 let localBet = 0;
 let myStats = { wins: 0, losses: 0, draws: 0, balance: 1000 };
 
-// Load stats from localStorage
-function loadStats() {
+// Load stats — баланс из Firestore, статистика из localStorage
+async function loadStats(uid) {
+  // Сначала грузим локальную статистику (wins/losses/draws)
   try {
-    const s = JSON.parse(localStorage.getItem('bj_online_stats') || 'null');
-    if (s) myStats = s;
+    const s = JSON.parse(localStorage.getItem('bj_stats_' + uid) || 'null');
+    if (s) { myStats.wins = s.wins||0; myStats.losses = s.losses||0; myStats.draws = s.draws||0; }
   } catch (_) {}
+  // Главное: баланс из Firestore (единые звёзды!)
+  try {
+    const snap = await getDoc(doc(db, 'users', uid));
+    if (snap.exists() && snap.data().stars != null) {
+      myStats.balance = snap.data().stars;
+    } else if (!snap.exists()) {
+      // Новый пользователь — инициализируем
+      await setDoc(doc(db, 'users', uid), { stars: myStats.balance }, { merge: true });
+    }
+  } catch(e) { console.warn('Firestore loadStats error:', e); }
   renderStats();
 }
-function saveStats() {
-  try { localStorage.setItem('bj_online_stats', JSON.stringify(myStats)); } catch (_) {}
+// Save stats — баланс в Firestore, статистика в localStorage
+async function saveStats() {
+  if (!currentUser) return;
+  // Статистику (wins/losses/draws) сохраняем локально
+  try {
+    localStorage.setItem('bj_stats_' + currentUser.uid, JSON.stringify({
+      wins: myStats.wins, losses: myStats.losses, draws: myStats.draws
+    }));
+  } catch (_) {}
+  // Баланс синхронизируем в Firestore
+  try {
+    await setDoc(doc(db, 'users', currentUser.uid), { stars: myStats.balance }, { merge: true });
+  } catch(e) { console.warn('Firestore saveStats error:', e); }
   renderStats();
 }
 function renderStats() {
@@ -951,7 +973,7 @@ el('btn-leave-room').onclick = () => leaveRoom();
 el('auth-nick').addEventListener('keydown', e => { if (e.key==='Enter') el('btn-login').click(); });
 el('auth-pass').addEventListener('keydown', e => { if (e.key==='Enter') el('btn-login').click(); });
 
-onAuthStateChanged(auth, user => {
+onAuthStateChanged(auth, async user => {
   hide('auth-checking');
   if (!user) {
     currentUser = null;
@@ -971,7 +993,7 @@ onAuthStateChanged(auth, user => {
   el('nav-name').textContent = displayNick(user);
   // Go to lobby
   hide('auth-gate');
-  loadStats();
+  await loadStats(user.uid);
   showLobby();
 });
 

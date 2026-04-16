@@ -1124,43 +1124,66 @@
             100% { transform: scale(1); }
         }
 
+        @keyframes hitmanShimmer {
+            0%   { background-position: 0% 50%; }
+            100% { background-position: 200% 50%; }
+        }
         .nav-hitman {
             font-family: var(--font-display);
-            font-weight: 700;
-            font-size: 0.82rem;
-            letter-spacing: 0.05em;
-            padding: 8px 14px;
-            color: #fca5a5;
-            background: rgba(30, 10, 10, 0.9);
-            border: 1px solid rgba(220,38,38,.5);
+            font-weight: 800;
+            font-size: 0.8rem;
+            letter-spacing: 0.07em;
+            padding: 8px 16px;
+            color: #ffe0e0;
+            background: linear-gradient(105deg, #2a0505 0%, #1a0000 35%, #2d0808 65%, #1a0000 100%);
+            background-size: 200% auto;
+            border: 1px solid rgba(220,38,38,.55);
             border-radius: var(--radius-sm);
             cursor: pointer;
             display: inline-flex;
             align-items: center;
             gap: 6px;
-            transition: color 0.2s, background 0.2s, transform 0.18s;
-            animation: hitmanPulse 3s ease-in-out infinite;
+            position: relative;
+            overflow: hidden;
+            transition: color 0.2s, transform 0.18s, border-color 0.2s;
+            animation: hitmanPulse 3.5s ease-in-out infinite;
             text-decoration: none;
             text-transform: uppercase;
+            box-shadow: inset 0 1px 0 rgba(255,100,100,.08);
         }
+        .nav-hitman::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(105deg, transparent 0%, rgba(255,60,60,.12) 50%, transparent 100%);
+            transform: skewX(-20deg) translateX(-120%);
+            transition: transform 0.55s ease;
+            pointer-events: none;
+        }
+        .nav-hitman:hover::before { transform: skewX(-20deg) translateX(200%); }
         .nav-hitman:hover {
             color: #fff;
-            background: rgba(50, 10, 10, 0.95);
-            transform: translateY(-1px);
-            animation: hitmanPulse 1.2s ease-in-out infinite;
+            border-color: rgba(255,50,50,.8);
+            transform: translateY(-2px);
+            animation: hitmanPulse 1s ease-in-out infinite;
+            box-shadow: 0 0 18px rgba(220,38,38,.35), inset 0 1px 0 rgba(255,120,120,.12);
         }
+        .nav-hitman:active { transform: translateY(0) scale(0.97); }
         .nav-hitman .skull-icon {
             font-size: 1em;
             animation: skullBeat 2.4s ease-in-out infinite;
         }
         [data-theme="light"] .nav-hitman {
             color: #991b1b;
-            background: rgba(255, 245, 245, 0.95);
+            background: linear-gradient(105deg, #fff0f0 0%, #ffe8e8 50%, #fff0f0 100%);
+            background-size: 200% auto;
             border-color: rgba(220,38,38,.4);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,.8);
         }
         [data-theme="light"] .nav-hitman:hover {
             color: #7f1d1d;
-            background: #fff0f0;
+            border-color: rgba(220,38,38,.7);
+            box-shadow: 0 0 14px rgba(220,38,38,.15), inset 0 1px 0 rgba(255,255,255,.8);
         }
 
         /* ═══════════════════════════════════════
@@ -1672,8 +1695,8 @@
                 <a href="#honor">Доска почёта</a>
                 <a href="#news">Новости</a>
                 <a href="mafia.html" class="nav-mafia">🃏 Мафия</a>
-                <button type="button" class="nav-hitman" id="btnOpenHitman" aria-label="Hitman Agency">
-                    <span class="skull-icon">💀</span> Hitman
+                <button type="button" class="nav-hitman" id="btnOpenHitman" aria-label="Агентство по ликвидациям">
+                    <span class="skull-icon">☠</span> Ликвидация
                 </button>
             </div>
             <button type="button" class="theme-toggle" id="themeToggle" aria-label="Сменить тему" title="Светлая / тёмная тема">
@@ -2008,7 +2031,7 @@ initReveal();
         <div class="hitman-header">
             <div class="hitman-header-top">
                 <div>
-                    <div class="hitman-title">☠ Hitman Agency</div>
+                    <div class="hitman-title">☠ Агентство по ликвидациям</div>
                     <div class="hitman-subtitle">Ликвидация · Хаос · Защита</div>
                 </div>
                 <button type="button" class="hitman-close" id="btnCloseHitman" aria-label="Закрыть">✕</button>
