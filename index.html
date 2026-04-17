@@ -1963,469 +1963,6 @@ function initReveal() {
 initReveal();
 
 
-/* ═══════════════════════════════════════════════════════════════════════
-   🥚 EASTER EGG SYSTEM — ОПЕРАЦИЯ: ТЕНЬ
-   20+ пасхалок с цепочкой через 4 страницы
-   Награды хранятся в localStorage key: 'eg_6a_progress'
-═══════════════════════════════════════════════════════════════════════ */
-(function EasterEggSystem() {
-
-/* ── УТИЛИТЫ ───────────────────────────────────────── */
-var COLORS = ['#5ec8ff','#a78bfa','#34d399','#fbbf24','#f87171','#fb923c'];
-
-function getProgress() {
-    try { return JSON.parse(localStorage.getItem('eg_6a_progress') || '{}'); } catch(e) { return {}; }
-}
-function setProgress(data) {
-    try { localStorage.setItem('eg_6a_progress', JSON.stringify(data)); } catch(e) {}
-}
-function markDone(key) {
-    var p = getProgress(); p[key] = true; setProgress(p);
-}
-function isDone(key) { return !!getProgress()[key]; }
-
-function spawnConfetti(count, fromX, fromY) {
-    count = count || 60;
-    for (var i = 0; i < count; i++) {
-        (function(idx) {
-            setTimeout(function() {
-                var el = document.createElement('div');
-                el.style.cssText = 'position:fixed;z-index:99999;pointer-events:none;' +
-                    'left:' + ((fromX != null ? fromX : Math.random() * 100) ) + (fromX != null ? 'px' : 'vw') + ';' +
-                    'top:' + ((fromY != null ? fromY : Math.random() * 40 + 5)) + (fromY != null ? 'px' : 'vh') + ';' +
-                    'width:' + (6 + Math.random() * 10) + 'px;' +
-                    'height:' + (6 + Math.random() * 10) + 'px;' +
-                    'background:' + COLORS[Math.floor(Math.random() * COLORS.length)] + ';' +
-                    'border-radius:' + (Math.random() > 0.5 ? '50%' : '3px') + ';' +
-                    'animation:confettiFall ' + (0.6 + Math.random() * 1.2) + 's ease-out forwards;';
-                document.body.appendChild(el);
-                el.addEventListener('animationend', function() { el.remove(); });
-            }, idx * 18);
-        })(i);
-    }
-}
-
-function showToast(msg, color, duration) {
-    var toast = document.createElement('div');
-    toast.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%) translateY(20px);' +
-        'background:' + (color || '#131720') + ';color:#fff;padding:14px 28px;border-radius:14px;' +
-        'font-family:Outfit,sans-serif;font-weight:700;font-size:1rem;z-index:99999;' +
-        'box-shadow:0 8px 32px rgba(0,0,0,.5);opacity:0;transition:all 0.35s ease;max-width:90vw;text-align:center;';
-    toast.textContent = msg;
-    document.body.appendChild(toast);
-    requestAnimationFrame(function() {
-        toast.style.opacity = '1';
-        toast.style.transform = 'translateX(-50%) translateY(0)';
-    });
-    setTimeout(function() {
-        toast.style.opacity = '0';
-        toast.style.transform = 'translateX(-50%) translateY(20px)';
-        setTimeout(function() { toast.remove(); }, 400);
-    }, duration || 3500);
-}
-
-function openEggModal(title, body, onClose) {
-    var ov = document.createElement('div');
-    ov.style.cssText = 'position:fixed;inset:0;z-index:99998;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(8px);animation:fadeInScale .3s ease both;';
-    var box = document.createElement('div');
-    box.style.cssText = 'background:linear-gradient(160deg,#0d1117,#131720);border:1px solid rgba(94,200,255,.25);border-radius:20px;padding:32px;max-width:480px;width:100%;box-shadow:0 0 60px rgba(94,200,255,.15),0 32px 80px rgba(0,0,0,.7);position:relative;';
-    box.innerHTML = '<h2 style="font-family:Outfit,sans-serif;font-size:1.5rem;font-weight:900;background:linear-gradient(100deg,#5ec8ff,#a78bfa);-webkit-background-clip:text;background-clip:text;color:transparent;margin-bottom:12px;">' + title + '</h2>' +
-        '<div style="color:#c8d0e0;line-height:1.7;font-size:.97rem;">' + body + '</div>' +
-        '<button id="eggModalClose" style="margin-top:24px;padding:12px 28px;background:linear-gradient(105deg,#5ec8ff,#a78bfa);border:none;border-radius:12px;color:#040c14;font-weight:800;font-size:.95rem;cursor:pointer;width:100%;">Понял! 🔥</button>';
-    ov.appendChild(box);
-    document.body.appendChild(ov);
-    document.getElementById('eggModalClose').onclick = function() {
-        ov.remove();
-        if (onClose) onClose();
-    };
-    ov.onclick = function(e) { if (e.target === ov) { ov.remove(); if (onClose) onClose(); } };
-}
-
-/* ══════════════════════════════════════════════════════════════════
-   ПАСХАЛКА #1 — «ШИФР ЦЕЗАРЯ»
-   В подвале футера спрятана мерцающая точка.
-   Кликни — откроется шифровка. Правильный ответ = «ТЕНЬ»
-══════════════════════════════════════════════════════════════════ */
-(function egg1_caesar() {
-    if (isDone('e1')) return;
-    var footer = document.querySelector('footer');
-    if (!footer) return;
-    var dot = document.createElement('span');
-    dot.id = 'egg1dot';
-    dot.title = '...';
-    dot.style.cssText = 'display:inline-block;width:8px;height:8px;border-radius:50%;background:#5ec8ff;margin-left:10px;cursor:pointer;vertical-align:middle;animation:heroPulse 2s ease-in-out infinite;opacity:.45;';
-    footer.appendChild(dot);
-
-    dot.addEventListener('click', function() {
-        openEggModal('🔐 Зашифрованное послание',
-            '<p style="margin-bottom:14px;">Перехвачено. Расшифруй шифр Цезаря (сдвиг +3):</p>' +
-            '<div style="font-family:monospace;font-size:1.4rem;letter-spacing:.2em;color:#5ec8ff;text-align:center;padding:16px;background:rgba(94,200,255,.07);border-radius:10px;margin-bottom:18px;">ХЗКМ</div>' +
-            '<input id="caesarInput" placeholder="Введи слово..." style="width:100%;padding:12px 16px;border-radius:10px;background:#0d1117;border:1px solid rgba(94,200,255,.3);color:#eef1f8;font-size:1rem;margin-bottom:10px;box-sizing:border-box;">' +
-            '<button id="caesarCheck" style="width:100%;padding:11px;background:rgba(94,200,255,.15);border:1px solid rgba(94,200,255,.3);border-radius:10px;color:#5ec8ff;font-weight:700;cursor:pointer;">Проверить</button>' +
-            '<div id="caesarHint" style="margin-top:10px;font-size:.85rem;color:#8a95a9;text-align:center;">Подсказка: русский алфавит, каждая буква сдвинута на 3 назад</div>',
-            null
-        );
-        setTimeout(function() {
-            var inp = document.getElementById('caesarInput');
-            var btn = document.getElementById('caesarCheck');
-            var hint = document.getElementById('caesarHint');
-            if (!btn) return;
-            btn.onclick = function() {
-                var val = (inp.value || '').trim().toUpperCase();
-                if (val === 'ТЕНЬ') {
-                    markDone('e1');
-                    localStorage.setItem('eg_e1_clue', '1');
-                    document.querySelector('.eggModalClose') && document.querySelector('.eggModalClose').click();
-                    // close modal
-                    var ov = btn.closest('[style*="position:fixed"]');
-                    if (ov) ov.remove();
-                    dot.remove();
-                    spawnConfetti(80);
-                    showToast('🥚 +10 000 ⭐ Пасхалка #1 найдена! Ключ: иди в чат → напиши /тень', '#1a5fa8', 5000);
-                } else {
-                    hint.style.color = '#f87171';
-                    hint.textContent = '❌ Неверно. Попробуй ещё раз!';
-                    inp.style.borderColor = 'rgba(248,113,113,.5)';
-                    setTimeout(function() { inp.style.borderColor = 'rgba(94,200,255,.3)'; hint.style.color='#8a95a9'; hint.textContent='Подсказка: русский алфавит, каждая буква сдвинута на 3 назад'; }, 2000);
-                }
-            };
-            inp.addEventListener('keydown', function(e) { if (e.key === 'Enter') btn.click(); });
-        }, 100);
-    });
-})();
-
-/* ══════════════════════════════════════════════════════════════════
-   ПАСХАЛКА #2 — «ДВОИЧНЫЙ КОД»
-   В заголовке H1 тройной клик → открывается мини-загадка с бинарным кодом
-══════════════════════════════════════════════════════════════════ */
-(function egg2_binary() {
-    if (isDone('e2')) return;
-    var h1 = document.querySelector('.hero h1');
-    if (!h1) return;
-    var clicks = 0, timer = null;
-    h1.style.cursor = 'default';
-    h1.addEventListener('click', function() {
-        clicks++;
-        clearTimeout(timer);
-        timer = setTimeout(function() { clicks = 0; }, 800);
-        if (clicks >= 3) {
-            clicks = 0;
-            openEggModal('01000011 01101111 01100100 01100101',
-                '<p style="margin-bottom:14px;">Что означает этот двоичный код? (ASCII)</p>' +
-                '<div style="font-family:monospace;font-size:.85rem;color:#34d399;word-break:break-all;padding:12px;background:rgba(52,211,153,.06);border-radius:10px;margin-bottom:16px;line-height:1.8;">' +
-                '01000011 01101100 01100001 01110011 01110011 00110110 01000001</div>' +
-                '<input id="binaryInput" placeholder="Переведи в текст..." style="width:100%;padding:12px 16px;border-radius:10px;background:#0d1117;border:1px solid rgba(52,211,153,.3);color:#eef1f8;font-size:1rem;margin-bottom:10px;box-sizing:border-box;">' +
-                '<button id="binaryCheck" style="width:100%;padding:11px;background:rgba(52,211,153,.15);border:1px solid rgba(52,211,153,.3);border-radius:10px;color:#34d399;font-weight:700;cursor:pointer;">Декодировать</button>' +
-                '<div id="binaryHint" style="margin-top:8px;font-size:.82rem;color:#8a95a9;">Каждые 8 бит = одна буква (ASCII)</div>'
-            );
-            setTimeout(function() {
-                var inp = document.getElementById('binaryInput');
-                var btn = document.getElementById('binaryCheck');
-                var hint = document.getElementById('binaryHint');
-                if (!btn) return;
-                btn.onclick = function() {
-                    var val = (inp.value || '').trim();
-                    if (val.toLowerCase() === 'class6a' || val === 'Class6A' || val.toUpperCase() === 'CLASS6A') {
-                        markDone('e2');
-                        var ov = btn.closest('[style*="inset:0"]');
-                        if (ov) ov.remove();
-                        spawnConfetti(90);
-                        showToast('🥚 +15 000 ⭐ Пасхалка #2! Следующая подсказка: загляни в карточные игры и найди «777»', '#1a5f3a', 5500);
-                    } else {
-                        hint.style.color = '#f87171';
-                        hint.textContent = '❌ Не то. Посчитай внимательнее!';
-                        setTimeout(function() { hint.style.color='#8a95a9'; hint.textContent='Каждые 8 бит = одна буква (ASCII)'; }, 2200);
-                    }
-                };
-                inp.addEventListener('keydown', function(e) { if (e.key === 'Enter') btn.click(); });
-            }, 100);
-        }
-    });
-})();
-
-/* ══════════════════════════════════════════════════════════════════
-   ПАСХАЛКА #3 — «КОНАМИ КОД» — НО С ТВИСТОМ
-   Введи ↑↑↓↓←→←→BA — откроется мини-кликер на 10 секунд
-   Цель: 30 кликов за 10 сек → +20 000 ⭐
-══════════════════════════════════════════════════════════════════ */
-(function egg3_konami() {
-    if (isDone('e3')) return;
-    var seq = [];
-    var KONAMI = ['ArrowUp','ArrowUp','ArrowDown','ArrowDown','ArrowLeft','ArrowRight','ArrowLeft','ArrowRight','b','a'];
-    document.addEventListener('keydown', function(e) {
-        seq.push(e.key);
-        if (seq.length > 10) seq.shift();
-        if (seq.join(',') === KONAMI.join(',')) {
-            seq = [];
-            openKonamiGame();
-        }
-    });
-
-    function openKonamiGame() {
-        var ov = document.createElement('div');
-        ov.style.cssText = 'position:fixed;inset:0;z-index:99998;background:rgba(0,0,0,.9);display:flex;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(12px);';
-        var box = document.createElement('div');
-        box.style.cssText = 'background:linear-gradient(160deg,#0d0808,#1a0d0d);border:1px solid rgba(251,191,36,.35);border-radius:20px;padding:32px;max-width:400px;width:100%;text-align:center;box-shadow:0 0 60px rgba(251,191,36,.12);';
-        box.innerHTML = '<div style="font-size:3rem;margin-bottom:8px;">⚡</div>' +
-            '<h2 style="font-family:Outfit,sans-serif;font-weight:900;color:#fbbf24;margin-bottom:8px;">КОНАМИ АКТИВИРОВАН!</h2>' +
-            '<p style="color:#8a95a9;margin-bottom:20px;font-size:.9rem;">30 кликов за 10 секунд — и 20 000 ⭐ твои!</p>' +
-            '<div id="konamiTimer" style="font-size:2.5rem;font-weight:900;color:#fbbf24;font-family:Outfit,sans-serif;">10</div>' +
-            '<div id="konamiCount" style="font-size:1.2rem;color:#c8d0e0;margin-bottom:20px;">Кликов: <strong>0</strong> / 30</div>' +
-            '<button id="konamiBtn" style="width:180px;height:180px;border-radius:50%;background:radial-gradient(circle,#fbbf24,#f59e0b);border:none;font-size:3.5rem;cursor:pointer;box-shadow:0 0 40px rgba(251,191,36,.4);transition:transform .1s;active:scale(.95);">💥</button>' +
-            '<div id="konamiResult" style="margin-top:20px;min-height:30px;font-size:1rem;color:#34d399;font-weight:700;"></div>';
-        ov.appendChild(box);
-        document.body.appendChild(ov);
-        var kClicks = 0, kTime = 10, kTimer = null, kStarted = false;
-        var btn = document.getElementById('konamiBtn');
-        var timerEl = document.getElementById('konamiTimer');
-        var countEl = document.getElementById('konamiCount');
-        var resultEl = document.getElementById('konamiResult');
-        btn.addEventListener('click', function() {
-            if (!kStarted) {
-                kStarted = true;
-                kTimer = setInterval(function() {
-                    kTime--;
-                    timerEl.textContent = kTime;
-                    if (kTime <= 0) {
-                        clearInterval(kTimer);
-                        btn.disabled = true;
-                        if (kClicks >= 30) {
-                            markDone('e3');
-                            resultEl.textContent = '🎉 +20 000 ⭐! Ты сделал это!';
-                            spawnConfetti(100);
-                            setTimeout(function() {
-                                ov.remove();
-                                showToast('🥚 +20 000 ⭐ Пасхалка #3! Следи за новостями — там что-то скрыто...', '#5c4510', 5000);
-                            }, 1500);
-                        } else {
-                            resultEl.style.color = '#f87171';
-                            resultEl.textContent = '❌ ' + kClicks + '/30. Попробуй снова!';
-                            setTimeout(function() { ov.remove(); }, 2000);
-                        }
-                    }
-                }, 1000);
-            }
-            if (!btn.disabled) {
-                kClicks++;
-                countEl.innerHTML = 'Кликов: <strong>' + kClicks + '</strong> / 30';
-                btn.style.transform = 'scale(.92)';
-                setTimeout(function() { btn.style.transform = 'scale(1)'; }, 80);
-            }
-        });
-        ov.addEventListener('click', function(e) {
-            if (e.target === ov && !kStarted) { clearInterval(kTimer); ov.remove(); }
-        });
-    }
-})();
-
-/* ══════════════════════════════════════════════════════════════════
-   ПАСХАЛКА #4 — «АЗБУКА МОРЗЕ»
-   Зажми и отпусти пробел — введи код морзе для слова «6А»
-   · ·····  ·–
-   Нажатие <300ms = точка, >300ms = тире. Пробел = разделитель
-══════════════════════════════════════════════════════════════════ */
-(function egg4_morse() {
-    if (isDone('e4')) return;
-    var pressStart = 0, morseBuffer = '', morseLetters = [], letterTimer = null, listening = false;
-    // Activate: зажми пробел 3 раза подряд быстро
-    var spaceCount = 0, spaceTimer = null;
-    document.addEventListener('keydown', function(e) {
-        if (e.key === ' ' && !e.repeat) {
-            if (!listening) {
-                spaceCount++;
-                clearTimeout(spaceTimer);
-                spaceTimer = setTimeout(function() { spaceCount = 0; }, 1000);
-                if (spaceCount >= 3) {
-                    spaceCount = 0;
-                    activateMorse();
-                }
-                return;
-            }
-            e.preventDefault();
-            pressStart = Date.now();
-        }
-    });
-    document.addEventListener('keyup', function(e) {
-        if (e.key === ' ' && listening) {
-            e.preventDefault();
-            var dur = Date.now() - pressStart;
-            morseBuffer += dur < 300 ? '.' : '-';
-            updateMorseDisplay();
-            clearTimeout(letterTimer);
-            letterTimer = setTimeout(function() {
-                if (morseBuffer) { morseLetters.push(morseBuffer); morseBuffer = ''; updateMorseDisplay(); }
-                if (morseLetters.length >= 2) checkMorse();
-            }, 900);
-        }
-    });
-
-    var morseOverlay = null;
-    function activateMorse() {
-        if (morseOverlay) return;
-        listening = true; morseBuffer = ''; morseLetters = [];
-        morseOverlay = document.createElement('div');
-        morseOverlay.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:99999;background:rgba(10,34,21,.95);border:1px solid rgba(52,211,153,.35);border-radius:16px;padding:20px 24px;min-width:280px;box-shadow:0 8px 32px rgba(0,0,0,.6);';
-        morseOverlay.innerHTML = '<div style="font-size:.7rem;letter-spacing:.15em;color:#34d399;font-weight:700;text-transform:uppercase;margin-bottom:8px;">📡 Азбука Морзе</div>' +
-            '<div style="font-size:.8rem;color:#8a95a9;margin-bottom:10px;">Зажми пробел: кратко=· долго=−<br>Пауза 0.9с = следующая буква</div>' +
-            '<div id="morseDisplay" style="font-family:monospace;font-size:1.4rem;color:#34d399;min-height:28px;letter-spacing:.2em;"></div>' +
-            '<div id="morseLetters" style="font-family:monospace;font-size:.9rem;color:#5ec8ff;min-height:20px;margin-top:4px;"></div>' +
-            '<div id="morseHint" style="font-size:.75rem;color:#606a7a;margin-top:8px;">Цель: введи «6А» в азбуке Морзе · ·····  ·–</div>' +
-            '<button id="morseCancelBtn" style="margin-top:12px;padding:6px 14px;background:transparent;border:1px solid rgba(255,255,255,.15);border-radius:8px;color:#8a95a9;cursor:pointer;font-size:.8rem;">Отмена</button>';
-        document.body.appendChild(morseOverlay);
-        document.getElementById('morseCancelBtn').onclick = function() { deactivateMorse(); };
-    }
-    function deactivateMorse() {
-        listening = false; morseBuffer = ''; morseLetters = [];
-        if (morseOverlay) { morseOverlay.remove(); morseOverlay = null; }
-    }
-    function updateMorseDisplay() {
-        var disp = document.getElementById('morseDisplay');
-        var lett = document.getElementById('morseLetters');
-        if (disp) disp.textContent = morseLetters.join(' ') + (morseBuffer ? (morseLetters.length ? ' ' : '') + morseBuffer : '');
-        if (lett) lett.textContent = morseLetters.map(decodeMorse).join('');
-    }
-    var MORSE_MAP = {'·–····':'6','·–':'А','·':'.','–':'T'};
-    var MORSE_TABLE = {'·–····':'6','·–':'А','–·':'N','···':'S','·':'E','–':'T','·–':' А','––·':'G','····':'H','··':'I','·–––':'J','–·–':'K','·–··':'L','––':'M','–·':'N','–––':'O','··–·':'P','––·–':'Q','·–·':'R','···':'S','–':'T','··–':'U','···–':'V','·––':'W','–··–':'X','–·––':'Y','––··':'Z'};
-    // Simple map for what we need: 6 = ·····– and А = ·–
-    var MORSE_EXACT = {'·····–':'6','·–':'А'};
-    function decodeMorse(code) {
-        return MORSE_EXACT[code] || MORSE_TABLE[code] || '?';
-    }
-    function checkMorse() {
-        var decoded = morseLetters.map(decodeMorse).join('');
-        var hint = document.getElementById('morseHint');
-        if (decoded === '6А' || decoded === '6A') {
-            markDone('e4');
-            deactivateMorse();
-            spawnConfetti(70);
-            showToast('🥚 +25 000 ⭐ Пасхалка #4 — Мастер Морзе! Ключ 4 разблокирован. Иди в Мафию.', '#1a0a4a', 5500);
-        } else if (morseLetters.length >= 2) {
-            if (hint) { hint.style.color = '#f87171'; hint.textContent = '❌ «' + decoded + '» — не то. Цель: 6А (·····–  ·–)'; }
-            morseLetters = [];
-            setTimeout(function() { if (hint) { hint.style.color = '#606a7a'; hint.textContent = 'Цель: введи «6А» в азбуке Морзе · ·····  ·–'; }}, 2000);
-        }
-    }
-})();
-
-/* ══════════════════════════════════════════════════════════════════
-   ПАСХАЛКА #5 — «ЛОГИКА ВРЕМЕНИ»
-   Посети сайт ровно в 06:06 — или открой DevTools Console и введи
-   unlock6a() — появится интерфейс «Ночной режим»
-   Награда: +30 000 ⭐ + разблокирует первый шаг цепочки на index4.html
-══════════════════════════════════════════════════════════════════ */
-(function egg5_time() {
-    window.unlock6a = function() {
-        if (isDone('e5')) { showToast('Ты уже нашёл эту пасхалку! 🎉', '#1a5fa8'); return; }
-        activateTimeEgg();
-    };
-
-    var now = new Date();
-    if (now.getHours() === 6 && now.getMinutes() === 6) {
-        setTimeout(activateTimeEgg, 2000);
-    }
-
-    function activateTimeEgg() {
-        markDone('e5');
-        localStorage.setItem('eg_chain_start', '1');
-        var ov = document.createElement('div');
-        ov.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.97);display:flex;align-items:center;justify-content:center;flex-direction:column;animation:fadeInScale .5s ease both;';
-        ov.innerHTML = '<div style="text-align:center;padding:32px;max-width:520px;">' +
-            '<div style="font-size:4rem;margin-bottom:16px;animation:heroFloat 3s ease-in-out infinite;">🌑</div>' +
-            '<h1 style="font-family:Outfit,sans-serif;font-weight:900;font-size:2rem;background:linear-gradient(100deg,#5ec8ff,#a78bfa,#34d399);-webkit-background-clip:text;background-clip:text;color:transparent;margin-bottom:12px;">НОЧНОЙ РЕЖИМ</h1>' +
-            '<p style="color:#8a95a9;line-height:1.8;margin-bottom:24px;">Ты нашёл скрытый режим сайта 6А.<br>Это начало операции <strong style="color:#5ec8ff;">ТЕНЬ</strong>.<br><br>' +
-            'Твой первый шаг пройден.<br>Теперь иди в <strong style="color:#fbbf24;">Карточные игры</strong> и найди<br>три семёрки в одном раунде слотов.</p>' +
-            '<div style="font-size:1.4rem;font-weight:800;color:#fbbf24;margin-bottom:24px;">+30 000 ⭐ НАЧИСЛЕНО</div>' +
-            '<button id="timeClose" style="padding:14px 40px;background:linear-gradient(105deg,#5ec8ff,#a78bfa);border:none;border-radius:14px;color:#040c14;font-weight:800;font-size:1rem;cursor:pointer;">Начать операцию →</button>' +
-            '</div>';
-        document.body.appendChild(ov);
-        spawnConfetti(120);
-        document.getElementById('timeClose').onclick = function() { ov.remove(); };
-    }
-})();
-
-/* ══════════════════════════════════════════════════════════════════
-   ПАСХАЛКА #6 — «ДОСКА ПОЧЁТА»
-   Кликни на имя из доски почёта 7 раз → получи квиз о классе
-══════════════════════════════════════════════════════════════════ */
-(function egg6_honorboard() {
-    if (isDone('e6')) return;
-    var attempts = 0, quizActive = false;
-    var QUESTIONS = [
-        { q: 'Как называется сайт класса?', a: '6aclass.online', hint: 'Смотри в адресной строке' },
-        { q: 'Сколько карточных игр на сайте? (число)', a: '7', hint: 'Посчитай на странице index4.html' },
-        { q: 'Какой год основания сайта? (число)', a: '2026', hint: 'Смотри в футере' }
-    ];
-    var qIdx = 0, score = 0;
-
-    function attachHonorClicks() {
-        var cards = document.querySelectorAll('.honor-card, .honor-name, [class*="honor"]');
-        if (!cards.length) { setTimeout(attachHonorClicks, 1500); return; }
-        cards.forEach(function(c) {
-            var cnt = 0, t = null;
-            c.addEventListener('click', function() {
-                cnt++;
-                clearTimeout(t);
-                t = setTimeout(function() { cnt = 0; }, 2500);
-                if (cnt >= 7 && !quizActive) {
-                    cnt = 0; quizActive = true;
-                    startQuiz();
-                }
-            });
-        });
-    }
-    attachHonorClicks();
-
-    function startQuiz() {
-        qIdx = 0; score = 0;
-        showQuestion();
-    }
-    function showQuestion() {
-        if (qIdx >= QUESTIONS.length) {
-            endQuiz(); return;
-        }
-        var q = QUESTIONS[qIdx];
-        openEggModal('🧩 Квиз о 6А [' + (qIdx+1) + '/' + QUESTIONS.length + ']',
-            '<p style="margin-bottom:14px;font-size:1.05rem;">' + q.q + '</p>' +
-            '<input id="quizInp" placeholder="Ответ..." style="width:100%;padding:12px 16px;border-radius:10px;background:#0d1117;border:1px solid rgba(167,139,250,.3);color:#eef1f8;font-size:1rem;margin-bottom:10px;box-sizing:border-box;">' +
-            '<button id="quizCheck" style="width:100%;padding:11px;background:rgba(167,139,250,.15);border:1px solid rgba(167,139,250,.3);border-radius:10px;color:#a78bfa;font-weight:700;cursor:pointer;">Ответить</button>' +
-            '<div id="quizHint" style="margin-top:8px;font-size:.82rem;color:#8a95a9;">' + q.hint + '</div>',
-            function() { quizActive = false; }
-        );
-        setTimeout(function() {
-            var inp = document.getElementById('quizInp');
-            var btn = document.getElementById('quizCheck');
-            if (!btn) return;
-            btn.onclick = function() {
-                var val = (inp.value || '').trim().toLowerCase();
-                var correct = q.a.toLowerCase();
-                var ov = btn.closest('[style*="inset:0"]');
-                if (val === correct || val.replace(/\./g,'') === correct.replace(/\./g,'')) {
-                    score++;
-                    qIdx++;
-                    if (ov) ov.remove();
-                    setTimeout(showQuestion, 300);
-                } else {
-                    var hint = document.getElementById('quizHint');
-                    if (hint) { hint.style.color = '#f87171'; hint.textContent = '❌ Не то!'; }
-                    setTimeout(function() { if (hint) { hint.style.color='#8a95a9'; hint.textContent = q.hint; } }, 1800);
-                }
-            };
-            inp.addEventListener('keydown', function(e) { if (e.key === 'Enter') btn.click(); });
-        }, 100);
-    }
-    function endQuiz() {
-        quizActive = false;
-        if (score >= 2) {
-            markDone('e6');
-            spawnConfetti(80);
-            openEggModal('🥚 Квиз пройден!', '<p>Результат: ' + score + '/' + QUESTIONS.length + '</p><p style="margin-top:10px;color:#fbbf24;font-weight:700;">+40 000 ⭐! Ты знаешь класс 6А лучше всех!</p>');
-        } else {
-            openEggModal('😅 Попробуй ещё', '<p>Ответил правильно ' + score + ' из ' + QUESTIONS.length + '.<br>Нажми на карточку из доски почёта 7 раз чтобы попробовать снова.</p>');
-        }
-    }
-})();
-
-})(); // end EasterEggSystem
 </script>
 <!-- ══════════════════════════════════════════════════════════
      HITMAN AGENCY MODAL
@@ -2550,7 +2087,7 @@ function openEggModal(title, body, onClose) {
 //  HITMAN AGENCY — полная реализация с Firebase Firestore
 // ═══════════════════════════════════════════════════════════════════
 import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
-import { getAuth, onAuthStateChanged }
+import { getAuth, onAuthStateChanged, signOut }
     from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
 import {
     getFirestore, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc,
@@ -3094,11 +2631,29 @@ function closeHitman() {
 
 // ── AUTH STATE ────────────────────────────────────────────────────
 onAuthStateChanged(auth, async user => {
-    currentUser = user;
     if (user) {
         try {
             const userRef = doc(db, 'users', user.uid);
             const snap = await getDoc(userRef);
+
+            // ── ПРОВЕРКА БАНА ──────────────────────────────────────
+            if (snap.exists() && snap.data().banned === true) {
+                await signOut(auth);
+                currentUser = null;
+                // Показываем сообщение о бане поверх страницы
+                const existing = document.getElementById('_bannedOverlay');
+                if (!existing) {
+                    const ov = document.createElement('div');
+                    ov.id = '_bannedOverlay';
+                    ov.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(4,12,20,.97);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;font-family:Outfit,sans-serif;';
+                    ov.innerHTML = '<div style="font-size:3rem;">🚫</div><div style="color:#f87171;font-size:1.4rem;font-weight:800;">Аккаунт ликвидирован</div><div style="color:#8a95a9;font-size:1rem;">Доступ ограничен.</div>';
+                    document.body.appendChild(ov);
+                }
+                return;
+            }
+            // ───────────────────────────────────────────────────────
+
+            currentUser = user;
             const displayName = user.displayName || nickFromEmail(user.email);
             if (snap.exists()) {
                 await updateDoc(userRef, { displayName, email: user.email, lastSeen: serverTimestamp() });
@@ -3106,6 +2661,8 @@ onAuthStateChanged(auth, async user => {
                 await setDoc(userRef, { uid: user.uid, displayName, email: user.email, stars: 0, createdAt: serverTimestamp(), lastSeen: serverTimestamp() });
             }
         } catch(e) { console.warn('profile save error:', e); }
+    } else {
+        currentUser = null;
     }
 });
 </script>
