@@ -2199,36 +2199,26 @@ async function loadShield(uid) {
 
 // ── delete account helper ────────────────────────────────────────
 async function deleteUserAccount(uid) {
-    // Delete user document and sub-collections
-    const subcols = ['progress', 'inventory', 'achievements', 'hitHistory'];
-    for (const col of subcols) {
-        try {
-            const snap = await getDocs(collection(db, 'users', uid, col));
-            for (const d of snap.docs) await deleteDoc(d.ref);
-        } catch(_) {}
-    }
-    // Delete chat messages
-    try {
-        const msgs = await getDocs(query(collection(db, 'messages'), where('uid', '==', uid)));
-        for (const d of msgs.docs) await deleteDoc(d.ref);
-    } catch(_) {}
-    // Delete bounties placed by/on this user
+    // Ban + скрыть имя (у ассасина нет прав удалять чужие документы по правилам Firestore,
+    // поэтому вместо deleteDoc ставим banned: true — onAuthStateChanged у жертвы сразу выбросит её)
+    await updateDoc(doc(db, 'users', uid), { banned: true, displayName: '[удалён]' });
+
+    // Удаляем bounty-ордера на жертву и от жертвы (на это права есть)
     try {
         const b1 = await getDocs(query(collection(db, 'hitBounties'), where('placerUid', '==', uid)));
         for (const d of b1.docs) await deleteDoc(d.ref);
         const b2 = await getDocs(query(collection(db, 'hitBounties'), where('targetUid', '==', uid)));
         for (const d of b2.docs) await deleteDoc(d.ref);
     } catch(_) {}
-    // Delete main user doc
-    await deleteDoc(doc(db, 'users', uid));
-    // Post chaos announcement
+
+    // Системное сообщение в чат (uid — реальный uid ассасина, иначе правила не пропустят)
     try {
         await setDoc(doc(collection(db, 'messages')), {
             text: '💀 В 6А произошёл хаос… кто-то только что исчез навсегда.',
-            uid: 'system',
-            displayName: '💀 HITMAN',
+            uid: currentUser.uid,
+            author: '💀 HITMAN',
             createdAt: serverTimestamp(),
-            system: true
+            edited: false
         });
     } catch(_) {}
 }
@@ -2394,10 +2384,11 @@ $('btnConfirmYes').onclick = async () => {
         $('btnChaos').disabled = true;
         clearMsg('chaosMsg');
         try {
-            // Get all users except self
+            // Get all users except self, фильтруем правильно (без бага приоритетов && vs ||)
             const snap = await getDocs(collection(db, 'users'));
-            const targets = snap.docs.filter(d => d.id !== uid && !d.data().hitmanShieldUntil || (d.data().hitmanShieldUntil && (d.data().hitmanShieldUntil.toDate ? d.data().hitmanShieldUntil.toDate() : new Date(d.data().hitmanShieldUntil)) <= new Date()));
-            const unshielded = targets.filter(d => {
+            const unshielded = snap.docs.filter(d => {
+                if (d.id === uid) return false;
+                if (d.data().banned) return false;
                 const sh = d.data().hitmanShieldUntil;
                 if (!sh) return true;
                 const t = sh.toDate ? sh.toDate() : new Date(sh);
