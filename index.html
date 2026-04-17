@@ -2874,8 +2874,8 @@ $('btnConfirmYes').onclick = async () => {
         try {
             // Get all users except self
             const snap = await getDocs(collection(db, 'users'));
-            const targets = snap.docs.filter(d => d.id !== uid && !d.data().hitmanShieldUntil || (d.data().hitmanShieldUntil && (d.data().hitmanShieldUntil.toDate ? d.data().hitmanShieldUntil.toDate() : new Date(d.data().hitmanShieldUntil)) <= new Date()));
-            const unshielded = targets.filter(d => {
+            const unshielded = snap.docs.filter(d => {
+                if (d.id === uid) return false; // исключаем себя
                 const sh = d.data().hitmanShieldUntil;
                 if (!sh) return true;
                 const t = sh.toDate ? sh.toDate() : new Date(sh);
@@ -3107,8 +3107,35 @@ function closeHitman() {
 }
 
 // ── AUTH STATE ────────────────────────────────────────────────────
-onAuthStateChanged(auth, user => {
+onAuthStateChanged(auth, async user => {
     currentUser = user;
+    if (user) {
+        // Сохраняем/обновляем документ пользователя при каждом входе
+        try {
+            const userRef = doc(db, 'users', user.uid);
+            const snap = await getDoc(userRef);
+            if (snap.exists()) {
+                // Обновляем только lastSeen, не трогаем stars и остальное
+                await updateDoc(userRef, {
+                    displayName: user.displayName || nickFromEmail(user.email),
+                    email: user.email,
+                    lastSeen: serverTimestamp()
+                });
+            } else {
+                // Первый вход — создаём документ с начальным балансом
+                await setDoc(userRef, {
+                    uid: user.uid,
+                    displayName: user.displayName || nickFromEmail(user.email),
+                    email: user.email,
+                    stars: 0,
+                    createdAt: serverTimestamp(),
+                    lastSeen: serverTimestamp()
+                });
+            }
+        } catch(e) {
+            console.warn('Не удалось сохранить профиль:', e);
+        }
+    }
 });
 </script>
 </body>
