@@ -2832,13 +2832,13 @@ $('btnConfirmYes').onclick = async () => {
         $('btnAssassinate').disabled = true;
         clearMsg('assassinateMsg');
         try {
-            // Find target user
-            const usersSnap = await getDocs(query(
-                collection(db, 'users'),
-                where('displayName', '==', nick),
-                limit(1)
-            ));
-            if (usersSnap.empty) { showMsg('assassinateMsg', `Пользователь «${nick}» не найден.`); $('btnAssassinate').disabled = false; return; }
+            // Find target user — case-insensitive client-side search
+            const allUsersSnap = await getDocs(collection(db, 'users'));
+            const matchedDocs = allUsersSnap.docs.filter(d =>
+                (d.data().displayName || '').toLowerCase() === nick.toLowerCase()
+            );
+            if (matchedDocs.length === 0) { showMsg('assassinateMsg', `Пользователь «${nick}» не найден.`); $('btnAssassinate').disabled = false; return; }
+            const usersSnap = { docs: matchedDocs };
 
             const targetDoc = usersSnap.docs[0];
             const targetData = targetDoc.data();
@@ -2874,8 +2874,8 @@ $('btnConfirmYes').onclick = async () => {
         try {
             // Get all users except self
             const snap = await getDocs(collection(db, 'users'));
-            const unshielded = snap.docs.filter(d => {
-                if (d.id === uid) return false; // исключаем себя
+            const targets = snap.docs.filter(d => d.id !== uid && !d.data().hitmanShieldUntil || (d.data().hitmanShieldUntil && (d.data().hitmanShieldUntil.toDate ? d.data().hitmanShieldUntil.toDate() : new Date(d.data().hitmanShieldUntil)) <= new Date()));
+            const unshielded = targets.filter(d => {
                 const sh = d.data().hitmanShieldUntil;
                 if (!sh) return true;
                 const t = sh.toDate ? sh.toDate() : new Date(sh);
@@ -2930,8 +2930,12 @@ $('btnConfirmYes').onclick = async () => {
         clearMsg('bountyMsg');
         try {
             // Find target
-            const usersSnap = await getDocs(query(collection(db, 'users'), where('displayName', '==', nick), limit(1)));
-            if (usersSnap.empty) { showMsg('bountyMsg', `Пользователь «${nick}» не найден.`); $('btnPlaceBounty').disabled = false; return; }
+            const allUsersSnap2 = await getDocs(collection(db, 'users'));
+            const matchedDocs2 = allUsersSnap2.docs.filter(d =>
+                (d.data().displayName || '').toLowerCase() === nick.toLowerCase()
+            );
+            if (matchedDocs2.length === 0) { showMsg('bountyMsg', `Пользователь «${nick}» не найден.`); $('btnPlaceBounty').disabled = false; return; }
+            const usersSnap = { docs: matchedDocs2 };
             const targetDoc = usersSnap.docs[0];
 
             // Deduct stars from placer
@@ -3110,31 +3114,16 @@ function closeHitman() {
 onAuthStateChanged(auth, async user => {
     currentUser = user;
     if (user) {
-        // Сохраняем/обновляем документ пользователя при каждом входе
         try {
             const userRef = doc(db, 'users', user.uid);
             const snap = await getDoc(userRef);
+            const displayName = user.displayName || nickFromEmail(user.email);
             if (snap.exists()) {
-                // Обновляем только lastSeen, не трогаем stars и остальное
-                await updateDoc(userRef, {
-                    displayName: user.displayName || nickFromEmail(user.email),
-                    email: user.email,
-                    lastSeen: serverTimestamp()
-                });
+                await updateDoc(userRef, { displayName, email: user.email, lastSeen: serverTimestamp() });
             } else {
-                // Первый вход — создаём документ с начальным балансом
-                await setDoc(userRef, {
-                    uid: user.uid,
-                    displayName: user.displayName || nickFromEmail(user.email),
-                    email: user.email,
-                    stars: 0,
-                    createdAt: serverTimestamp(),
-                    lastSeen: serverTimestamp()
-                });
+                await setDoc(userRef, { uid: user.uid, displayName, email: user.email, stars: 0, createdAt: serverTimestamp(), lastSeen: serverTimestamp() });
             }
-        } catch(e) {
-            console.warn('Не удалось сохранить профиль:', e);
-        }
+        } catch(e) { console.warn('profile save error:', e); }
     }
 });
 </script>
