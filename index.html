@@ -2734,13 +2734,6 @@ $('btnAssassinate').onclick = async () => {
         showMsg('assassinateMsg', `Недостаточно звёзд. Нужно ${fmtNum(COST.assassinate)} ⭐, у тебя ${fmtNum(currentStars)} ⭐. Иди зарабатывай!`, 'info'); return;
     }
 
-    // Check daily cooldown (stored locally — simple approach)
-    const cdKey = 'hitman_assassin_day_' + currentUser.uid;
-    const cdVal = localStorage.getItem(cdKey);
-    if (cdVal === todayKey()) {
-        showMsg('assassinateMsg', '⏳ Сегодня уже использовал Assassinate. Возвращайся завтра.', 'info'); return;
-    }
-
     // Open confirm
     $('hitmanConfirmText').innerHTML = `Ты точно хочешь навсегда удалить аккаунт<br><span class="hitman-confirm-target">«${nick}»</span>?<br><br>Действие необратимо. Никто никогда не узнает, что это был ты.`;
     $('hitmanConfirm').classList.add('is-open');
@@ -2754,11 +2747,6 @@ $('btnChaos').onclick = async () => {
     if (currentStars < COST.chaos) {
         showMsg('chaosMsg', `Недостаточно звёзд. Нужно ${fmtNum(COST.chaos)} ⭐, у тебя ${fmtNum(currentStars)} ⭐.`, 'info'); return;
     }
-    const cdKey = 'hitman_chaos_day_' + currentUser.uid;
-    if (localStorage.getItem(cdKey) === todayKey()) {
-        showMsg('chaosMsg', '⏳ Сегодня уже запускал хаос. Возвращайся завтра.', 'info'); return;
-    }
-
     $('hitmanConfirmText').innerHTML = `Система случайно выберёт любого пользователя 6А и уничтожит его аккаунт.<br><br><span class="hitman-confirm-target">Ты не узнаешь, кто это будет.</span><br><br>Запустить хаос?`;
     $('hitmanConfirm').classList.add('is-open');
     pendingAction = { type: 'chaos' };
@@ -2854,9 +2842,6 @@ $('btnConfirmYes').onclick = async () => {
             await deleteUserAccount(targetDoc.id);
             // Log hit
             await logHit(uid, nick, 'assassinate');
-            // Cooldown
-            localStorage.setItem('hitman_assassin_day_' + uid, todayKey());
-
             currentStars -= COST.assassinate;
             $('hitmanBalance').textContent = fmtNum(currentStars);
             showMsg('assassinateMsg', `✅ Аккаунт «${nick}» уничтожен. Никто ничего не знает.`, 'success');
@@ -2892,9 +2877,6 @@ $('btnConfirmYes').onclick = async () => {
             await deleteUserAccount(target.id);
             // Log hit
             await logHit(uid, '???', 'chaos');
-            // Cooldown
-            localStorage.setItem('hitman_chaos_day_' + uid, todayKey());
-
             currentStars -= COST.chaos;
             $('hitmanBalance').textContent = fmtNum(currentStars);
             showMsg('chaosMsg', '💥 Хаос запущен. Кто-то только что исчез навсегда.', 'success');
