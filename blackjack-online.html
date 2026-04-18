@@ -6,7 +6,6 @@
 <title>Блэкджек Онлайн</title>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=Cinzel:wght@400;600;700&family=Libre+Baskerville:ital,wght@0,400;1,400&display=swap" rel="stylesheet">
 <style>
-/* ── CSS VARIABLES (from index4.html) ── */
 :root {
   --gold: #e8c547;
   --gold2: #fff0a0;
@@ -24,41 +23,29 @@
   --green2: #2ecc71;
   --cream: #f5f0e0;
   --shadow-gold: 0 0 24px rgba(232,197,71,0.35);
-  --shadow-gold-strong: 0 0 50px rgba(232,197,71,0.45);
 }
 html { overflow-x: hidden; -webkit-text-size-adjust: 100%; }
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-@keyframes ambientShift {
-  0%,100%{opacity:1;filter:hue-rotate(0deg)}
-  50%{opacity:.92;filter:hue-rotate(12deg)}
-}
+@keyframes ambientShift { 0%,100%{opacity:1;filter:hue-rotate(0deg)} 50%{opacity:.92;filter:hue-rotate(12deg)} }
 @keyframes feltGlow {
   0%,100%{box-shadow:inset 0 2px 28px rgba(0,0,0,.55),0 4px 28px rgba(0,0,0,.5),0 0 20px rgba(232,197,71,.06)}
   50%{box-shadow:inset 0 2px 28px rgba(0,0,0,.55),0 6px 32px rgba(0,0,0,.55),0 0 36px rgba(232,197,71,.18)}
 }
-@keyframes cardDeal {
-  from{opacity:0;transform:translateY(-28px) scale(.92) rotate(-4deg)}
-  to{opacity:1;transform:translateY(0) scale(1) rotate(0)}
-}
+@keyframes cardDeal { from{opacity:0;transform:translateY(-28px) scale(.92) rotate(-4deg)} to{opacity:1;transform:translateY(0) scale(1) rotate(0)} }
 @keyframes titleGlow {
   0%,100%{text-shadow:0 0 30px rgba(232,197,71,.45),0 2px 4px rgba(0,0,0,.9)}
   50%{text-shadow:0 0 55px rgba(255,230,140,.55),0 0 80px rgba(255,45,106,.15),0 2px 4px rgba(0,0,0,.9)}
 }
-@keyframes coinPop {
-  0%{transform:scale(1)} 40%{transform:scale(1.12)} 100%{transform:scale(1)}
-}
 @keyframes spin { to{transform:rotate(360deg)} }
-@keyframes fadeIn {
-  from{opacity:0;transform:translateY(10px)}
-  to{opacity:1;transform:translateY(0)}
-}
-@keyframes shimmer {
-  0%{transform:translateX(-100%)}
-  100%{transform:translateX(100%)}
-}
-@keyframes pulse {
-  0%,100%{opacity:1} 50%{opacity:.5}
+@keyframes fadeIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+@keyframes shimmer { 0%{transform:translateX(-100%)} 100%{transform:translateX(100%)} }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+@keyframes popIn { 0%{transform:scale(0.5);opacity:0} 60%{transform:scale(1.12)} 100%{transform:scale(1);opacity:1} }
+@keyframes winGlow { 0%,100%{box-shadow:0 0 20px rgba(46,204,113,.3)} 50%{box-shadow:0 0 40px rgba(46,204,113,.7),0 0 80px rgba(46,204,113,.3)} }
+@keyframes coinFly {
+  0%{transform:translate(0,0) scale(1);opacity:1}
+  100%{transform:translate(var(--cx),var(--cy)) scale(0.2);opacity:0}
 }
 
 body {
@@ -79,7 +66,6 @@ body::before {
   pointer-events:none;z-index:0;opacity:.45;
   animation:ambientShift 18s ease-in-out infinite;
 }
-
 .hidden { display:none !important; }
 
 /* ── NAV ── */
@@ -97,215 +83,77 @@ body::before {
   background:linear-gradient(90deg,transparent,var(--gold),var(--gold2),var(--gold),transparent);
   opacity:.85;
 }
-.nav-logo {
-  display:flex;align-items:center;gap:10px;z-index:1;
-}
-.nav-title {
-  font-family:'Cinzel',serif;font-size:1.05em;font-weight:700;
-  letter-spacing:4px;color:var(--gold2);
-  text-shadow:0 0 22px rgba(232,197,71,.55);
-}
-.nav-user {
-  display:flex;align-items:center;gap:10px;z-index:1;
-}
-.nav-avatar {
-  width:34px;height:34px;border-radius:50%;
-  display:flex;align-items:center;justify-content:center;
-  font-family:'Cinzel',serif;font-size:.85em;font-weight:700;color:#fff;
-  border:2px solid rgba(232,197,71,.4);flex-shrink:0;
-}
-.nav-name {
-  font-family:'Cinzel',serif;font-size:.75em;color:var(--gold2);letter-spacing:1px;
-}
-.btn-nav {
-  padding:6px 14px;background:transparent;
-  color:rgba(212,175,55,.6);border:1px solid rgba(212,175,55,.25);
-  cursor:pointer;font-family:'Cinzel',serif;font-size:.68em;
-  letter-spacing:2px;transition:all .2s;border-radius:4px;
-}
+.nav-logo { display:flex;align-items:center;gap:10px;z-index:1; }
+.nav-title { font-family:'Cinzel',serif;font-size:1.05em;font-weight:700;letter-spacing:4px;color:var(--gold2);text-shadow:0 0 22px rgba(232,197,71,.55); }
+.nav-user { display:flex;align-items:center;gap:10px;z-index:1; }
+.nav-avatar { width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Cinzel',serif;font-size:.85em;font-weight:700;color:#fff;border:2px solid rgba(232,197,71,.4);flex-shrink:0; }
+.nav-name { font-family:'Cinzel',serif;font-size:.75em;color:var(--gold2);letter-spacing:1px; }
+.btn-nav { padding:6px 14px;background:transparent;color:rgba(212,175,55,.6);border:1px solid rgba(212,175,55,.25);cursor:pointer;font-family:'Cinzel',serif;font-size:.68em;letter-spacing:2px;transition:all .2s;border-radius:4px; }
 .btn-nav:hover{color:var(--gold);border-color:rgba(212,175,55,.5);}
 
-/* ── AUTH GATE ── */
-.auth-gate {
-  position:relative;z-index:1;
-  display:flex;align-items:center;justify-content:center;
-  min-height:calc(100vh - 60px);padding:24px 16px;
-}
-.auth-card {
-  width:100%;max-width:380px;
-  background:linear-gradient(155deg,rgba(36,28,58,.98) 0%,rgba(14,12,24,.99) 100%);
-  border:1px solid rgba(232,197,71,.35);border-radius:16px;
-  padding:36px 28px;box-shadow:0 24px 64px rgba(0,0,0,.7);
-  animation:fadeIn .5s ease;
-}
-.auth-card h2 {
-  font-family:'Cinzel',serif;font-size:1.4em;font-weight:700;
-  letter-spacing:4px;color:var(--gold2);margin-bottom:6px;text-align:center;
-}
-.auth-sub {
-  font-size:.75em;color:rgba(212,175,55,.45);
-  letter-spacing:2px;text-align:center;margin-bottom:28px;
-}
+/* ── AUTH ── */
+.auth-gate { position:relative;z-index:1;display:flex;align-items:center;justify-content:center;min-height:calc(100vh - 60px);padding:24px 16px; }
+.auth-card { width:100%;max-width:380px;background:linear-gradient(155deg,rgba(36,28,58,.98) 0%,rgba(14,12,24,.99) 100%);border:1px solid rgba(232,197,71,.35);border-radius:16px;padding:36px 28px;box-shadow:0 24px 64px rgba(0,0,0,.7);animation:fadeIn .5s ease; }
+.auth-card h2 { font-family:'Cinzel',serif;font-size:1.4em;font-weight:700;letter-spacing:4px;color:var(--gold2);margin-bottom:6px;text-align:center; }
+.auth-sub { font-size:.75em;color:rgba(212,175,55,.45);letter-spacing:2px;text-align:center;margin-bottom:28px; }
 .auth-field { margin-bottom:16px; }
-.auth-field label {
-  display:block;font-family:'Cinzel',serif;
-  font-size:.65em;letter-spacing:2px;color:rgba(212,175,55,.5);
-  text-transform:uppercase;margin-bottom:8px;
-}
-.auth-input {
-  width:100%;padding:13px 16px;
-  border-radius:8px;border:1px solid rgba(232,197,71,.25);
-  background:rgba(255,255,255,.04);color:var(--gold2);
-  font-family:'Libre Baskerville',serif;font-size:.92em;
-  transition:border-color .2s,box-shadow .2s;
-}
-.auth-input:focus {
-  outline:none;border-color:rgba(232,197,71,.6);
-  box-shadow:0 0 0 3px rgba(232,197,71,.12);
-}
+.auth-field label { display:block;font-family:'Cinzel',serif;font-size:.65em;letter-spacing:2px;color:rgba(212,175,55,.5);text-transform:uppercase;margin-bottom:8px; }
+.auth-input { width:100%;padding:13px 16px;border-radius:8px;border:1px solid rgba(232,197,71,.25);background:rgba(255,255,255,.04);color:var(--gold2);font-family:'Libre Baskerville',serif;font-size:.92em;transition:border-color .2s,box-shadow .2s; }
+.auth-input:focus { outline:none;border-color:rgba(232,197,71,.6);box-shadow:0 0 0 3px rgba(232,197,71,.12); }
 .auth-actions { display:flex;flex-direction:column;gap:10px;margin-top:22px; }
-.auth-error {
-  font-size:.75em;color:#f87171;min-height:1.2em;
-  margin-top:10px;text-align:center;
-}
-.auth-switch {
-  display:flex;justify-content:center;gap:6px;margin-top:14px;
-  font-size:.72em;color:rgba(212,175,55,.4);
-}
-.auth-switch button {
-  background:none;border:none;color:var(--gold);cursor:pointer;
-  font-family:inherit;font-size:inherit;text-decoration:underline;
-  text-underline-offset:2px;
-}
+.auth-error { font-size:.75em;color:#f87171;min-height:1.2em;margin-top:10px;text-align:center; }
+.auth-switch { display:flex;justify-content:center;gap:6px;margin-top:14px;font-size:.72em;color:rgba(212,175,55,.4); }
+.auth-switch button { background:none;border:none;color:var(--gold);cursor:pointer;font-family:inherit;font-size:inherit;text-decoration:underline;text-underline-offset:2px; }
 
 /* ── BUTTONS ── */
-.g-btn {
-  padding:11px 26px;font-size:.78em;
-  background:linear-gradient(180deg,rgba(232,197,71,.12) 0%,rgba(232,197,71,.04) 100%);
-  color:var(--gold2);border:1px solid rgba(232,197,71,.45);
-  cursor:pointer;font-family:'Cinzel',serif;letter-spacing:2px;
-  transition:transform .2s,box-shadow .25s,background .2s,color .2s;
-  border-radius:8px;text-transform:uppercase;
-}
-.g-btn:hover {
-  background:linear-gradient(180deg,var(--gold2) 0%,var(--gold) 100%);
-  color:#120810;box-shadow:0 0 22px rgba(232,197,71,.35);transform:translateY(-2px);
-}
+.g-btn { padding:11px 26px;font-size:.78em;background:linear-gradient(180deg,rgba(232,197,71,.12) 0%,rgba(232,197,71,.04) 100%);color:var(--gold2);border:1px solid rgba(232,197,71,.45);cursor:pointer;font-family:'Cinzel',serif;letter-spacing:2px;transition:transform .2s,box-shadow .25s,background .2s,color .2s;border-radius:8px;text-transform:uppercase; }
+.g-btn:hover { background:linear-gradient(180deg,var(--gold2) 0%,var(--gold) 100%);color:#120810;box-shadow:0 0 22px rgba(232,197,71,.35);transform:translateY(-2px); }
 .g-btn:disabled{opacity:.3;cursor:default;}
 .g-btn:disabled:hover{background:rgba(212,175,55,.06);color:var(--gold);box-shadow:none;transform:none;}
-.g-btn.primary {
-  background:linear-gradient(180deg,var(--gold2) 0%,var(--gold) 55%,var(--gold3) 100%);
-  color:#120810;border-color:var(--gold2);
-  box-shadow:0 0 22px rgba(232,197,71,.4);
-}
+.g-btn.primary { background:linear-gradient(180deg,var(--gold2) 0%,var(--gold) 55%,var(--gold3) 100%);color:#120810;border-color:var(--gold2);box-shadow:0 0 22px rgba(232,197,71,.4); }
 .g-btn.primary:hover { box-shadow:0 0 36px rgba(232,197,71,.6);transform:translateY(-2px); }
 .g-btn.danger { border-color:rgba(231,76,60,.5);color:#e74c3c; }
 .g-btn.danger:hover { background:#e74c3c;color:#fff;box-shadow:0 0 15px rgba(231,76,60,.35); }
-.btns-row {
-  display:flex;justify-content:center;gap:8px;flex-wrap:wrap;margin:12px 0;
-}
-.spinner {
-  width:22px;height:22px;border:2px solid rgba(232,197,71,.2);
-  border-top-color:var(--gold);border-radius:50%;
-  animation:spin .7s linear infinite;display:inline-block;vertical-align:middle;
-}
+.g-btn.green { border-color:rgba(46,204,113,.5);color:var(--green2); }
+.g-btn.green:hover { background:var(--green2);color:#0a2215;box-shadow:0 0 15px rgba(46,204,113,.4); }
+.btns-row { display:flex;justify-content:center;gap:8px;flex-wrap:wrap;margin:12px 0; }
+.spinner { width:22px;height:22px;border:2px solid rgba(232,197,71,.2);border-top-color:var(--gold);border-radius:50%;animation:spin .7s linear infinite;display:inline-block;vertical-align:middle; }
 
 /* ── LOBBY ── */
-.lobby-wrap {
-  position:relative;z-index:1;max-width:860px;margin:0 auto;
-  padding:36px 20px 60px;animation:fadeIn .45s ease;
-}
-.lobby-title {
-  font-family:'Cinzel',serif;font-size:clamp(1.6em,4vw,2.6em);
-  font-weight:700;letter-spacing:6px;color:var(--gold);
-  text-align:center;margin-bottom:6px;
-  animation:titleGlow 5s ease-in-out infinite;
-}
-.lobby-sub {
-  font-family:'Cinzel',serif;font-size:.7em;
-  color:rgba(212,175,55,.35);letter-spacing:5px;
-  text-align:center;text-transform:uppercase;margin-bottom:40px;
-}
-.lobby-sections {
-  display:grid;grid-template-columns:1fr 1fr;gap:20px;
-}
+.lobby-wrap { position:relative;z-index:1;max-width:860px;margin:0 auto;padding:36px 20px 60px;animation:fadeIn .45s ease; }
+.lobby-title { font-family:'Cinzel',serif;font-size:clamp(1.6em,4vw,2.6em);font-weight:700;letter-spacing:6px;color:var(--gold);text-align:center;margin-bottom:6px;animation:titleGlow 5s ease-in-out infinite; }
+.lobby-sub { font-family:'Cinzel',serif;font-size:.7em;color:rgba(212,175,55,.35);letter-spacing:5px;text-align:center;text-transform:uppercase;margin-bottom:40px; }
+.lobby-sections { display:grid;grid-template-columns:1fr 1fr;gap:20px; }
 @media(max-width:600px){.lobby-sections{grid-template-columns:1fr;}}
-.lobby-panel {
-  background:linear-gradient(155deg,rgba(36,28,58,.95) 0%,rgba(14,12,24,.98) 100%);
-  border:1px solid rgba(232,197,71,.25);border-radius:14px;
-  padding:28px 24px;box-shadow:0 12px 40px rgba(0,0,0,.5);
-}
-.lobby-panel h3 {
-  font-family:'Cinzel',serif;font-size:.88em;letter-spacing:3px;
-  color:var(--gold2);text-transform:uppercase;margin-bottom:20px;
-  padding-bottom:12px;border-bottom:1px solid rgba(232,197,71,.12);
-}
-.room-input {
-  width:100%;padding:12px 14px;
-  border-radius:8px;border:1px solid rgba(232,197,71,.25);
-  background:rgba(255,255,255,.04);color:var(--gold2);
-  font-family:'Cinzel',serif;font-size:.85em;letter-spacing:2px;
-  transition:border-color .2s;margin-bottom:14px;
-  text-transform:uppercase;
-}
-.room-input:focus {
-  outline:none;border-color:rgba(232,197,71,.6);
-  box-shadow:0 0 0 3px rgba(232,197,71,.1);
-}
+.lobby-panel { background:linear-gradient(155deg,rgba(36,28,58,.95) 0%,rgba(14,12,24,.98) 100%);border:1px solid rgba(232,197,71,.25);border-radius:14px;padding:28px 24px;box-shadow:0 12px 40px rgba(0,0,0,.5); }
+.lobby-panel h3 { font-family:'Cinzel',serif;font-size:.88em;letter-spacing:3px;color:var(--gold2);text-transform:uppercase;margin-bottom:20px;padding-bottom:12px;border-bottom:1px solid rgba(232,197,71,.12); }
+.room-input { width:100%;padding:12px 14px;border-radius:8px;border:1px solid rgba(232,197,71,.25);background:rgba(255,255,255,.04);color:var(--gold2);font-family:'Cinzel',serif;font-size:.85em;letter-spacing:2px;transition:border-color .2s;margin-bottom:14px;text-transform:uppercase; }
+.room-input:focus { outline:none;border-color:rgba(232,197,71,.6);box-shadow:0 0 0 3px rgba(232,197,71,.1); }
 .room-input::placeholder{color:rgba(212,175,55,.2);}
 .rooms-list { display:flex;flex-direction:column;gap:10px;min-height:100px; }
-.room-item {
-  display:flex;align-items:center;justify-content:space-between;
-  background:rgba(255,255,255,.03);border:1px solid rgba(232,197,71,.15);
-  border-radius:8px;padding:12px 16px;cursor:pointer;
-  transition:all .2s;
-}
-.room-item:hover {
-  border-color:rgba(232,197,71,.4);background:rgba(232,197,71,.06);
-  transform:translateX(4px);
-}
-.room-item-name {
-  font-family:'Cinzel',serif;font-size:.82em;
-  letter-spacing:2px;color:var(--gold2);
-}
-.room-item-info {
-  font-size:.65em;color:rgba(212,175,55,.4);letter-spacing:1px;
-}
-.room-status-dot {
-  width:8px;height:8px;border-radius:50%;
-  background:var(--green2);box-shadow:0 0 6px var(--green2);
-  flex-shrink:0;
-}
+.room-item { display:flex;align-items:center;justify-content:space-between;background:rgba(255,255,255,.03);border:1px solid rgba(232,197,71,.15);border-radius:8px;padding:12px 16px;cursor:pointer;transition:all .2s;gap:10px; }
+.room-item:hover { border-color:rgba(232,197,71,.4);background:rgba(232,197,71,.06);transform:translateX(4px); }
+.room-item-name { font-family:'Cinzel',serif;font-size:.82em;letter-spacing:2px;color:var(--gold2); }
+.room-item-info { font-size:.65em;color:rgba(212,175,55,.4);letter-spacing:1px; }
+.room-status-dot { width:8px;height:8px;border-radius:50%;background:var(--green2);box-shadow:0 0 6px var(--green2);flex-shrink:0; }
 .room-status-dot.waiting { background:var(--gold);box-shadow:0 0 6px var(--gold); }
-.empty-rooms {
-  display:flex;align-items:center;justify-content:center;
-  min-height:80px;font-size:.72em;
-  color:rgba(212,175,55,.25);letter-spacing:2px;font-family:'Cinzel',serif;
+.empty-rooms { display:flex;align-items:center;justify-content:center;min-height:80px;font-size:.72em;color:rgba(212,175,55,.25);letter-spacing:2px;font-family:'Cinzel',serif; }
+
+/* ── ROOM ITEM DELETE BTN ── */
+.room-item-del {
+  background:none;border:1px solid rgba(231,76,60,.3);color:rgba(231,76,60,.6);
+  border-radius:6px;padding:4px 10px;font-size:.6em;font-family:'Cinzel',serif;
+  cursor:pointer;letter-spacing:1px;transition:all .2s;flex-shrink:0;
 }
+.room-item-del:hover { background:rgba(231,76,60,.15);color:#e74c3c;border-color:rgba(231,76,60,.6); }
 
 /* ── GAME ROOM ── */
-.game-wrap {
-  position:relative;z-index:1;max-width:960px;margin:0 auto;
-  padding:24px 16px 60px;animation:fadeIn .45s ease;
-}
-.room-header {
-  display:flex;align-items:center;justify-content:space-between;
-  flex-wrap:wrap;gap:12px;margin-bottom:24px;
-}
+.game-wrap { position:relative;z-index:1;max-width:960px;margin:0 auto;padding:24px 16px 60px;animation:fadeIn .45s ease; }
+.room-header { display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:24px; }
 .room-header-info { display:flex;flex-direction:column;gap:4px; }
-.room-id-label {
-  font-family:'Cinzel',serif;font-size:.65em;
-  letter-spacing:3px;color:rgba(212,175,55,.35);text-transform:uppercase;
-}
-.room-name-big {
-  font-family:'Cinzel',serif;font-size:1.2em;
-  font-weight:700;letter-spacing:4px;color:var(--gold2);
-}
-.phase-badge {
-  display:inline-flex;align-items:center;gap:6px;
-  padding:5px 14px;border-radius:999px;font-family:'Cinzel',serif;
-  font-size:.65em;letter-spacing:2px;text-transform:uppercase;
-}
+.room-id-label { font-family:'Cinzel',serif;font-size:.65em;letter-spacing:3px;color:rgba(212,175,55,.35);text-transform:uppercase; }
+.room-name-big { font-family:'Cinzel',serif;font-size:1.2em;font-weight:700;letter-spacing:4px;color:var(--gold2); }
+.phase-badge { display:inline-flex;align-items:center;gap:6px;padding:5px 14px;border-radius:999px;font-family:'Cinzel',serif;font-size:.65em;letter-spacing:2px;text-transform:uppercase; }
 .phase-badge.betting { background:rgba(232,197,71,.12);border:1px solid rgba(232,197,71,.35);color:var(--gold); }
 .phase-badge.playing { background:rgba(46,204,113,.1);border:1px solid rgba(46,204,113,.4);color:var(--green2); }
 .phase-badge.results { background:rgba(255,45,106,.1);border:1px solid rgba(255,45,106,.35);color:#ff6b8a; }
@@ -313,96 +161,39 @@ body::before {
 .phase-dot { width:6px;height:6px;border-radius:50%;background:currentColor;animation:pulse 1.4s ease-in-out infinite; }
 
 /* ── PLAYERS LIST ── */
-.players-bar {
-  display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px;
-}
-.player-chip {
-  display:flex;align-items:center;gap:10px;
-  background:rgba(255,255,255,.04);border:1px solid rgba(232,197,71,.18);
-  border-radius:10px;padding:10px 14px;min-width:140px;
-  transition:border-color .3s;position:relative;overflow:hidden;
-}
-.player-chip.active-turn {
-  border-color:rgba(232,197,71,.7);
-  box-shadow:0 0 20px rgba(232,197,71,.2),inset 0 0 20px rgba(232,197,71,.05);
-}
-.player-chip.active-turn::before {
-  content:'';position:absolute;top:0;left:-100%;width:60%;height:100%;
-  background:linear-gradient(105deg,transparent,rgba(255,255,255,.06),transparent);
-  animation:shimmer 2s ease-in-out infinite;
-}
+.players-bar { display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px; }
+.player-chip { display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.04);border:1px solid rgba(232,197,71,.18);border-radius:10px;padding:10px 14px;min-width:140px;transition:border-color .3s;position:relative;overflow:hidden; }
+.player-chip.active-turn { border-color:rgba(232,197,71,.7);box-shadow:0 0 20px rgba(232,197,71,.2),inset 0 0 20px rgba(232,197,71,.05); }
+.player-chip.active-turn::before { content:'';position:absolute;top:0;left:-100%;width:60%;height:100%;background:linear-gradient(105deg,transparent,rgba(255,255,255,.06),transparent);animation:shimmer 2s ease-in-out infinite; }
 .player-chip.is-me { border-color:rgba(106,184,255,.4); }
-.player-avatar {
-  width:36px;height:36px;border-radius:50%;flex-shrink:0;
-  display:flex;align-items:center;justify-content:center;
-  font-family:'Cinzel',serif;font-size:.88em;font-weight:700;color:#fff;
-}
+.player-avatar { width:36px;height:36px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-family:'Cinzel',serif;font-size:.88em;font-weight:700;color:#fff; }
 .player-info { flex:1;min-width:0; }
-.player-name {
-  font-family:'Cinzel',serif;font-size:.72em;
-  letter-spacing:1px;color:var(--gold2);white-space:nowrap;
-  overflow:hidden;text-overflow:ellipsis;
-}
-.player-score-small {
-  font-family:'Cinzel',serif;font-size:.62em;
-  color:rgba(212,175,55,.45);letter-spacing:1px;margin-top:2px;
-}
+.player-name { font-family:'Cinzel',serif;font-size:.72em;letter-spacing:1px;color:var(--gold2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+.player-score-small { font-family:'Cinzel',serif;font-size:.62em;color:rgba(212,175,55,.45);letter-spacing:1px;margin-top:2px; }
 .player-status-icon { font-size:.9em; }
-.you-badge {
-  position:absolute;top:4px;right:6px;
-  font-family:'Cinzel',serif;font-size:.5em;
-  letter-spacing:1px;color:rgba(106,184,255,.6);
-}
+.you-badge { position:absolute;top:4px;right:6px;font-family:'Cinzel',serif;font-size:.5em;letter-spacing:1px;color:rgba(106,184,255,.6); }
+/* Kick button on player chip */
+.kick-btn { background:none;border:none;color:rgba(231,76,60,.4);cursor:pointer;font-size:.75em;padding:2px 4px;transition:color .2s;position:absolute;bottom:4px;right:6px;display:none; }
+.player-chip:hover .kick-btn { display:block; }
+.kick-btn:hover { color:#e74c3c; }
 
-/* ── FELT TABLE (from index4.html) ── */
-.felt-table {
-  background:linear-gradient(160deg,var(--felt) 0%,var(--felt2) 100%);
-  border:2px solid rgba(232,197,71,.32);border-radius:14px;
-  padding:22px;margin:14px 0;box-shadow:inset 0 2px 28px rgba(0,0,0,.55),0 4px 28px rgba(0,0,0,.5);
-  position:relative;animation:feltGlow 7s ease-in-out infinite;
-}
-.felt-table::before {
-  content:'';position:absolute;inset:4px;
-  border:1px solid rgba(212,175,55,.08);border-radius:6px;pointer-events:none;
-}
-.zone-lbl {
-  font-family:'Cinzel',serif;font-size:.65em;
-  color:rgba(212,175,55,.35);letter-spacing:3px;
-  text-transform:uppercase;margin-bottom:10px;text-align:center;
-}
-.score-badge {
-  display:inline-block;
-  font-family:'Cinzel',serif;font-size:.75em;font-weight:700;
-  background:rgba(0,0,0,.4);border:1px solid rgba(232,197,71,.3);
-  padding:2px 10px;border-radius:999px;color:var(--gold2);
-  margin-left:8px;
-}
+/* ── FELT TABLE ── */
+.felt-table { background:linear-gradient(160deg,var(--felt) 0%,var(--felt2) 100%);border:2px solid rgba(232,197,71,.32);border-radius:14px;padding:22px;margin:14px 0;box-shadow:inset 0 2px 28px rgba(0,0,0,.55),0 4px 28px rgba(0,0,0,.5);position:relative;animation:feltGlow 7s ease-in-out infinite; }
+.felt-table::before { content:'';position:absolute;inset:4px;border:1px solid rgba(212,175,55,.08);border-radius:6px;pointer-events:none; }
+.zone-lbl { font-family:'Cinzel',serif;font-size:.65em;color:rgba(212,175,55,.35);letter-spacing:3px;text-transform:uppercase;margin-bottom:10px;text-align:center; }
+.score-badge { display:inline-block;font-family:'Cinzel',serif;font-size:.75em;font-weight:700;background:rgba(0,0,0,.4);border:1px solid rgba(232,197,71,.3);padding:2px 10px;border-radius:999px;color:var(--gold2);margin-left:8px; }
 .score-badge.bust { color:#ff8a80;border-color:rgba(255,45,106,.4); }
 .score-badge.bj { color:var(--green2);border-color:rgba(46,204,113,.5); }
 
 /* ── CARDS ── */
-.cards-row {
-  display:flex;justify-content:center;flex-wrap:wrap;
-  gap:10px;min-height:110px;margin:10px 0 16px;align-items:center;
-}
-.card {
-  width:74px;height:104px;
-  background:linear-gradient(145deg,#fdfaf0,#f0ead8);
-  border:1px solid rgba(0,0,0,.2);border-radius:10px;
-  display:flex;flex-direction:column;align-items:center;justify-content:center;
-  font-size:1.6em;position:relative;flex-shrink:0;
-  box-shadow:2px 6px 16px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.85);
-  animation:cardDeal .42s ease backwards;
-}
+.cards-row { display:flex;justify-content:center;flex-wrap:wrap;gap:10px;min-height:110px;margin:10px 0 16px;align-items:center; }
+.card { width:74px;height:104px;background:linear-gradient(145deg,#fdfaf0,#f0ead8);border:1px solid rgba(0,0,0,.2);border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:1.6em;position:relative;flex-shrink:0;box-shadow:2px 6px 16px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.85);animation:cardDeal .42s ease backwards; }
 .card.red { color:#c0392b; }
 .card.black { color:#111; }
 .card .cc { position:absolute;font-size:11px;font-weight:700;line-height:1.1;font-family:'Cinzel',serif; }
 .card .cc.tl { top:5px;left:6px; }
 .card .cc.br { bottom:5px;right:6px;transform:rotate(180deg); }
-.card.hidden {
-  background:repeating-linear-gradient(135deg,#1a3a7a 0 6px,#142d60 6px 12px);
-  border:2px solid rgba(212,175,55,.4);
-}
+.card.hidden { background:repeating-linear-gradient(135deg,#1a3a7a 0 6px,#142d60 6px 12px);border:2px solid rgba(212,175,55,.4); }
 .card.hidden::after { content:'♠';font-size:.5em;color:rgba(212,175,55,.3); }
 .cards-row .card:nth-child(1){animation-delay:.02s}
 .cards-row .card:nth-child(2){animation-delay:.08s}
@@ -411,170 +202,92 @@ body::before {
 .cards-row .card:nth-child(5){animation-delay:.26s}
 
 /* ── PLAYER HANDS ── */
-.player-hands {
-  display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));
-  gap:14px;margin:14px 0;
-}
-.hand-panel {
-  background:rgba(0,0,0,.25);border:1px solid rgba(232,197,71,.12);
-  border-radius:10px;padding:14px;
-}
-.hand-panel.active-hand {
-  border-color:rgba(232,197,71,.6);
-  box-shadow:0 0 24px rgba(232,197,71,.15);
-}
-.hand-panel-name {
-  font-family:'Cinzel',serif;font-size:.65em;
-  letter-spacing:2px;color:rgba(212,175,55,.5);
-  text-transform:uppercase;margin-bottom:8px;
-}
-.hand-cards {
-  display:flex;flex-wrap:wrap;gap:6px;min-height:88px;align-items:center;
-}
+.player-hands { display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin:14px 0; }
+.hand-panel { background:rgba(0,0,0,.25);border:1px solid rgba(232,197,71,.12);border-radius:10px;padding:14px; }
+.hand-panel.active-hand { border-color:rgba(232,197,71,.6);box-shadow:0 0 24px rgba(232,197,71,.15); }
+.hand-panel.win-hand { border-color:rgba(46,204,113,.5);animation:winGlow 1.5s ease-in-out infinite; }
+.hand-panel.lose-hand { border-color:rgba(255,45,106,.3);opacity:.7; }
+.hand-panel-name { font-family:'Cinzel',serif;font-size:.65em;letter-spacing:2px;color:rgba(212,175,55,.5);text-transform:uppercase;margin-bottom:8px; }
+.hand-cards { display:flex;flex-wrap:wrap;gap:6px;min-height:88px;align-items:center; }
 .hand-cards .card { width:58px;height:82px;font-size:1.25em;animation-delay:0s!important; }
 .hand-cards .card .cc { font-size:9px; }
+/* Payout badge on hand panel */
+.payout-badge { display:inline-block;margin-left:8px;font-family:'Cinzel',serif;font-size:.8em;font-weight:700;animation:popIn .4s ease; }
+.payout-badge.win-pay { color:var(--green2); }
+.payout-badge.lose-pay { color:#ff8a80; }
+.payout-badge.draw-pay { color:var(--gold); }
 
 /* ── BET CHIPS ── */
-.bet-row {
-  display:flex;align-items:center;justify-content:center;
-  gap:10px;margin:10px 0 18px;flex-wrap:wrap;
-}
-.bet-chip {
-  width:48px;height:48px;border-radius:50%;
-  border:3px solid var(--gold3);
-  background:radial-gradient(circle at 35% 35%,#3a2a10,#1a1205);
-  cursor:pointer;font-family:'Cinzel',serif;font-size:.72em;font-weight:700;
-  color:var(--gold);display:flex;align-items:center;justify-content:center;
-  transition:all .2s;box-shadow:0 3px 8px rgba(0,0,0,.5),inset 0 1px 0 rgba(212,175,55,.2);
-  position:relative;
-}
-.bet-chip::after {
-  content:'';position:absolute;inset:4px;border-radius:50%;
-  border:1px dashed rgba(212,175,55,.3);
-}
-.bet-chip:hover, .bet-chip.active {
-  background:radial-gradient(circle at 35% 35%,var(--gold2),var(--gold),var(--gold3));
-  color:#120810;border-color:var(--gold2);
-  box-shadow:0 0 26px rgba(232,197,71,.55),0 3px 10px rgba(0,0,0,.55);
-  transform:scale(1.1);
-}
-.bet-total-wrap {
-  display:inline-flex;flex-direction:column;align-items:center;min-width:72px;
-}
-.bet-total-label {
-  font-family:'Cinzel',serif;font-size:.55em;
-  letter-spacing:2px;color:rgba(232,197,71,.4);text-transform:uppercase;
-}
-.bet-total {
-  font-family:'Cinzel',serif;font-size:1.15em;
-  font-weight:700;color:var(--gold2);
-}
-.bet-clear {
-  padding:6px 12px!important;font-size:.62em!important;border-radius:8px!important;
-}
+.bet-row { display:flex;align-items:center;justify-content:center;gap:10px;margin:10px 0 18px;flex-wrap:wrap; }
+.bet-chip { width:48px;height:48px;border-radius:50%;border:3px solid var(--gold3);background:radial-gradient(circle at 35% 35%,#3a2a10,#1a1205);cursor:pointer;font-family:'Cinzel',serif;font-size:.72em;font-weight:700;color:var(--gold);display:flex;align-items:center;justify-content:center;transition:all .2s;box-shadow:0 3px 8px rgba(0,0,0,.5),inset 0 1px 0 rgba(212,175,55,.2);position:relative; }
+.bet-chip::after { content:'';position:absolute;inset:4px;border-radius:50%;border:1px dashed rgba(212,175,55,.3); }
+.bet-chip:hover,.bet-chip.active { background:radial-gradient(circle at 35% 35%,var(--gold2),var(--gold),var(--gold3));color:#120810;border-color:var(--gold2);box-shadow:0 0 26px rgba(232,197,71,.55),0 3px 10px rgba(0,0,0,.55);transform:scale(1.1); }
+.bet-total-wrap { display:inline-flex;flex-direction:column;align-items:center;min-width:72px; }
+.bet-total-label { font-family:'Cinzel',serif;font-size:.55em;letter-spacing:2px;color:rgba(232,197,71,.4);text-transform:uppercase; }
+.bet-total { font-family:'Cinzel',serif;font-size:1.15em;font-weight:700;color:var(--gold2); }
+.bet-clear { padding:6px 12px!important;font-size:.62em!important;border-radius:8px!important; }
 
 /* ── RESULT BOX ── */
-.result-box {
-  min-height:40px;font-family:'Cinzel',serif;
-  font-size:1.1em;letter-spacing:2px;margin:10px 0;
-  text-align:center;
-}
+.result-box { min-height:40px;font-family:'Cinzel',serif;font-size:1.1em;letter-spacing:2px;margin:10px 0;text-align:center; }
 .result-box.win { color:var(--green2);text-shadow:0 0 20px rgba(46,204,113,.55); }
 .result-box.lose { color:#ff8a80;text-shadow:0 0 18px rgba(255,45,106,.35); }
 .result-box.draw { color:var(--gold2);text-shadow:0 0 14px rgba(232,197,71,.35); }
-.result-box.push { color:var(--gold2); }
 
 /* ── CHAT ── */
-.chat-panel {
-  background:linear-gradient(155deg,rgba(36,28,58,.95) 0%,rgba(14,12,24,.98) 100%);
-  border:1px solid rgba(232,197,71,.18);border-radius:14px;
-  display:flex;flex-direction:column;height:260px;overflow:hidden;
-  margin-top:20px;
-}
-.chat-panel-header {
-  padding:12px 16px;border-bottom:1px solid rgba(232,197,71,.1);
-  font-family:'Cinzel',serif;font-size:.65em;
-  letter-spacing:3px;color:rgba(212,175,55,.4);text-transform:uppercase;
-}
-.chat-msgs {
-  flex:1;overflow-y:auto;padding:12px 14px;
-  display:flex;flex-direction:column;gap:8px;
-  scrollbar-width:thin;scrollbar-color:rgba(232,197,71,.2) transparent;
-}
+.chat-panel { background:linear-gradient(155deg,rgba(36,28,58,.95) 0%,rgba(14,12,24,.98) 100%);border:1px solid rgba(232,197,71,.18);border-radius:14px;display:flex;flex-direction:column;height:260px;overflow:hidden;margin-top:20px; }
+.chat-panel-header { padding:12px 16px;border-bottom:1px solid rgba(232,197,71,.1);font-family:'Cinzel',serif;font-size:.65em;letter-spacing:3px;color:rgba(212,175,55,.4);text-transform:uppercase; }
+.chat-msgs { flex:1;overflow-y:auto;padding:12px 14px;display:flex;flex-direction:column;gap:8px;scrollbar-width:thin;scrollbar-color:rgba(232,197,71,.2) transparent; }
 .chat-msgs::-webkit-scrollbar{width:4px}
 .chat-msgs::-webkit-scrollbar-track{background:transparent}
 .chat-msgs::-webkit-scrollbar-thumb{background:rgba(232,197,71,.2);border-radius:2px}
 .chat-msg { display:flex;gap:8px;align-items:flex-start; }
-.chat-msg-avatar {
-  width:24px;height:24px;border-radius:50%;flex-shrink:0;
-  display:flex;align-items:center;justify-content:center;
-  font-size:.62em;font-weight:700;color:#fff;
-}
-.chat-msg-content {}
-.chat-msg-author {
-  font-family:'Cinzel',serif;font-size:.62em;
-  letter-spacing:1px;color:rgba(212,175,55,.5);margin-bottom:2px;
-}
-.chat-msg-text {
-  font-size:.78em;color:rgba(240,234,220,.85);line-height:1.5;
-}
-.chat-input-row {
-  display:flex;gap:8px;padding:10px 12px;
-  border-top:1px solid rgba(232,197,71,.1);
-}
-.chat-input {
-  flex:1;padding:8px 12px;
-  border-radius:8px;border:1px solid rgba(232,197,71,.2);
-  background:rgba(255,255,255,.04);color:var(--gold2);
-  font-family:'Libre Baskerville',serif;font-size:.8em;
-  transition:border-color .2s;
-}
+.chat-msg-avatar { width:24px;height:24px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:.62em;font-weight:700;color:#fff; }
+.chat-msg-author { font-family:'Cinzel',serif;font-size:.62em;letter-spacing:1px;color:rgba(212,175,55,.5);margin-bottom:2px; }
+.chat-msg-text { font-size:.78em;color:rgba(240,234,220,.85);line-height:1.5; }
+.chat-input-row { display:flex;gap:8px;padding:10px 12px;border-top:1px solid rgba(232,197,71,.1); }
+.chat-input { flex:1;padding:8px 12px;border-radius:8px;border:1px solid rgba(232,197,71,.2);background:rgba(255,255,255,.04);color:var(--gold2);font-family:'Libre Baskerville',serif;font-size:.8em;transition:border-color .2s; }
 .chat-input:focus { outline:none;border-color:rgba(232,197,71,.5); }
-.chat-send {
-  padding:8px 16px;font-size:.7em;border-radius:8px;
-}
+.chat-send { padding:8px 16px;font-size:.7em;border-radius:8px; }
 
 /* ── TOAST ── */
-#toast {
-  position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(16px);
-  background:linear-gradient(135deg,rgba(34,28,56,.98),rgba(14,12,24,.98));
-  border:1px solid rgba(232,197,71,.45);border-radius:999px;
-  padding:10px 24px;color:var(--gold2);font-family:'Cinzel',serif;
-  font-size:.78em;letter-spacing:2px;opacity:0;
-  transition:all .3s;pointer-events:none;z-index:999;
-  box-shadow:0 8px 32px rgba(0,0,0,.6);
-}
+#toast { position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(16px);background:linear-gradient(135deg,rgba(34,28,56,.98),rgba(14,12,24,.98));border:1px solid rgba(232,197,71,.45);border-radius:999px;padding:10px 24px;color:var(--gold2);font-family:'Cinzel',serif;font-size:.78em;letter-spacing:2px;opacity:0;transition:all .3s;pointer-events:none;z-index:999;box-shadow:0 8px 32px rgba(0,0,0,.6); }
 #toast.show { opacity:1;transform:translateX(-50%) translateY(0); }
 
-/* ── DIVIDER ── */
 .divider { border:none;border-top:1px solid rgba(212,175,55,.1);margin:14px 0; }
 
 /* ── STATS BAR ── */
-.stats-row {
-  display:flex;justify-content:center;gap:28px;margin-top:18px;
-  padding-top:16px;border-top:1px solid rgba(212,175,55,.1);flex-wrap:wrap;
-}
+.stats-row { display:flex;justify-content:center;gap:28px;margin-top:18px;padding-top:16px;border-top:1px solid rgba(212,175,55,.1);flex-wrap:wrap; }
 .stat-box { text-align:center; }
 .stat-n { font-family:'Cinzel',serif;font-size:1.2em;font-weight:700; }
 .stat-n.w { color:var(--green2); }
 .stat-n.l { color:#e57373; }
 .stat-lbl { font-size:.58em;color:rgba(212,175,55,.35);letter-spacing:2px;text-transform:uppercase;margin-top:3px; }
 
-/* ── WAITING OVERLAY ── */
-.waiting-msg {
-  text-align:center;padding:32px;
-  font-family:'Cinzel',serif;font-size:.85em;
-  letter-spacing:3px;color:rgba(212,175,55,.45);
-}
-.your-turn-banner {
-  background:linear-gradient(135deg,rgba(46,204,113,.15),rgba(46,204,113,.08));
-  border:1px solid rgba(46,204,113,.4);border-radius:10px;
-  padding:12px 20px;text-align:center;margin-bottom:14px;
-  font-family:'Cinzel',serif;font-size:.82em;letter-spacing:2px;
-  color:var(--green2);animation:pulse 2s ease-in-out infinite;
-}
+/* ── WAITING / TURN BANNERS ── */
+.waiting-msg { text-align:center;padding:32px;font-family:'Cinzel',serif;font-size:.85em;letter-spacing:3px;color:rgba(212,175,55,.45); }
+.your-turn-banner { background:linear-gradient(135deg,rgba(46,204,113,.15),rgba(46,204,113,.08));border:1px solid rgba(46,204,113,.4);border-radius:10px;padding:12px 20px;text-align:center;margin-bottom:14px;font-family:'Cinzel',serif;font-size:.82em;letter-spacing:2px;color:var(--green2);animation:pulse 2s ease-in-out infinite; }
 
-/* ── FIRESTORE RULES COMMENT ── */
+/* ── CONFIRM MODAL ── */
+.modal-overlay { position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.75);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;padding:20px; }
+.modal-box { background:linear-gradient(155deg,rgba(36,28,58,.99) 0%,rgba(14,12,24,.99) 100%);border:1px solid rgba(232,197,71,.4);border-radius:16px;padding:32px 28px;max-width:360px;width:100%;text-align:center;box-shadow:0 24px 64px rgba(0,0,0,.8);animation:popIn .3s ease; }
+.modal-box h3 { font-family:'Cinzel',serif;font-size:1em;letter-spacing:3px;color:var(--gold2);margin-bottom:12px; }
+.modal-box p { font-size:.8em;color:rgba(212,175,55,.5);margin-bottom:24px;line-height:1.6; }
+.modal-btns { display:flex;gap:10px;justify-content:center; }
+
+/* ── TIMER BAR ── */
+.timer-bar-wrap { height:4px;background:rgba(255,255,255,.06);border-radius:2px;margin-bottom:14px;overflow:hidden; }
+.timer-bar { height:100%;background:linear-gradient(90deg,var(--green2),var(--gold));border-radius:2px;transition:width 1s linear; }
+.timer-bar.urgent { background:linear-gradient(90deg,#ff8a80,var(--neon)); }
+
+/* ── SOUND TOGGLE ── */
+.sound-toggle { background:none;border:1px solid rgba(232,197,71,.2);color:rgba(212,175,55,.5);border-radius:6px;padding:5px 10px;cursor:pointer;font-size:.75em;transition:all .2s; }
+.sound-toggle:hover,.sound-toggle.on { color:var(--gold);border-color:rgba(232,197,71,.5); }
+
+/* ── COIN FLY ANIMATION ── */
+.coin-fly { position:fixed;width:28px;height:28px;border-radius:50%;background:radial-gradient(circle at 35% 35%,var(--gold2),var(--gold),var(--gold3));font-family:'Cinzel',serif;font-size:.55em;font-weight:700;color:#120810;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:9999;animation:coinFly .8s ease-in forwards; }
+
+/* ── WAITING PLAYERS INFO ── */
+.waiting-players-info { text-align:center;font-family:'Cinzel',serif;font-size:.72em;color:rgba(212,175,55,.4);letter-spacing:2px;margin:8px 0; }
 </style>
 </head>
 <body>
@@ -587,6 +300,7 @@ body::before {
   <div id="nav-user-wrap" class="nav-user hidden">
     <div id="nav-avatar" class="nav-avatar"></div>
     <span id="nav-name" class="nav-name"></span>
+    <button class="sound-toggle" id="btn-sound" title="Звук">🔊</button>
     <button class="btn-nav" id="btn-leave-room" style="display:none">← Лобби</button>
     <button class="btn-nav" id="btn-logout">Выйти</button>
   </div>
@@ -626,7 +340,6 @@ body::before {
   <div class="lobby-title">♠ BLACKJACK ♣</div>
   <div class="lobby-sub">Онлайн · Мультиплеер</div>
   <div class="lobby-sections">
-    <!-- Create Room -->
     <div class="lobby-panel">
       <h3>🎰 Создать комнату</h3>
       <div class="auth-field">
@@ -644,7 +357,6 @@ body::before {
       </div>
       <button id="btn-create-room" class="g-btn primary" style="width:100%;margin-top:8px">Создать стол</button>
     </div>
-    <!-- Join Room -->
     <div class="lobby-panel">
       <h3>🚪 Активные столы</h3>
       <div id="rooms-list" class="rooms-list">
@@ -652,12 +364,10 @@ body::before {
       </div>
     </div>
   </div>
-
-  <!-- Join by ID -->
   <div class="lobby-panel" style="margin-top:20px">
     <h3>🔑 Войти по коду</h3>
     <div style="display:flex;gap:10px">
-      <input type="text" id="join-code-input" class="room-input" placeholder="КОД КОМНАТЫ" maxlength="10" style="margin:0;flex:1;text-transform:uppercase">
+      <input type="text" id="join-code-input" class="room-input" placeholder="КОД КОМНАТЫ" maxlength="20" style="margin:0;flex:1;text-transform:uppercase">
       <button id="btn-join-code" class="g-btn">Войти</button>
     </div>
   </div>
@@ -673,22 +383,23 @@ body::before {
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
       <span id="phase-badge" class="phase-badge waiting"><span class="phase-dot"></span> Ожидание</span>
       <button id="btn-copy-code" class="btn-nav">📋 Код</button>
+      <button id="btn-close-room" class="btn-nav hidden" style="color:rgba(231,76,60,.6);border-color:rgba(231,76,60,.3)">🗑 Закрыть стол</button>
     </div>
   </div>
 
-  <!-- Players bar -->
-  <div id="players-bar" class="players-bar"></div>
+  <!-- Timer bar -->
+  <div id="timer-bar-wrap" class="timer-bar-wrap hidden">
+    <div id="timer-bar" class="timer-bar" style="width:100%"></div>
+  </div>
 
-  <!-- My turn banner -->
+  <div id="players-bar" class="players-bar"></div>
   <div id="your-turn-banner" class="your-turn-banner hidden">⚡ ВАШ ХОД — Ещё или Хватит?</div>
 
-  <!-- Dealer -->
   <div class="felt-table">
     <div class="zone-lbl">♦ ДИЛЕР <span id="dealer-score-badge" class="score-badge hidden">0</span></div>
     <div id="dealer-cards" class="cards-row"></div>
   </div>
 
-  <!-- Player hands -->
   <div id="player-hands" class="player-hands"></div>
 
   <!-- BET SECTION -->
@@ -702,6 +413,7 @@ body::before {
       <span class="bet-chip" onclick="addBet(25)">25</span>
       <span class="bet-chip" onclick="addBet(50)">50</span>
       <span class="bet-chip" onclick="addBet(100)">100</span>
+      <span class="bet-chip" onclick="addBet(500)" style="width:56px;height:56px;font-size:.8em">500</span>
       <div class="bet-total-wrap">
         <span class="bet-total-label">Ставка</span>
         <span id="my-bet-display" class="bet-total">0</span>
@@ -709,35 +421,36 @@ body::before {
     </div>
     <div class="btns-row">
       <button class="g-btn bet-clear" onclick="clearBet()">✕ Сбросить</button>
-      <button id="btn-place-bet" class="g-btn primary" onclick="placeBet()">Поставить ставку ✓</button>
+      <button class="g-btn" onclick="betHalf()">½ Половина</button>
+      <button class="g-btn" onclick="betAll()">ALL IN</button>
+      <button id="btn-place-bet" class="g-btn primary" onclick="placeBet()">Поставить ✓</button>
     </div>
   </div>
 
   <!-- GAME CONTROLS -->
   <div id="game-controls" class="btns-row hidden">
-    <button id="btn-hit" class="g-btn primary" onclick="doHit()">Ещё карту</button>
-    <button id="btn-stand" class="g-btn" onclick="doStand()">Хватит</button>
-    <button id="btn-double" class="g-btn" onclick="doDouble()">Удвоить</button>
+    <button id="btn-hit" class="g-btn primary" onclick="doHit()">🃏 Ещё карту</button>
+    <button id="btn-stand" class="g-btn" onclick="doStand()">✋ Хватит</button>
+    <button id="btn-double" class="g-btn" onclick="doDouble()">⚡ Удвоить</button>
   </div>
 
   <!-- HOST CONTROLS -->
   <div id="host-controls" class="btns-row hidden">
+    <button id="btn-start-game" class="g-btn primary" onclick="hostStartGame()">🃏 Начать игру</button>
     <button id="btn-start-deal" class="g-btn primary" onclick="hostStartDeal()">🃏 Раздать карты</button>
-    <button id="btn-new-round" class="g-btn" onclick="hostNewRound()">🔄 Новый раунд</button>
+    <button id="btn-new-round" class="g-btn green" onclick="hostNewRound()">🔄 Новый раунд</button>
   </div>
 
-  <!-- Result -->
   <div id="game-result" class="result-box"></div>
 
-  <!-- Stats -->
   <div class="stats-row">
     <div class="stat-box"><div id="stat-w" class="stat-n w">0</div><div class="stat-lbl">Победы</div></div>
     <div class="stat-box"><div id="stat-l" class="stat-n l">0</div><div class="stat-lbl">Поражения</div></div>
     <div class="stat-box"><div id="stat-d" class="stat-n" style="color:var(--gold)">0</div><div class="stat-lbl">Ничьи</div></div>
+    <div class="stat-box"><div id="stat-streak" class="stat-n" style="color:#a78bfa">0</div><div class="stat-lbl">Серия 🔥</div></div>
     <div class="stat-box"><div id="stat-bal" class="stat-n" style="color:var(--gold2)">1000</div><div class="stat-lbl">Баланс ⭐</div></div>
   </div>
 
-  <!-- Chat -->
   <div class="chat-panel">
     <div class="chat-panel-header">💬 ЧАТ КОМНАТЫ</div>
     <div id="chat-msgs" class="chat-msgs"></div>
@@ -748,42 +461,25 @@ body::before {
   </div>
 </div>
 
-<div id="toast"></div>
+<!-- CONFIRM MODAL -->
+<div id="confirm-modal" class="modal-overlay hidden">
+  <div class="modal-box">
+    <h3 id="confirm-title">Подтвердить</h3>
+    <p id="confirm-text"></p>
+    <div class="modal-btns">
+      <button class="g-btn" id="confirm-no">Отмена</button>
+      <button class="g-btn danger" id="confirm-yes">Подтвердить</button>
+    </div>
+  </div>
+</div>
 
-<!-- ╔══════════════════════════════════════════════════╗
-     ║  FIRESTORE SECURITY RULES (вставить в консоли):   ║
-     ║                                                   ║
-     ║  rules_version = '2';                             ║
-     ║  service cloud.firestore {                        ║
-     ║    match /databases/{database}/documents {        ║
-     ║      match /rooms/{roomId} {                      ║
-     ║        allow read: if request.auth != null;       ║
-     ║        allow create: if request.auth != null;     ║
-     ║        allow update: if request.auth != null;     ║
-     ║        allow delete: if request.auth != null      ║
-     ║          && resource.data.hostUid==request.auth.uid;║
-     ║      }                                            ║
-     ║      match /rooms/{roomId}/chat/{msgId} {         ║
-     ║        allow read, create: if request.auth!=null; ║
-     ║      }                                            ║
-     ║    }                                              ║
-     ║  }                                                ║
-     ╚══════════════════════════════════════════════════╝ -->
+<div id="toast"></div>
 
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
-import {
-  getAuth, onAuthStateChanged,
-  signInWithEmailAndPassword, createUserWithEmailAndPassword,
-  signOut, updateProfile
-} from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
-import {
-  getFirestore, collection, doc, addDoc, setDoc, updateDoc, deleteDoc,
-  onSnapshot, query, orderBy, serverTimestamp, arrayUnion, arrayRemove,
-  getDoc, getDocs, where, limit, writeBatch, increment
-} from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, updateProfile } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
+import { getFirestore, collection, doc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, serverTimestamp, getDoc, getDocs, where, limit, writeBatch } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
 
-// ── FIREBASE CONFIG (из index5.html) ────────────────────
 const firebaseConfig = {
   apiKey: 'AIzaSyCtVaVgIvQot9SJpwKyUKrClNwar6xX9fo',
   authDomain: 'class6a-chat.firebaseapp.com',
@@ -805,193 +501,233 @@ let roomUnsub = null;
 let chatUnsub = null;
 let roomData = null;
 let localBet = 0;
-let myStats = { wins: 0, losses: 0, draws: 0, balance: 1000 };
+let myStats = { wins: 0, losses: 0, draws: 0, balance: 1000, streak: 0 };
+let soundOn = true;
+let timerInterval = null;
+let dealerRunning = false;
+let advanceLock = false;
+// FIX: per-round result tracking — keyed by updatedAt so it only fires once
+let lastHandledResultKey = null;
 
-// Load stats — баланс из Firestore, статистика из localStorage
+// ── SOUND ────────────────────────────────────────────────
+const AudioCtx = window.AudioContext || window.webkitAudioContext;
+let actx = null;
+function getACtx() { if (!actx) actx = new AudioCtx(); return actx; }
+function playTone(freq, dur, type='sine', vol=0.18) {
+  if (!soundOn) return;
+  try {
+    const a = getACtx();
+    const o = a.createOscillator();
+    const g = a.createGain();
+    o.connect(g); g.connect(a.destination);
+    o.frequency.value = freq; o.type = type;
+    g.gain.setValueAtTime(vol, a.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, a.currentTime + dur);
+    o.start(); o.stop(a.currentTime + dur);
+  } catch(_) {}
+}
+function sndCard()  { playTone(520, 0.09, 'triangle', 0.12); }
+function sndChip()  { playTone(900, 0.06, 'sine', 0.08); }
+function sndWin()   { [523,659,784,1046].forEach((f,i) => setTimeout(()=>playTone(f,.2,'sine',.2), i*90)); }
+function sndLose()  { [300,250,200].forEach((f,i) => setTimeout(()=>playTone(f,.18,'sawtooth',.12), i*100)); }
+function sndDraw()  { playTone(440,.3,'sine',.1); }
+function sndBust()  { [400,300].forEach((f,i)=>setTimeout(()=>playTone(f,.2,'sawtooth',.15),i*120)); }
+function sndTick()  { playTone(1200,.04,'square',.06); }
+
+el('btn-sound').onclick = () => {
+  soundOn = !soundOn;
+  el('btn-sound').textContent = soundOn ? '🔊' : '🔇';
+  el('btn-sound').classList.toggle('on', soundOn);
+};
+
+// ── STATS ────────────────────────────────────────────────
 async function loadStats(uid) {
-  // Сначала грузим локальную статистику (wins/losses/draws)
   try {
     const s = JSON.parse(localStorage.getItem('bj_stats_' + uid) || 'null');
-    if (s) { myStats.wins = s.wins||0; myStats.losses = s.losses||0; myStats.draws = s.draws||0; }
-  } catch (_) {}
-  // Главное: баланс из Firestore (единые звёзды!)
+    if (s) { myStats.wins=s.wins||0; myStats.losses=s.losses||0; myStats.draws=s.draws||0; myStats.streak=s.streak||0; }
+  } catch(_) {}
   try {
     const snap = await getDoc(doc(db, 'users', uid));
     if (snap.exists() && snap.data().stars != null) {
       myStats.balance = snap.data().stars;
     } else if (!snap.exists()) {
-      // Новый пользователь — инициализируем
-      await setDoc(doc(db, 'users', uid), { stars: myStats.balance }, { merge: true });
+      await setDoc(doc(db,'users',uid), { stars: myStats.balance }, { merge: true });
     }
-  } catch(e) { console.warn('Firestore loadStats error:', e); }
+  } catch(e) { console.warn('loadStats:', e); }
   renderStats();
 }
-// Save stats — баланс в Firestore, статистика в localStorage
+
 async function saveStats() {
   if (!currentUser) return;
-  // Статистику (wins/losses/draws) сохраняем локально
   try {
     localStorage.setItem('bj_stats_' + currentUser.uid, JSON.stringify({
-      wins: myStats.wins, losses: myStats.losses, draws: myStats.draws
+      wins: myStats.wins, losses: myStats.losses, draws: myStats.draws, streak: myStats.streak
     }));
-  } catch (_) {}
-  // Баланс синхронизируем в Firestore
+  } catch(_) {}
   try {
-    await setDoc(doc(db, 'users', currentUser.uid), { stars: myStats.balance }, { merge: true });
-  } catch(e) { console.warn('Firestore saveStats error:', e); }
+    await setDoc(doc(db,'users',currentUser.uid), { stars: myStats.balance }, { merge: true });
+  } catch(e) { console.warn('saveStats:', e); }
   renderStats();
 }
+
 function renderStats() {
   el('stat-w').textContent = myStats.wins;
   el('stat-l').textContent = myStats.losses;
   el('stat-d').textContent = myStats.draws;
   el('stat-bal').textContent = myStats.balance;
+  const streakEl = el('stat-streak');
+  streakEl.textContent = myStats.streak;
+  streakEl.style.color = myStats.streak >= 3 ? '#ff6b35' : myStats.streak >= 1 ? '#a78bfa' : 'rgba(212,175,55,.4)';
 }
 
-// ── HELPERS ─────────────────────────────────────────────
+// ── HELPERS ──────────────────────────────────────────────
 function el(id) { return document.getElementById(id); }
 function show(id) { el(id)?.classList.remove('hidden'); }
 function hide(id) { el(id)?.classList.add('hidden'); }
-
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function nickFromInput(raw) {
-  let n = String(raw || '').trim();
-  if (n.toLowerCase().endsWith(FAKE_DOMAIN.toLowerCase()))
-    n = n.slice(0, n.length - FAKE_DOMAIN.length).trim();
+  let n = String(raw||'').trim();
+  if (n.toLowerCase().endsWith(FAKE_DOMAIN.toLowerCase())) n = n.slice(0,n.length-FAKE_DOMAIN.length).trim();
   return n;
 }
-function nickToEmail(raw) {
-  const n = nickFromInput(raw);
-  if (!n) throw new Error('Введите ник');
-  return n + FAKE_DOMAIN;
-}
+function nickToEmail(raw) { const n=nickFromInput(raw); if(!n) throw new Error('Введите ник'); return n+FAKE_DOMAIN; }
 function displayNick(u) {
   if (!u) return '?';
   if (u.displayName) return u.displayName;
-  const em = u.email || '';
-  if (em.toLowerCase().endsWith(FAKE_DOMAIN.toLowerCase()))
-    return em.slice(0, em.length - FAKE_DOMAIN.length) || '?';
+  const em = u.email||'';
+  if (em.toLowerCase().endsWith(FAKE_DOMAIN.toLowerCase())) return em.slice(0,em.length-FAKE_DOMAIN.length)||'?';
   const at = em.indexOf('@');
-  return at > 0 ? em.slice(0, at) : (em || '?');
+  return at>0?em.slice(0,at):(em||'?');
 }
 function avatarGrad(uid) {
-  let h = 0;
-  for (let i = 0; i < uid.length; i++) h = (h * 31 + uid.charCodeAt(i)) >>> 0;
+  let h=0; for (let i=0;i<uid.length;i++) h=(h*31+uid.charCodeAt(i))>>>0;
   return `linear-gradient(135deg,hsl(${h%360} 65% 48%) 0%,hsl(${(h%360+38)%360} 58% 42%) 100%)`;
 }
-function initials(name) { return ([...String(name || '?')][0] || '?').toUpperCase(); }
+function initials(name) { return ([...String(name||'?')][0]||'?').toUpperCase(); }
 
 let _toastT;
-function toast(msg) {
-  const t = el('toast');
-  t.textContent = msg;
-  t.classList.add('show');
-  clearTimeout(_toastT);
-  _toastT = setTimeout(() => t.classList.remove('show'), 2200);
+function toast(msg, duration=2200) {
+  const t=el('toast'); t.textContent=msg; t.classList.add('show');
+  clearTimeout(_toastT); _toastT=setTimeout(()=>t.classList.remove('show'),duration);
 }
 
-// ── CARD LOGIC (from index4.html) ────────────────────────
+// ── CONFIRM MODAL ────────────────────────────────────────
+function confirm(title, text, onYes) {
+  el('confirm-title').textContent = title;
+  el('confirm-text').textContent = text;
+  show('confirm-modal');
+  el('confirm-yes').onclick = () => { hide('confirm-modal'); onYes(); };
+  el('confirm-no').onclick = () => hide('confirm-modal');
+}
+
+// ── COIN FLY ANIMATION ───────────────────────────────────
+function spawnCoins(x, y, count=6) {
+  for (let i=0; i<count; i++) {
+    const coin = document.createElement('div');
+    coin.className = 'coin-fly';
+    coin.textContent = '⭐';
+    const angle = (Math.PI*2/count)*i - Math.PI/2;
+    const dist = 60 + Math.random()*40;
+    coin.style.cssText = `left:${x}px;top:${y}px;--cx:${Math.cos(angle)*dist}px;--cy:${Math.sin(angle)*dist}px;animation-delay:${i*0.04}s`;
+    document.body.appendChild(coin);
+    setTimeout(() => coin.remove(), 900 + i*40);
+  }
+}
+
+// ── TIMER BAR ────────────────────────────────────────────
+function startTimer(seconds) {
+  clearInterval(timerInterval);
+  const bar = el('timer-bar');
+  const wrap = el('timer-bar-wrap');
+  show('timer-bar-wrap');
+  bar.classList.remove('urgent');
+  bar.style.width = '100%';
+  let left = seconds;
+  timerInterval = setInterval(() => {
+    left--;
+    bar.style.width = (left/seconds*100) + '%';
+    if (left <= 5) { bar.classList.add('urgent'); if(left>0) sndTick(); }
+    if (left <= 0) { clearInterval(timerInterval); hide('timer-bar-wrap'); }
+  }, 1000);
+}
+function stopTimer() { clearInterval(timerInterval); hide('timer-bar-wrap'); }
+
+// ── CARD LOGIC ───────────────────────────────────────────
 function mkDeck() {
-  const suits = ['♠','♥','♦','♣'], vals = ['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
-  const d = [];
+  const suits=['♠','♥','♦','♣'], vals=['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+  const d=[];
   for (const s of suits) for (const v of vals) d.push({v,s});
   return shuf(d);
 }
 function shuf(a) {
-  for (let i = a.length-1; i > 0; i--) {
-    const j = Math.random()*(i+1)|0;
-    [a[i],a[j]] = [a[j],a[i]];
-  }
+  for (let i=a.length-1;i>0;i--) { const j=Math.random()*(i+1)|0; [a[i],a[j]]=[a[j],a[i]]; }
   return a;
 }
 function isRed(s) { return s==='♥'||s==='♦'; }
 function bjV(c) { return ['J','Q','K'].includes(c.v)?10:c.v==='A'?11:parseInt(c.v); }
 function bjS(h) {
-  let s = h.reduce((a,c)=>a+bjV(c),0), ac = h.filter(c=>c.v==='A').length;
-  while (s > 21 && ac-- > 0) s -= 10;
+  let s=h.reduce((a,c)=>a+bjV(c),0), ac=h.filter(c=>c.v==='A').length;
+  while(s>21&&ac-->0) s-=10;
   return s;
 }
-
 function renderCard(card, hidden) {
-  const d = document.createElement('div');
-  d.className = 'card' + (hidden?'':isRed(card.s)?' red':' black') + (hidden?' hidden':'');
+  const d=document.createElement('div');
+  d.className='card'+(hidden?'':isRed(card.s)?' red':' black')+(hidden?' hidden':'');
   if (!hidden) {
-    const tl = document.createElement('div'); tl.className='cc tl'; tl.textContent=card.v+card.s;
-    const br = document.createElement('div'); br.className='cc br'; br.textContent=card.v+card.s;
-    const mid = document.createElement('div'); mid.textContent=card.s;
-    d.append(tl, mid, br);
+    const tl=document.createElement('div'); tl.className='cc tl'; tl.textContent=card.v+card.s;
+    const br=document.createElement('div'); br.className='cc br'; br.textContent=card.v+card.s;
+    const mid=document.createElement('div'); mid.textContent=card.s;
+    d.append(tl,mid,br);
   }
   return d;
 }
-
 function renderCards(cards, containerId, hideSecond=false) {
-  const c = el(containerId); if (!c) return;
-  c.innerHTML = '';
-  cards.forEach((card, i) => c.appendChild(renderCard(card, hideSecond && i===1)));
-}
-
-function renderHandCards(cards, container, hideSecond=false) {
-  container.innerHTML = '';
-  cards.forEach((card, i) => container.appendChild(renderCard(card, hideSecond && i===1)));
+  const c=el(containerId); if(!c) return;
+  c.innerHTML='';
+  cards.forEach((card,i)=>c.appendChild(renderCard(card,hideSecond&&i===1)));
 }
 
 // ── AUTH ─────────────────────────────────────────────────
 el('btn-register-mode').onclick = () => toggleRegisterMode(true);
 el('btn-back-login').onclick = () => toggleRegisterMode(false);
-
 function toggleRegisterMode(on) {
-  ['btn-register','btn-back-login'].forEach(id => el(id).classList.toggle('hidden',!on));
-  ['btn-register-mode','btn-login'].forEach(id => el(id).classList.toggle('hidden',on));
-  el('auth-error').textContent = '';
+  ['btn-register','btn-back-login'].forEach(id=>el(id).classList.toggle('hidden',!on));
+  ['btn-register-mode','btn-login'].forEach(id=>el(id).classList.toggle('hidden',on));
+  el('auth-error').textContent='';
 }
-
 el('btn-login').onclick = async () => {
-  el('auth-error').textContent = '';
-  el('btn-login').disabled = true;
-  try {
-    await signInWithEmailAndPassword(auth, nickToEmail(el('auth-nick').value), el('auth-pass').value);
-  } catch (e) {
-    el('auth-error').textContent = e.message||String(e);
-  } finally { el('btn-login').disabled = false; }
+  el('auth-error').textContent=''; el('btn-login').disabled=true;
+  try { await signInWithEmailAndPassword(auth,nickToEmail(el('auth-nick').value),el('auth-pass').value); }
+  catch(e) { el('auth-error').textContent=e.message||String(e); }
+  finally { el('btn-login').disabled=false; }
 };
-
 el('btn-register').onclick = async () => {
-  el('auth-error').textContent = '';
-  el('btn-register').disabled = true;
+  el('auth-error').textContent=''; el('btn-register').disabled=true;
   try {
-    const nick = nickFromInput(el('auth-nick').value);
-    if (!nick) { el('auth-error').textContent = 'Введите ник'; return; }
-    const cred = await createUserWithEmailAndPassword(auth, nickToEmail(nick), el('auth-pass').value);
-    await updateProfile(cred.user, { displayName: nick });
-  } catch (e) {
-    el('auth-error').textContent = e.message||String(e);
-  } finally { el('btn-register').disabled = false; }
+    const nick=nickFromInput(el('auth-nick').value);
+    if (!nick) { el('auth-error').textContent='Введите ник'; return; }
+    const cred=await createUserWithEmailAndPassword(auth,nickToEmail(nick),el('auth-pass').value);
+    await updateProfile(cred.user,{displayName:nick});
+  } catch(e) { el('auth-error').textContent=e.message||String(e); }
+  finally { el('btn-register').disabled=false; }
 };
-
 el('btn-logout').onclick = () => { leaveRoom(); signOut(auth); };
-el('btn-leave-room').onclick = () => leaveRoom();
-
-el('auth-nick').addEventListener('keydown', e => { if (e.key==='Enter') el('btn-login').click(); });
-el('auth-pass').addEventListener('keydown', e => { if (e.key==='Enter') el('btn-login').click(); });
+el('btn-leave-room').onclick = () => {
+  confirm('Покинуть стол?', 'Вы выйдете из комнаты. Ваша ставка будет потеряна.', leaveRoom);
+};
+el('auth-nick').addEventListener('keydown', e => { if(e.key==='Enter') el('btn-login').click(); });
+el('auth-pass').addEventListener('keydown', e => { if(e.key==='Enter') el('btn-login').click(); });
 
 onAuthStateChanged(auth, async user => {
   hide('auth-checking');
   if (!user) {
-    currentUser = null;
-    hide('nav-user-wrap');
-    show('auth-gate');
-    hide('lobby');
-    hide('game-room');
-    show('auth-form');
-    return;
+    currentUser=null; hide('nav-user-wrap'); show('auth-gate'); hide('lobby'); hide('game-room'); show('auth-form'); return;
   }
-  currentUser = user;
-  // Update nav
+  currentUser=user;
   show('nav-user-wrap');
-  const av = el('nav-avatar');
-  av.style.background = avatarGrad(user.uid);
-  av.textContent = initials(displayNick(user));
-  el('nav-name').textContent = displayNick(user);
-  // Go to lobby
+  el('nav-avatar').style.background=avatarGrad(user.uid);
+  el('nav-avatar').textContent=initials(displayNick(user));
+  el('nav-name').textContent=displayNick(user);
   hide('auth-gate');
   await loadStats(user.uid);
   showLobby();
@@ -999,24 +735,16 @@ onAuthStateChanged(auth, async user => {
 
 // ── LOBBY ─────────────────────────────────────────────────
 let roomsUnsub = null;
-
 function showLobby() {
-  hide('game-room');
-  show('lobby');
-  hide('btn-leave-room');
+  stopTimer();
+  hide('game-room'); show('lobby'); hide('btn-leave-room');
   startRoomsListener();
 }
 
 function startRoomsListener() {
-  if (roomsUnsub) roomsUnsub();
-  const q = query(
-    collection(db, 'rooms'),
-    where('status', 'in', ['waiting','playing']),
-    orderBy('createdAt','desc'),
-    limit(20)
-  );
-  roomsUnsub = onSnapshot(q, snap => renderRoomsList(snap), err => {
-    // If index doesn't exist yet, try simpler query
+  if (roomsUnsub) { roomsUnsub(); roomsUnsub=null; }
+  const q = query(collection(db,'rooms'), where('status','in',['waiting','playing']), orderBy('createdAt','desc'), limit(20));
+  roomsUnsub = onSnapshot(q, snap => renderRoomsList(snap), () => {
     const q2 = query(collection(db,'rooms'), limit(20));
     roomsUnsub = onSnapshot(q2, snap => renderRoomsList(snap));
   });
@@ -1025,136 +753,152 @@ function startRoomsListener() {
 function renderRoomsList(snap) {
   const list = el('rooms-list');
   list.innerHTML = '';
-  if (snap.empty) {
-    list.innerHTML = '<div class="empty-rooms">Нет активных столов</div>';
-    return;
-  }
-  snap.forEach(doc => {
-    const d = doc.data();
-    if (d.status === 'ended') return;
+  const rooms = [];
+  snap.forEach(d => { if (d.data().status !== 'ended') rooms.push({id:d.id,...d.data()}); });
+  if (!rooms.length) { list.innerHTML='<div class="empty-rooms">Нет активных столов</div>'; return; }
+  rooms.forEach(d => {
     const item = document.createElement('div');
     item.className = 'room-item';
-    const pc = (d.players||[]).length;
-    const mx = d.maxPlayers||4;
-    const isWaiting = d.status==='waiting';
-    item.innerHTML = `
+    const pc=(d.players||[]).length, mx=d.maxPlayers||4;
+    const isWaiting=d.status==='waiting';
+    const isMyRoom = d.hostUid===currentUser.uid;
+    item.innerHTML=`
       <div class="room-status-dot ${isWaiting?'waiting':''}"></div>
-      <div style="flex:1">
-        <div class="room-item-name">${esc(d.name||doc.id)}</div>
-        <div class="room-item-info">${pc}/${mx} игроков · ${isWaiting?'Ждёт':'Играет'}</div>
+      <div style="flex:1;min-width:0">
+        <div class="room-item-name">${esc(d.name||d.id)}</div>
+        <div class="room-item-info">${pc}/${mx} · ${isWaiting?'Ждёт':'Играет'}${isMyRoom?' · <span style="color:var(--gold)">Мой стол</span>':''}</div>
       </div>
-      <div class="room-item-info">${doc.id}</div>
+      <div class="room-item-info" style="flex-shrink:0">${d.id}</div>
     `;
-    if (pc < mx || d.players?.find(p=>p.uid===currentUser.uid)) {
-      item.onclick = () => joinRoom(doc.id);
-    } else {
-      item.style.opacity = '0.5';
-      item.style.cursor = 'default';
+    // FIX: delete button for room owner
+    if (isMyRoom) {
+      const delBtn = document.createElement('button');
+      delBtn.className = 'room-item-del';
+      delBtn.textContent = '✕';
+      delBtn.title = 'Удалить комнату';
+      delBtn.onclick = e => {
+        e.stopPropagation();
+        confirm('Удалить комнату?', `Стол "${d.name||d.id}" будет закрыт для всех игроков.`, () => deleteRoom(d.id));
+      };
+      item.appendChild(delBtn);
     }
+    const canJoin = pc < mx || (d.players||[]).find(p=>p.uid===currentUser.uid);
+    if (canJoin) item.onclick = () => joinRoom(d.id);
+    else { item.style.opacity='0.5'; item.style.cursor='default'; }
     list.appendChild(item);
   });
 }
 
-function esc(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+// ── DELETE ROOM (host) ────────────────────────────────────
+async function deleteRoom(roomId) {
+  try {
+    await updateDoc(doc(db,'rooms',roomId), { status:'ended', updatedAt:serverTimestamp() });
+    // If currently in this room → leave
+    if (currentRoomId === roomId) {
+      if (roomUnsub) { roomUnsub(); roomUnsub=null; }
+      if (chatUnsub) { chatUnsub(); chatUnsub=null; }
+      currentRoomId=null; roomData=null;
+      showLobby();
+    }
+    toast('Комната закрыта');
+  } catch(e) { toast('Ошибка: '+e.message); }
 }
 
 // ── CREATE ROOM ───────────────────────────────────────────
 el('btn-create-room').onclick = async () => {
-  const name = el('room-name-input').value.trim() || 'ВИП СТОЛ';
-  const maxP = parseInt(el('room-max-players').value)||4;
-  el('btn-create-room').disabled = true;
+  const name=el('room-name-input').value.trim()||'ВИП СТОЛ';
+  const maxP=parseInt(el('room-max-players').value)||4;
+  el('btn-create-room').disabled=true;
   try {
-    const roomRef = await addDoc(collection(db,'rooms'), {
-      name: name.toUpperCase().slice(0,20),
-      hostUid: currentUser.uid,
-      hostName: displayNick(currentUser),
-      status: 'waiting',         // waiting | betting | dealing | player-turn | dealer-turn | results
-      maxPlayers: maxP,
-      players: [],               // [{uid,name,cards,score,bet,status,handDone}]
-      dealerCards: [],
-      deck: [],
-      gamePhase: 'waiting',
-      activePlayerIndex: 0,
-      pot: 0,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
+    const roomRef=await addDoc(collection(db,'rooms'), {
+      name:name.toUpperCase().slice(0,20),
+      hostUid:currentUser.uid,
+      hostName:displayNick(currentUser),
+      status:'waiting',
+      maxPlayers:maxP,
+      players:[], dealerCards:[], deck:[],
+      gamePhase:'waiting', activePlayerIndex:0,
+      createdAt:serverTimestamp(), updatedAt:serverTimestamp()
     });
     await joinRoom(roomRef.id);
-  } catch (e) {
-    toast('Ошибка: ' + e.message);
-  } finally { el('btn-create-room').disabled = false; }
+  } catch(e) { toast('Ошибка: '+e.message); }
+  finally { el('btn-create-room').disabled=false; }
 };
 
 // ── JOIN BY CODE ──────────────────────────────────────────
 el('btn-join-code').onclick = () => {
-  const code = el('join-code-input').value.trim().toUpperCase();
+  const code=el('join-code-input').value.trim().toUpperCase();
   if (!code) { toast('Введите код'); return; }
   joinRoom(code);
 };
-el('join-code-input').addEventListener('keydown', e => { if(e.key==='Enter') el('btn-join-code').click(); });
+el('join-code-input').addEventListener('keydown',e=>{ if(e.key==='Enter') el('btn-join-code').click(); });
 
 // ── JOIN ROOM ─────────────────────────────────────────────
 async function joinRoom(roomId) {
   try {
-    const roomRef = doc(db,'rooms',roomId);
-    const snap = await getDoc(roomRef);
+    const roomRef=doc(db,'rooms',roomId);
+    const snap=await getDoc(roomRef);
     if (!snap.exists()) { toast('Комната не найдена'); return; }
-    const d = snap.data();
-    const uid = currentUser.uid;
-    const existingPlayer = (d.players||[]).find(p=>p.uid===uid);
-    if (!existingPlayer) {
-      if ((d.players||[]).length >= (d.maxPlayers||4)) { toast('Комната заполнена'); return; }
-      const newPlayer = {
-        uid, name: displayNick(currentUser),
-        cards: [], score: 0, bet: 0,
-        status: 'waiting', // waiting | bet_placed | playing | stand | bust | done
-        handDone: false
-      };
-      await updateDoc(roomRef, { players: arrayUnion(newPlayer) });
+    const d=snap.data();
+    if (d.status==='ended') { toast('Эта комната закрыта'); return; }
+    const uid=currentUser.uid;
+    const players=[...(d.players||[])];
+    const existingIdx=players.findIndex(p=>p.uid===uid);
+    if (existingIdx<0) {
+      // FIX: don't add player mid-game
+      if (['player-turn','dealer-turn','dealing'].includes(d.gamePhase)) {
+        toast('Игра уже идёт — подожди следующего раунда');
+      }
+      if (players.length>=(d.maxPlayers||4)) { toast('Комната заполнена'); return; }
+      players.push({ uid, name:displayNick(currentUser), cards:[], score:0, bet:0, status:'waiting', handDone:false, payout:0 });
+      await updateDoc(roomRef,{ players, updatedAt:serverTimestamp() });
     }
-    currentRoomId = roomId;
+    currentRoomId=roomId;
     enterGameRoom(roomId);
-  } catch (e) {
-    toast('Ошибка входа: ' + e.message);
-  }
+  } catch(e) { toast('Ошибка входа: '+e.message); }
 }
 
 // ── LEAVE ROOM ────────────────────────────────────────────
 async function leaveRoom() {
-  if (!currentRoomId || !currentUser) return;
-  const roomRef = doc(db,'rooms',currentRoomId);
+  if (!currentRoomId||!currentUser) return;
+  const roomRef=doc(db,'rooms',currentRoomId);
   try {
-    const snap = await getDoc(roomRef);
-    if (!snap.exists()) return;
-    const d = snap.data();
-    const player = d.players?.find(p=>p.uid===currentUser.uid);
-    if (player) await updateDoc(roomRef, { players: arrayRemove(player) });
-    // Clean up if room empty
-    const updated = await getDoc(roomRef);
-    if (updated.exists() && (updated.data().players||[]).length === 0) {
-      await deleteDoc(roomRef);
+    const snap=await getDoc(roomRef);
+    if (snap.exists()) {
+      const d=snap.data();
+      // FIX: rebuild array without this player (arrayRemove fails with complex objects)
+      const newPlayers=(d.players||[]).filter(p=>p.uid!==currentUser.uid);
+      if (newPlayers.length===0) {
+        // Last person — mark as ended
+        await updateDoc(roomRef,{ status:'ended', players:[], updatedAt:serverTimestamp() });
+      } else {
+        // FIX: if host leaves, transfer host to first remaining player
+        let update = { players:newPlayers, updatedAt:serverTimestamp() };
+        if (d.hostUid===currentUser.uid && newPlayers.length>0) {
+          update.hostUid = newPlayers[0].uid;
+          update.hostName = newPlayers[0].name;
+          toast('Хост передан: '+newPlayers[0].name);
+        }
+        await updateDoc(roomRef, update);
+      }
     }
-  } catch (_) {}
-  if (roomUnsub) { roomUnsub(); roomUnsub = null; }
-  if (chatUnsub) { chatUnsub(); chatUnsub = null; }
-  currentRoomId = null;
-  roomData = null;
+  } catch(_) {}
+  if (roomUnsub) { roomUnsub(); roomUnsub=null; }
+  if (chatUnsub) { chatUnsub(); chatUnsub=null; }
+  currentRoomId=null; roomData=null;
   showLobby();
 }
 
 // ── GAME ROOM UI ──────────────────────────────────────────
 function enterGameRoom(roomId) {
-  if (roomsUnsub) { roomsUnsub(); roomsUnsub = null; }
-  hide('lobby');
-  show('game-room');
-  show('btn-leave-room');
-  el('display-room-id').textContent = roomId;
-  localBet = 0;
-  el('my-bet-display').textContent = '0';
+  if (roomsUnsub) { roomsUnsub(); roomsUnsub=null; }
+  hide('lobby'); show('game-room'); show('btn-leave-room');
+  el('display-room-id').textContent=roomId;
+  localBet=0; el('my-bet-display').textContent='0';
+  lastHandledResultKey=null;
   startRoomListener(roomId);
   startChatListener(roomId);
-  el('btn-copy-code').onclick = () => {
+  el('btn-copy-code').onclick=()=>{
     navigator.clipboard.writeText(roomId).then(()=>toast('Код скопирован!')).catch(()=>toast(roomId));
   };
 }
@@ -1162,620 +906,519 @@ function enterGameRoom(roomId) {
 // ── ROOM LISTENER ─────────────────────────────────────────
 function startRoomListener(roomId) {
   if (roomUnsub) roomUnsub();
-  roomUnsub = onSnapshot(doc(db,'rooms',roomId), snap => {
-    if (!snap.exists()) { toast('Комната закрыта'); leaveRoom(); return; }
-    roomData = snap.data();
+  roomUnsub=onSnapshot(doc(db,'rooms',roomId), snap=>{
+    if (!snap.exists()||snap.data().status==='ended') { toast('Комната закрыта'); leaveRoom(); return; }
+    roomData=snap.data();
     renderGameRoom(roomData);
   });
 }
 
+// ── RENDER GAME ROOM ──────────────────────────────────────
 function renderGameRoom(data) {
-  if (data.gamePhase === 'results' && data.hostUid !== currentUser.uid) {
-    handleResultsForMe(data);
-  }
+  const uid=currentUser.uid;
+  const phase=data.gamePhase||'waiting';
+  const players=data.players||[];
+  const myPlayer=players.find(p=>p.uid===uid);
+  const isHost=data.hostUid===uid;
+  const activeIdx=data.activePlayerIndex||0;
+  const activePlayer=players[activeIdx];
+  const isMyTurn=activePlayer?.uid===uid&&phase==='player-turn';
 
-  if (data.gamePhase === 'betting') { 
-    resultsHandled = false; 
-    dealerRunning = false; 
-  }
-
-  const uid = currentUser.uid;
-  const phase = data.gamePhase || 'waiting';
-  const players = data.players || [];
-  const myPlayer = players.find(p => p.uid === uid);
-  const isHost = data.hostUid === uid;
-  const activeIdx = data.activePlayerIndex || 0;
-  const activePlayer = players[activeIdx];
-  const isMyTurn = activePlayer?.uid === uid && phase === 'player-turn';
+  // Show/hide close room button (host only)
+  if (isHost) show('btn-close-room'); else hide('btn-close-room');
 
   // Phase badge
-  const phaseMap = {
-    waiting: ['waiting','Ожидание игроков'],
-    betting: ['betting','Ставки'],
-    dealing: ['playing','Раздача'],
-    'player-turn': ['playing','Ход игроков'],
-    'dealer-turn': ['playing','Ход дилера'],
-    results: ['results','Результаты']
+  const phaseMap={
+    waiting:['waiting','Ожидание'], betting:['betting','Ставки'],
+    dealing:['playing','Раздача'], 'player-turn':['playing','Ход игроков'],
+    'dealer-turn':['playing','Ход дилера'], results:['results','Результаты']
   };
-  const [phaseClass, phaseLabel] = phaseMap[phase] || ['waiting','…'];
-  const pb = el('phase-badge');
-  pb.className = `phase-badge ${phaseClass}`;
-  pb.innerHTML = `<span class="phase-dot"></span> ${phaseLabel}`;
+  const [phaseClass,phaseLabel]=phaseMap[phase]||['waiting','…'];
+  const pb=el('phase-badge');
+  pb.className=`phase-badge ${phaseClass}`;
+  pb.innerHTML=`<span class="phase-dot"></span> ${phaseLabel}`;
 
   // Players bar
-  renderPlayersBar(players, activeIdx, uid, phase);
+  renderPlayersBar(players, activeIdx, uid, phase, isHost);
 
   // Dealer cards
-  const dealerContainer = el('dealer-cards');
-  const showDealerHidden = ['player-turn','betting','dealing'].includes(phase) && (data.dealerCards||[]).length > 0;
-  renderCards(data.dealerCards||[], 'dealer-cards', showDealerHidden);
-  const dealerScore = el('dealer-score-badge');
-  if (data.dealerCards?.length > 0) {
+  const showHidden=['player-turn','betting','dealing'].includes(phase)&&(data.dealerCards||[]).length>0;
+  renderCards(data.dealerCards||[],'dealer-cards',showHidden);
+  const dealerScore=el('dealer-score-badge');
+  if (data.dealerCards?.length>0) {
     dealerScore.classList.remove('hidden');
-    if (showDealerHidden) {
-      const visibleCards = data.dealerCards.filter((_,i)=>i!==1);
-      dealerScore.textContent = '?';
+    if (showHidden) {
+      const vis=data.dealerCards.filter((_,i)=>i!==1);
+      const visScore=bjS(vis);
+      dealerScore.textContent=visScore+'+?';
+      dealerScore.className='score-badge';
     } else {
-      const ds = bjS(data.dealerCards);
-      dealerScore.textContent = ds;
-      dealerScore.className = `score-badge${ds>21?' bust':ds===21?' bj':''}`;
+      const ds=bjS(data.dealerCards);
+      dealerScore.textContent=ds;
+      dealerScore.className=`score-badge${ds>21?' bust':ds===21?' bj':''}`;
     }
   } else { dealerScore.classList.add('hidden'); }
 
   // Player hands
   renderPlayerHands(players, uid, activeIdx, phase);
 
-  // My turn banner
-  if (isMyTurn) show('your-turn-banner');
-  else hide('your-turn-banner');
+  // My turn banner + timer
+  if (isMyTurn && myPlayer && !myPlayer.handDone) {
+    show('your-turn-banner');
+    startTimer(30);
+  } else {
+    hide('your-turn-banner');
+    if (!isMyTurn) stopTimer();
+  }
 
   // Controls
-  hide('bet-section');
-  hide('game-controls');
-  hide('host-controls');
+  hide('bet-section'); hide('game-controls'); hide('host-controls');
+  el('game-result').textContent=''; el('game-result').className='result-box';
 
-  if (phase === 'betting') {
-    if (myPlayer && myPlayer.status === 'waiting') show('bet-section');
-    else if (myPlayer?.status === 'bet_placed') {
-      el('game-result').textContent = '✓ Ставка принята — ожидание...';
-      el('game-result').className = 'result-box draw';
+  if (phase==='betting') {
+    if (myPlayer?.status==='waiting') {
+      show('bet-section');
+    } else if (myPlayer?.status==='bet_placed') {
+      el('game-result').textContent='✓ Ставка принята — ожидание...';
+      el('game-result').className='result-box draw';
     }
-  } else if (phase === 'player-turn' && isMyTurn && myPlayer && !myPlayer.handDone) {
+  } else if (phase==='player-turn'&&isMyTurn&&myPlayer&&!myPlayer.handDone) {
     show('game-controls');
-    const dbl = el('btn-double');
-    dbl.disabled = (myPlayer.cards?.length !== 2) || (myStats.balance < (myPlayer.bet||0));
-  } else if (phase === 'results') {
-    // Show results
+    el('btn-double').disabled=(myPlayer.cards?.length!==2)||(myStats.balance<(myPlayer.bet||0));
+  } else if (phase==='results') {
+    // FIX: use updatedAt as key so result is handled exactly once per round
+    const resultKey = data.updatedAt?.seconds || Date.now();
+    if (lastHandledResultKey !== resultKey) {
+      lastHandledResultKey = resultKey;
+      handleResultsForMe(data);
+    }
     if (myPlayer) showMyResult(myPlayer, data.dealerCards||[]);
   }
 
   // Host controls
   if (isHost) {
     show('host-controls');
-    const btnDeal = el('btn-start-deal');
-    const btnNew = el('btn-new-round');
-    if (phase === 'waiting' || phase === 'betting') {
-      btnDeal.disabled = !allPlayersBet(players);
-      btnDeal.style.display = '';
-      btnNew.style.display = 'none';
-    } else if (phase === 'results') {
-      btnDeal.style.display = 'none';
-      btnNew.style.display = '';
-    } else {
-      btnDeal.style.display = 'none';
-      btnNew.style.display = 'none';
+    const btnStart=el('btn-start-game');
+    const btnDeal=el('btn-start-deal');
+    const btnNew=el('btn-new-round');
+    btnStart.style.display='none'; btnDeal.style.display='none'; btnNew.style.display='none';
+    if (phase==='waiting') {
+      btnStart.style.display='';
+      btnStart.disabled=players.length<1;
+    } else if (phase==='betting') {
+      // FIX: allPlayersBet fixed
+      btnDeal.style.display='';
+      btnDeal.disabled=!allPlayersBet(players);
+    } else if (phase==='results') {
+      btnNew.style.display='';
     }
+    // Show close room button
+    el('btn-close-room').onclick=()=>{
+      confirm('Закрыть стол?','Все игроки будут выброшены из комнаты.',()=>deleteRoom(currentRoomId));
+    };
   }
 
-  // Auto-advance dealer turn
-  if (phase === 'dealer-turn' && isHost) {
-    setTimeout(() => runDealerTurn(data), 800);
+  // FIX: dealer turn — only trigger once via lock
+  if (phase==='dealer-turn'&&isHost&&!dealerRunning) {
+    setTimeout(()=>runDealerTurn(data),800);
   }
-
-  // Auto-advance to next player if current is done
-  if (phase === 'player-turn' && isHost) {
+  // FIX: auto-advance — only when host
+  if (phase==='player-turn'&&isHost) {
     checkAdvancePlayerTurn(data);
   }
 }
 
-function renderPlayersBar(players, activeIdx, myUid, phase) {
-  const bar = el('players-bar'); bar.innerHTML = '';
-  players.forEach((p, i) => {
-    const chip = document.createElement('div');
-    const isMe = p.uid === myUid;
-    const isActive = i === activeIdx && phase === 'player-turn';
-    chip.className = `player-chip${isActive?' active-turn':''}${isMe?' is-me':''}`;
-
-    const av = document.createElement('div');
-    av.className = 'player-avatar';
-    av.style.background = avatarGrad(p.uid);
-    av.textContent = initials(p.name);
-
-    const info = document.createElement('div');
-    info.className = 'player-info';
-
-    const statusIcon = {
-      waiting: '⏳', bet_placed: '✓', playing: '🃏',
-      stand: '🤚', bust: '💥', done: '✅', blackjack: '🌟'
-    }[p.status] || '👤';
-
-    info.innerHTML = `
-      <div class="player-name">${esc(p.name)}</div>
-      <div class="player-score-small">
-        ${p.bet>0?'Ставка: '+p.bet+' ⭐ · ':''}
-        ${p.score>0?'Очки: '+p.score:''}
-      </div>
-    `;
-
-    const statusEl = document.createElement('div');
-    statusEl.className = 'player-status-icon';
-    statusEl.textContent = statusIcon;
-
-    chip.append(av, info, statusEl);
-
-    if (isMe) {
-      const you = document.createElement('div');
-      you.className = 'you-badge';
-      you.textContent = 'YOU';
-      chip.appendChild(you);
+// ── PLAYERS BAR ───────────────────────────────────────────
+function renderPlayersBar(players, activeIdx, myUid, phase, isHost) {
+  const bar=el('players-bar'); bar.innerHTML='';
+  players.forEach((p,i) => {
+    const chip=document.createElement('div');
+    const isMe=p.uid===myUid;
+    const isActive=i===activeIdx&&phase==='player-turn';
+    chip.className=`player-chip${isActive?' active-turn':''}${isMe?' is-me':''}`;
+    const av=document.createElement('div');
+    av.className='player-avatar'; av.style.background=avatarGrad(p.uid); av.textContent=initials(p.name);
+    const info=document.createElement('div'); info.className='player-info';
+    const statusIcon={waiting:'⏳',bet_placed:'✓',playing:'🃏',stand:'🤚',bust:'💥',done:'✅',blackjack:'🌟'}[p.status]||'👤';
+    info.innerHTML=`<div class="player-name">${esc(p.name)}</div><div class="player-score-small">${p.bet>0?'Ставка: '+p.bet+' ⭐':'Нет ставки'}</div>`;
+    const statusEl=document.createElement('div'); statusEl.className='player-status-icon'; statusEl.textContent=statusIcon;
+    chip.append(av,info,statusEl);
+    if (isMe) { const you=document.createElement('div'); you.className='you-badge'; you.textContent='YOU'; chip.appendChild(you); }
+    // FIX: host can kick players
+    if (isHost && !isMe && (phase==='waiting'||phase==='betting')) {
+      const kickBtn=document.createElement('button');
+      kickBtn.className='kick-btn'; kickBtn.textContent='✕'; kickBtn.title='Выгнать';
+      kickBtn.onclick=e=>{ e.stopPropagation(); kickPlayer(p.uid, p.name); };
+      chip.appendChild(kickBtn);
     }
-
     bar.appendChild(chip);
   });
 }
 
+// ── KICK PLAYER ───────────────────────────────────────────
+async function kickPlayer(uid, name) {
+  if (!currentRoomId||!roomData) return;
+  confirm(`Выгнать ${name}?`, 'Игрок будет удалён из комнаты.', async () => {
+    const newPlayers=(roomData.players||[]).filter(p=>p.uid!==uid);
+    await updateDoc(doc(db,'rooms',currentRoomId),{players:newPlayers,updatedAt:serverTimestamp()});
+    addChatSysMsg(`${name} был выгнан хостом`);
+    toast(`${name} выгнан`);
+  });
+}
+
+// ── PLAYER HANDS ──────────────────────────────────────────
 function renderPlayerHands(players, myUid, activeIdx, phase) {
-  const container = el('player-hands'); container.innerHTML = '';
+  const container=el('player-hands'); container.innerHTML='';
   if (!['dealing','player-turn','dealer-turn','results'].includes(phase)) return;
-  players.forEach((p, i) => {
+  players.forEach((p,i) => {
     if (!p.cards?.length) return;
-    const panel = document.createElement('div');
-    const isActive = i === activeIdx && phase === 'player-turn';
-    panel.className = `hand-panel${isActive?' active-hand':''}`;
-
-    const score = bjS(p.cards);
-    const nameEl = document.createElement('div');
-    nameEl.className = 'hand-panel-name';
-    nameEl.innerHTML = `${esc(p.name)} <span class="score-badge${score>21?' bust':score===21&&p.cards.length===2?' bj':''}">${score}</span>`;
+    const panel=document.createElement('div');
+    const isActive=i===activeIdx&&phase==='player-turn';
+    const score=bjS(p.cards);
+    let panelClass='hand-panel';
+    if (isActive) panelClass+=' active-hand';
+    if (phase==='results') {
+      if (p.status==='win'||p.status==='blackjack') panelClass+=' win-hand';
+      else if (p.status==='bust'||p.status==='lose') panelClass+=' lose-hand';
+    }
+    panel.className=panelClass;
+    const nameEl=document.createElement('div'); nameEl.className='hand-panel-name';
+    let payoutHtml='';
+    if (phase==='results'&&p.payout!=null) {
+      const diff=p.payout-(p.bet||0);
+      if (p.status==='bust'||p.status==='lose') payoutHtml=`<span class="payout-badge lose-pay">-${p.bet} ⭐</span>`;
+      else if (p.status==='draw') payoutHtml=`<span class="payout-badge draw-pay">±0 ⭐</span>`;
+      else if (p.payout>0) payoutHtml=`<span class="payout-badge win-pay">+${diff} ⭐</span>`;
+    }
+    nameEl.innerHTML=`${esc(p.name)} <span class="score-badge${score>21?' bust':score===21&&p.cards.length===2?' bj':''}">${score}</span>${payoutHtml}`;
     panel.appendChild(nameEl);
-
-    const cardsWrap = document.createElement('div');
-    cardsWrap.className = 'hand-cards';
-    (p.cards||[]).forEach(c => cardsWrap.appendChild(renderCard(c,false)));
+    const cardsWrap=document.createElement('div'); cardsWrap.className='hand-cards';
+    (p.cards||[]).forEach(c=>cardsWrap.appendChild(renderCard(c,false)));
     panel.appendChild(cardsWrap);
     container.appendChild(panel);
   });
 }
 
+// ── RESULT DISPLAY ────────────────────────────────────────
 function showMyResult(myPlayer, dealerCards) {
-  const res = el('game-result');
-  const ds = bjS(dealerCards);
-  const ps = myPlayer.score || bjS(myPlayer.cards||[]);
-  const dealerBust = ds > 21;
-  const playerBust = ps > 21;
-
+  const res=el('game-result');
+  const ds=bjS(dealerCards);
+  const ps=myPlayer.score||bjS(myPlayer.cards||[]);
+  const dealerBust=ds>21, playerBust=ps>21;
   if (playerBust) {
-    res.textContent = `Перебор! (${ps}) — -${myPlayer.bet} ⭐`;
-    res.className = 'result-box lose';
+    res.textContent=`Перебор! (${ps}) — -${myPlayer.bet} ⭐`;
+    res.className='result-box lose';
   } else if (dealerBust) {
-    const win = myPlayer.bet * 2;
-    res.textContent = `Дилер перебрал! — +${myPlayer.bet} ⭐`;
-    res.className = 'result-box win';
-  } else if (ps > ds) {
-    const nat = ps===21 && myPlayer.cards?.length===2;
-    const profit = nat ? Math.round(myPlayer.bet*1.5) : myPlayer.bet;
-    res.textContent = `${nat?'Блэкджек! ':'Победа! '} +${profit} ⭐`;
-    res.className = 'result-box win';
-  } else if (ps < ds) {
-    res.textContent = `Проигрыш (${ps} < ${ds}) — -${myPlayer.bet} ⭐`;
-    res.className = 'result-box lose';
+    res.textContent=`Дилер перебрал! — +${myPlayer.bet} ⭐`;
+    res.className='result-box win';
+  } else if (ps>ds) {
+    const nat=ps===21&&myPlayer.cards?.length===2;
+    const profit=nat?Math.round(myPlayer.bet*1.5):myPlayer.bet;
+    res.textContent=`${nat?'♠ Блэкджек! ':'Победа! '} +${profit} ⭐`;
+    res.className='result-box win';
+  } else if (ps<ds) {
+    res.textContent=`Проигрыш (${ps} vs ${ds}) — -${myPlayer.bet} ⭐`;
+    res.className='result-box lose';
   } else {
-    res.textContent = `Ничья (${ps}) — ставка возвращена`;
-    res.className = 'result-box draw';
+    res.textContent=`Ничья (${ps}) — ставка возвращена`;
+    res.className='result-box draw';
   }
+}
+
+// ── FIX: RESULT HANDLING — once per round, keyed properly ─
+function handleResultsForMe(data) {
+  const uid=currentUser.uid;
+  const myPlayer=(data.players||[]).find(p=>p.uid===uid);
+  if (!myPlayer||myPlayer.payout==null) return;
+  // FIX: host credits in runDealerTurn, skip here
+  if (data.hostUid===uid) {
+    updateStreakAndStats(myPlayer, bjS(data.dealerCards||[]));
+    return;
+  }
+  if (myPlayer.payout>0) { myStats.balance+=myPlayer.payout; }
+  updateStreakAndStats(myPlayer, bjS(data.dealerCards||[]));
+  saveStats();
+  // Coin animation
+  if (myPlayer.payout>myPlayer.bet) {
+    const balEl=el('stat-bal');
+    const r=balEl.getBoundingClientRect();
+    spawnCoins(r.left+r.width/2, r.top, 8);
+  }
+}
+
+function updateStreakAndStats(myPlayer, dealerScore) {
+  const ps=bjS(myPlayer.cards||[]);
+  const ds=dealerScore;
+  if (ps>21) { myStats.losses++; myStats.streak=0; sndBust(); }
+  else if (ds>21||ps>ds) { myStats.wins++; myStats.streak++; sndWin(); }
+  else if (ps===ds) { myStats.draws++; myStats.streak=0; sndDraw(); }
+  else { myStats.losses++; myStats.streak=0; sndLose(); }
+  saveStats();
 }
 
 // ── BET CONTROLS ──────────────────────────────────────────
 window.addBet = function(amt) {
-  if (!currentRoomId) return;
-  const data = roomData;
-  if (data?.gamePhase !== 'betting') return;
-  localBet = Math.min(1000, Math.max(0, localBet + amt));
-  // Cap at balance
-  localBet = Math.min(localBet, myStats.balance);
-  el('my-bet-display').textContent = localBet;
+  if (!currentRoomId||roomData?.gamePhase!=='betting') return;
+  localBet=Math.min(myStats.balance, Math.min(1000000, localBet+amt));
+  el('my-bet-display').textContent=localBet;
+  sndChip();
 };
 window.clearBet = function() { localBet=0; el('my-bet-display').textContent='0'; };
+window.betHalf = function() {
+  localBet=Math.floor(myStats.balance/2);
+  el('my-bet-display').textContent=localBet; sndChip();
+};
+window.betAll = function() {
+  localBet=myStats.balance;
+  el('my-bet-display').textContent=localBet; sndChip();
+};
 
 window.placeBet = async function() {
-  if (!currentRoomId || !roomData || localBet <= 0) { toast('Выберите ставку'); return; }
-  if (localBet > myStats.balance) { toast('Недостаточно ⭐'); return; }
-  const roomRef = doc(db,'rooms',currentRoomId);
-  const uid = currentUser.uid;
-  const data = roomData;
-  const players = [...(data.players||[])];
-  const idx = players.findIndex(p=>p.uid===uid);
+  if (!currentRoomId||!roomData||localBet<=0) { toast('Выберите ставку'); return; }
+  if (localBet>myStats.balance) { toast('Недостаточно ⭐'); return; }
+  const roomRef=doc(db,'rooms',currentRoomId);
+  const uid=currentUser.uid;
+  const players=[...(roomData.players||[])];
+  const idx=players.findIndex(p=>p.uid===uid);
   if (idx<0) return;
-  players[idx] = { ...players[idx], bet: localBet, status: 'bet_placed' };
+  players[idx]={...players[idx],bet:localBet,status:'bet_placed'};
   try {
-    await updateDoc(roomRef, { players, updatedAt: serverTimestamp() });
-    myStats.balance -= localBet;
+    await updateDoc(roomRef,{players,updatedAt:serverTimestamp()});
+    myStats.balance-=localBet;
     saveStats();
     toast(`Ставка ${localBet} ⭐ принята`);
     hide('bet-section');
-    el('game-result').textContent = '✓ Ставка принята — ожидание остальных...';
-    el('game-result').className = 'result-box draw';
-  } catch (e) { toast('Ошибка: '+e.message); }
+    el('game-result').textContent='✓ Ставка — ожидание остальных...';
+    el('game-result').className='result-box draw';
+  } catch(e) { toast('Ошибка: '+e.message); }
+};
+
+// ── HOST: START GAME (waiting → betting) ──────────────────
+window.hostStartGame = async function() {
+  if (!currentRoomId||!roomData||roomData.hostUid!==currentUser.uid) return;
+  const players=roomData.players||[];
+  if (players.length<1) { toast('Нужен хотя бы 1 игрок'); return; }
+  const resetPlayers=players.map(p=>({...p,cards:[],score:0,bet:0,status:'waiting',handDone:false,payout:0}));
+  await updateDoc(doc(db,'rooms',currentRoomId),{
+    gamePhase:'betting', players:resetPlayers,
+    dealerCards:[], deck:[], activePlayerIndex:0,
+    status:'playing', updatedAt:serverTimestamp()
+  });
+  addChatSysMsg('Раунд начался! Делайте ставки 🎲');
 };
 
 // ── HOST: START DEAL ──────────────────────────────────────
 window.hostStartDeal = async function() {
-  if (!currentRoomId || !roomData) return;
-  const data = roomData;
-  if (data.hostUid !== currentUser.uid) return;
-  const players = data.players||[];
-  const bettingPlayers = players.filter(p=>p.bet>0&&p.status==='bet_placed');
-  if (bettingPlayers.length === 0 && players.length > 1) {
-    // Start betting phase first
-    const roomRef = doc(db,'rooms',currentRoomId);
-    const updatedPlayers = players.map(p=>({...p,status:'waiting',cards:[],score:0,bet:0,handDone:false}));
-    await updateDoc(roomRef, {
-      gamePhase:'betting', players: updatedPlayers,
-      dealerCards:[], deck:[], activePlayerIndex:0,
-      updatedAt: serverTimestamp()
-    });
-    return;
-  }
-  if (bettingPlayers.length === 0) { toast('Нет игроков со ставками'); return; }
-
-  const deck = mkDeck();
-  // Deal 2 cards to each betting player + 2 to dealer
-  const updatedPlayers = players.map(p => {
-    if (p.status !== 'bet_placed') return p;
-    const cards = [deck.pop(), deck.pop()];
-    const score = bjS(cards);
-    return {
-      ...p, cards, score,
-      status: score===21 ? 'blackjack' : 'playing',
-      handDone: score===21
-    };
+  if (!currentRoomId||!roomData||roomData.hostUid!==currentUser.uid) return;
+  const players=roomData.players||[];
+  const bettingPlayers=players.filter(p=>p.status==='bet_placed'&&p.bet>0);
+  if (bettingPlayers.length===0) { toast('Нет игроков со ставками'); return; }
+  const deck=mkDeck();
+  const updatedPlayers=players.map(p=>{
+    if (p.status!=='bet_placed') return {...p,handDone:true}; // skip non-betting
+    const cards=[deck.pop(),deck.pop()];
+    const score=bjS(cards);
+    return {...p,cards,score,status:score===21?'blackjack':'playing',handDone:score===21,payout:0};
   });
-  const dealerCards = [deck.pop(), deck.pop()];
-  // Find first active player
-  const firstIdx = updatedPlayers.findIndex(p=>p.status==='playing');
-
-  const roomRef = doc(db,'rooms',currentRoomId);
-  await updateDoc(roomRef, {
-    players: updatedPlayers,
-    dealerCards, deck,
-    gamePhase: firstIdx >= 0 ? 'player-turn' : 'dealer-turn',
-    activePlayerIndex: firstIdx >= 0 ? firstIdx : 0,
-    updatedAt: serverTimestamp()
+  const dealerCards=[deck.pop(),deck.pop()];
+  // First active (non-done) player
+  const firstIdx=updatedPlayers.findIndex(p=>!p.handDone&&p.status==='playing');
+  sndCard();
+  await updateDoc(doc(db,'rooms',currentRoomId),{
+    players:updatedPlayers, dealerCards, deck,
+    gamePhase:firstIdx>=0?'player-turn':'dealer-turn',
+    activePlayerIndex:firstIdx>=0?firstIdx:0,
+    updatedAt:serverTimestamp()
   });
   addChatSysMsg('Карты розданы! Игра началась 🃏');
 };
 
+// FIX: allPlayersBet — only true when at least one bet placed AND everyone has either bet or opted out
 function allPlayersBet(players) {
   if (!players.length) return false;
-  return players.every(p => p.status==='bet_placed' || p.status==='waiting' && p.bet===0);
+  const activePlayers=players.filter(p=>p.uid); // all players
+  const betPlaced=activePlayers.filter(p=>p.status==='bet_placed').length;
+  if (betPlaced===0) return false;
+  return activePlayers.every(p=>p.status==='bet_placed'||p.handDone);
 }
 
 // ── PLAYER TURN ACTIONS ───────────────────────────────────
 window.doHit = async function() {
   if (!canAct()) return;
-  const data = roomData;
-  const uid = currentUser.uid;
-  const players = [...data.players];
-  const idx = players.findIndex(p=>p.uid===uid);
+  const uid=currentUser.uid;
+  const players=[...roomData.players];
+  const idx=players.findIndex(p=>p.uid===uid);
   if (idx<0) return;
-  const deck = [...data.deck];
-  const newCard = deck.pop();
-  const cards = [...players[idx].cards, newCard];
-  const score = bjS(cards);
-  const bust = score > 21;
-  players[idx] = { ...players[idx], cards, score, status: bust?'bust':'playing', handDone: bust };
-  const roomRef = doc(db,'rooms',currentRoomId);
-  await updateDoc(roomRef, { players, deck, updatedAt: serverTimestamp() });
-  if (bust) { toast('Перебор! 💥'); }
+  const deck=[...roomData.deck];
+  const newCard=deck.pop();
+  const cards=[...players[idx].cards,newCard];
+  const score=bjS(cards);
+  const bust=score>21;
+  players[idx]={...players[idx],cards,score,status:bust?'bust':'playing',handDone:bust};
+  sndCard();
+  await updateDoc(doc(db,'rooms',currentRoomId),{players,deck,updatedAt:serverTimestamp()});
+  if (bust) toast('Перебор! 💥');
 };
 
 window.doStand = async function() {
   if (!canAct()) return;
-  const data = roomData;
-  const uid = currentUser.uid;
-  const players = [...data.players];
-  const idx = players.findIndex(p=>p.uid===uid);
+  const uid=currentUser.uid;
+  const players=[...roomData.players];
+  const idx=players.findIndex(p=>p.uid===uid);
   if (idx<0) return;
-  players[idx] = { ...players[idx], status: 'stand', handDone: true };
-  const roomRef = doc(db,'rooms',currentRoomId);
-  await updateDoc(roomRef, { players, updatedAt: serverTimestamp() });
+  players[idx]={...players[idx],status:'stand',handDone:true};
+  await updateDoc(doc(db,'rooms',currentRoomId),{players,updatedAt:serverTimestamp()});
 };
 
 window.doDouble = async function() {
   if (!canAct()) return;
-  const data = roomData;
-  const uid = currentUser.uid;
-  const players = [...data.players];
-  const idx = players.findIndex(p=>p.uid===uid);
+  const uid=currentUser.uid;
+  const players=[...roomData.players];
+  const idx=players.findIndex(p=>p.uid===uid);
   if (idx<0) return;
-  const p = players[idx];
-  if (p.cards.length !== 2) return;
-  if (myStats.balance < p.bet) { toast('Недостаточно ⭐'); return; }
-  const deck = [...data.deck];
-  const newCard = deck.pop();
-  const cards = [...p.cards, newCard];
-  const score = bjS(cards);
-  const bust = score > 21;
-  myStats.balance -= p.bet;
-  saveStats();
-  players[idx] = { ...players[idx], cards, score, bet: p.bet*2, status: bust?'bust':'stand', handDone: true };
-  const roomRef = doc(db,'rooms',currentRoomId);
-  await updateDoc(roomRef, { players, deck, updatedAt: serverTimestamp() });
+  const p=players[idx];
+  if (p.cards.length!==2) return;
+  if (myStats.balance<p.bet) { toast('Недостаточно ⭐'); return; }
+  const deck=[...roomData.deck];
+  const newCard=deck.pop();
+  const cards=[...p.cards,newCard];
+  const score=bjS(cards);
+  const bust=score>21;
+  myStats.balance-=p.bet; saveStats();
+  players[idx]={...players[idx],cards,score,bet:p.bet*2,status:bust?'bust':'stand',handDone:true};
+  sndCard();
+  await updateDoc(doc(db,'rooms',currentRoomId),{players,deck,updatedAt:serverTimestamp()});
   if (bust) toast('Перебор! 💥');
 };
 
 function canAct() {
-  if (!currentRoomId || !roomData) return false;
-  const data = roomData;
-  if (data.gamePhase !== 'player-turn') return false;
-  const uid = currentUser.uid;
-  const players = data.players||[];
-  const activeIdx = data.activePlayerIndex||0;
-  const activeP = players[activeIdx];
-  return activeP?.uid === uid && !activeP?.handDone;
+  if (!currentRoomId||!roomData) return false;
+  if (roomData.gamePhase!=='player-turn') return false;
+  const uid=currentUser.uid;
+  const players=roomData.players||[];
+  const activeP=players[roomData.activePlayerIndex||0];
+  return activeP?.uid===uid&&!activeP?.handDone;
 }
 
-// ── AUTO-ADVANCE PLAYER TURNS (host only) ─────────────────
-let advanceLock = false;
+// ── AUTO-ADVANCE (host only) ──────────────────────────────
 async function checkAdvancePlayerTurn(data) {
-  if (advanceLock) return;
-  const uid = currentUser.uid;
-  if (data.hostUid !== uid) return;
-  const players = data.players||[];
-  const idx = data.activePlayerIndex||0;
-  const cur = players[idx];
-  if (!cur || cur.handDone) {
-    advanceLock = true;
+  if (advanceLock||data.hostUid!==currentUser.uid) return;
+  const players=data.players||[];
+  const idx=data.activePlayerIndex||0;
+  const cur=players[idx];
+  if (!cur||cur.handDone) {
+    advanceLock=true;
     try { await advanceToNextPlayer(data); }
-    finally { setTimeout(()=>advanceLock=false, 1500); }
+    finally { setTimeout(()=>advanceLock=false,1500); }
   }
 }
-
 async function advanceToNextPlayer(data) {
-  const players = data.players||[];
-  const curIdx = data.activePlayerIndex||0;
-  // Find next non-done player
-  let nextIdx = curIdx + 1;
-  while (nextIdx < players.length && players[nextIdx]?.handDone) nextIdx++;
-  const roomRef = doc(db,'rooms',currentRoomId);
-  if (nextIdx >= players.length) {
-    // All done → dealer turn
-    await updateDoc(roomRef, { gamePhase:'dealer-turn', updatedAt: serverTimestamp() });
+  const players=data.players||[];
+  let nextIdx=(data.activePlayerIndex||0)+1;
+  while (nextIdx<players.length&&players[nextIdx]?.handDone) nextIdx++;
+  const roomRef=doc(db,'rooms',currentRoomId);
+  if (nextIdx>=players.length) {
+    await updateDoc(roomRef,{gamePhase:'dealer-turn',updatedAt:serverTimestamp()});
   } else {
-    await updateDoc(roomRef, { activePlayerIndex: nextIdx, updatedAt: serverTimestamp() });
+    await updateDoc(roomRef,{activePlayerIndex:nextIdx,updatedAt:serverTimestamp()});
   }
 }
 
-// ── DEALER TURN (host only) ───────────────────────────────
-let dealerRunning = false;
+// ── DEALER TURN (host only) — FIX: single execution guard ─
 async function runDealerTurn(data) {
-  if (dealerRunning || data.hostUid !== currentUser.uid) return;
-  dealerRunning = true;
+  if (dealerRunning||data.hostUid!==currentUser.uid) return;
+  dealerRunning=true;
   try {
-    let dealerCards = [...(data.dealerCards||[])];
-    let deck = [...(data.deck||[])];
-    while (bjS(dealerCards) < 17) {
+    let dealerCards=[...(data.dealerCards||[])];
+    let deck=[...(data.deck||[])];
+    while (bjS(dealerCards)<17) {
       dealerCards.push(deck.pop());
-      await new Promise(r=>setTimeout(r,700));
+      sndCard();
+      await new Promise(r=>setTimeout(r,750));
     }
-    const ds = bjS(dealerCards);
-    // Settle results
-    const players = [...(data.players||[])];
-    const settledPlayers = players.map(p => {
-      if (!p.cards?.length || !p.bet) return p;
-      const ps = bjS(p.cards);
-      const playerBust = ps > 21;
-      const dealerBust = ds > 21;
-      let result = 'lose';
-      let payout = 0;
+    const ds=bjS(dealerCards);
+    const players=[...(data.players||[])];
+    const settledPlayers=players.map(p=>{
+      if (!p.cards?.length||!p.bet||p.handDone===false&&p.status==='waiting') return {...p,payout:0};
+      const ps=bjS(p.cards);
+      const playerBust=ps>21, dealerBust=ds>21;
+      let result='lose', payout=0;
       if (playerBust) { result='bust'; payout=0; }
-      else if (dealerBust || ps > ds) {
+      else if (dealerBust||ps>ds) {
         result='win';
-        const nat = ps===21&&p.cards.length===2;
-        payout = nat ? p.bet + Math.round(p.bet*1.5) : p.bet*2;
-      } else if (ps === ds) { result='draw'; payout=p.bet; }
+        const nat=ps===21&&p.cards.length===2;
+        payout=nat?p.bet+Math.round(p.bet*1.5):p.bet*2;
+      } else if (ps===ds) { result='draw'; payout=p.bet; }
       else { result='lose'; payout=0; }
-      return { ...p, status: result, payout };
+      return {...p,status:result,payout};
     });
-
-    const roomRef = doc(db,'rooms',currentRoomId);
-    await updateDoc(roomRef, {
-      dealerCards, deck,
-      players: settledPlayers,
-      gamePhase: 'results',
-      updatedAt: serverTimestamp()
+    await updateDoc(doc(db,'rooms',currentRoomId),{
+      dealerCards, deck, players:settledPlayers,
+      gamePhase:'results', updatedAt:serverTimestamp()
     });
-
-    // Credit winnings for local user
-    const myResult = settledPlayers.find(p=>p.uid===currentUser.uid);
-    if (myResult?.payout > 0) {
-      myStats.balance += myResult.payout;
-      saveStats();
-    }
-    // Update stats
-    updateMyStats(myResult, ds);
-  } finally { dealerRunning = false; }
-}
-
-function updateMyStats(myPlayer, dealerScore) {
-  if (!myPlayer) return;
-  const ps = bjS(myPlayer.cards||[]);
-  const ds = dealerScore;
-  const bust = ps > 21;
-  const dealerBust = ds > 21;
-  if (bust) myStats.losses++;
-  else if (dealerBust || ps > ds) myStats.wins++;
-  else if (ps === ds) myStats.draws++;
-  else myStats.losses++;
-  saveStats();
+    // FIX: host credits own balance here
+    const myResult=settledPlayers.find(p=>p.uid===currentUser.uid);
+    if (myResult?.payout>0) { myStats.balance+=myResult.payout; }
+  } finally { dealerRunning=false; }
 }
 
 // ── HOST: NEW ROUND ───────────────────────────────────────
 window.hostNewRound = async function() {
   if (!currentRoomId||!roomData||roomData.hostUid!==currentUser.uid) return;
-
-  // Credit payouts for all players (non-host players need to update their own balance)
-  // This is a simplification – in prod, use Cloud Functions
-  const players = roomData.players||[];
-  const myPlayer = players.find(p=>p.uid===currentUser.uid);
-  if (myPlayer?.payout > 0 && roomData.gamePhase !== 'results') {
-    // already credited in dealerTurn
-  }
-
-  const roomRef = doc(db,'rooms',currentRoomId);
-  const resetPlayers = players.map(p=>({
-    ...p, cards:[], score:0, bet:0,
-    status:'waiting', handDone:false, payout:0
-  }));
-  await updateDoc(roomRef, {
+  const players=roomData.players||[];
+  const resetPlayers=players.map(p=>({...p,cards:[],score:0,bet:0,status:'waiting',handDone:false,payout:0}));
+  dealerRunning=false; advanceLock=false;
+  await updateDoc(doc(db,'rooms',currentRoomId),{
     gamePhase:'betting', players:resetPlayers,
     dealerCards:[], deck:[], activePlayerIndex:0,
-    updatedAt: serverTimestamp()
+    updatedAt:serverTimestamp()
   });
-  el('game-result').textContent = '';
-  el('game-result').className = 'result-box';
-  localBet = 0;
-  el('my-bet-display').textContent = '0';
-  addChatSysMsg('Новый раунд начинается! Делайте ставки 🎲');
+  el('game-result').textContent=''; el('game-result').className='result-box';
+  localBet=0; el('my-bet-display').textContent='0';
+  lastHandledResultKey=null;
+  addChatSysMsg('Новый раунд! Делайте ставки 🎲');
 };
-
-// ── RESULTS HANDLING (for non-host players) ───────────────
-// Non-host players need to credit their own balance when results arrive
-let resultsHandled = false;
-function handleResultsForMe(data) {
-  if (resultsHandled) return;
-  const uid = currentUser.uid;
-  const myPlayer = (data.players||[]).find(p=>p.uid===uid);
-  if (!myPlayer || !myPlayer.payout && myPlayer.payout !== 0) return;
-  if (data.hostUid === uid) return; // host handles their own in runDealerTurn
-  resultsHandled = true;
-  if (myPlayer.payout > 0) {
-    myStats.balance += myPlayer.payout;
-    saveStats();
-  }
-  updateMyStats(myPlayer, bjS(data.dealerCards||[]));
-}
-
 
 // ── CHAT ──────────────────────────────────────────────────
 function startChatListener(roomId) {
   if (chatUnsub) chatUnsub();
-  const q = query(
-    collection(db,'rooms',roomId,'chat'),
-    orderBy('t','asc'), limit(100)
-  );
-  chatUnsub = onSnapshot(q, snap => {
-    const msgs = el('chat-msgs');
-    msgs.innerHTML = '';
-    snap.forEach(d => {
-      const data = d.data();
-      renderChatMsg(msgs, data);
-    });
-    msgs.scrollTop = msgs.scrollHeight;
+  const q=query(collection(db,'rooms',roomId,'chat'),orderBy('t','asc'),limit(100));
+  chatUnsub=onSnapshot(q, snap=>{
+    const msgs=el('chat-msgs'); msgs.innerHTML='';
+    snap.forEach(d=>renderChatMsg(msgs,d.data()));
+    msgs.scrollTop=msgs.scrollHeight;
   });
 }
-
 function renderChatMsg(container, data) {
-  const row = document.createElement('div');
-  row.className = 'chat-msg';
+  const row=document.createElement('div'); row.className='chat-msg';
   if (data.sys) {
-    row.innerHTML = `<div style="width:100%;text-align:center;font-size:.65em;color:rgba(212,175,55,.3);font-family:'Cinzel',serif;letter-spacing:1px;padding:4px 0">${esc(data.text)}</div>`;
-    container.appendChild(row);
-    return;
+    row.innerHTML=`<div style="width:100%;text-align:center;font-size:.65em;color:rgba(212,175,55,.3);font-family:'Cinzel',serif;letter-spacing:1px;padding:4px 0">${esc(data.text)}</div>`;
+    container.appendChild(row); return;
   }
-  const av = document.createElement('div');
-  av.className = 'chat-msg-avatar';
-  av.style.background = avatarGrad(data.uid||'x');
-  av.textContent = initials(data.name||'?');
-  const content = document.createElement('div');
-  content.className = 'chat-msg-content';
-  content.innerHTML = `<div class="chat-msg-author">${esc(data.name||'?')}</div><div class="chat-msg-text">${esc(data.text||'')}</div>`;
-  row.append(av, content);
-  container.appendChild(row);
+  const av=document.createElement('div'); av.className='chat-msg-avatar'; av.style.background=avatarGrad(data.uid||'x'); av.textContent=initials(data.name||'?');
+  const content=document.createElement('div'); content.className='chat-msg-content';
+  content.innerHTML=`<div class="chat-msg-author">${esc(data.name||'?')}</div><div class="chat-msg-text">${esc(data.text||'')}</div>`;
+  row.append(av,content); container.appendChild(row);
 }
-
 window.sendChatMsg = async function() {
-  const input = el('chat-input');
-  const text = input.value.trim();
-  if (!text || !currentRoomId) return;
-  input.value = '';
+  const input=el('chat-input');
+  const text=input.value.trim();
+  if (!text||!currentRoomId) return;
+  input.value='';
   try {
-    await addDoc(collection(db,'rooms',currentRoomId,'chat'), {
-      uid: currentUser.uid,
-      name: displayNick(currentUser),
-      text: text.slice(0,200),
-      t: serverTimestamp()
+    await addDoc(collection(db,'rooms',currentRoomId,'chat'),{
+      uid:currentUser.uid, name:displayNick(currentUser), text:text.slice(0,200), t:serverTimestamp()
     });
-  } catch (_) {}
+  } catch(_) {}
 };
-
 async function addChatSysMsg(text) {
   if (!currentRoomId) return;
-  try {
-    await addDoc(collection(db,'rooms',currentRoomId,'chat'), {
-      sys: true, text, t: serverTimestamp()
-    });
-  } catch (_) {}
+  try { await addDoc(collection(db,'rooms',currentRoomId,'chat'),{sys:true,text,t:serverTimestamp()}); } catch(_) {}
 }
-
-el('chat-input').addEventListener('keydown', e => {
-  if (e.key==='Enter' && !e.shiftKey) { e.preventDefault(); window.sendChatMsg(); }
+el('chat-input').addEventListener('keydown',e=>{
+  if (e.key==='Enter'&&!e.shiftKey) { e.preventDefault(); window.sendChatMsg(); }
 });
 
-// ── INIT ─────────────────────────────────────────────────
-loadStats();
-
-/*
-=============================================================
-  СТРУКТУРА ДОКУМЕНТА КОМНАТЫ В FIRESTORE:
-  
-  rooms/{roomId} = {
-    name: string,                    // Название комнаты
-    hostUid: string,                 // UID создателя
-    hostName: string,
-    status: 'waiting'|'playing',     // Для лобби-листинга
-    maxPlayers: number,
-    gamePhase:                       // Фаза игры:
-      'waiting'    — ждём игроков
-      'betting'    — игроки делают ставки
-      'dealing'    — раздача (мгновенная)
-      'player-turn'— ходы игроков по очереди
-      'dealer-turn'— автоматический ход дилера (host)
-      'results'    — итоги раунда
-    players: [{                      // Массив игроков
-      uid: string,
-      name: string,
-      cards: [{v,s}],               // Карты в руке
-      score: number,                 // Текущие очки
-      bet: number,                   // Ставка в раунде
-      status: 'waiting'|'bet_placed'|'playing'|'stand'|'bust'|'blackjack'|'done',
-      handDone: boolean,             // Закончил ли ход
-      payout: number                 // Выплата после раунда
-    }],
-    dealerCards: [{v,s}],
-    deck: [{v,s}],                   // Остаток колоды
-    activePlayerIndex: number,       // Чей сейчас ход
-    createdAt: Timestamp,
-    updatedAt: Timestamp
-  }
-  
-  rooms/{roomId}/chat/{msgId} = {
-    uid: string, name: string,
-    text: string, t: Timestamp,
-    sys?: boolean                    // Системное сообщение
-  }
-=============================================================
-*/
 </script>
 </body>
 </html>
