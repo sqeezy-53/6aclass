@@ -1361,9 +1361,45 @@
             .chat-messages { scroll-behavior: auto; }
             .toast { transition: none; }
         }
+
+        /* ── БАН ЭКРАН ── */
+        #bannedScreen {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 99999;
+            background: rgba(4,4,10,.98);
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            gap: 20px;
+            text-align: center;
+            padding: 32px;
+        }
+        #bannedScreen.is-visible { display: flex; }
+        .banned-skull { font-size: 4rem; filter: drop-shadow(0 0 24px rgba(239,68,68,.6)); }
+        .banned-title { color: #f87171; font-size: 1.5rem; font-weight: 900; letter-spacing: -0.02em; font-family: var(--font-ui, sans-serif); }
+        .banned-sub { color: #6b7280; font-size: 0.9rem; max-width: 300px; line-height: 1.6; font-family: var(--font-ui, sans-serif); }
+        .banned-btn {
+            padding: 13px 28px; border-radius: 12px; border: none; cursor: pointer;
+            font-size: 0.95rem; font-weight: 700; width: 100%; max-width: 260px;
+            transition: opacity .2s; font-family: var(--font-ui, sans-serif);
+        }
+        .banned-btn:hover { opacity: .85; }
+        .banned-btn-logout { background: linear-gradient(135deg,#dc2626,#991b1b); color:#fff; }
+        .banned-btn-register { background:rgba(255,255,255,.07); border:1px solid rgba(255,255,255,.12)!important; color:#9ca3af; display:none; }
     </style>
 </head>
 <body>
+
+    <!-- ── ЭКРАН БАНА ── -->
+    <div id="bannedScreen">
+        <div class="banned-skull">☠️</div>
+        <div class="banned-title">Аккаунт ликвидирован</div>
+        <div class="banned-sub" id="bannedSubText">Твой аккаунт был уничтожен.<br>Ты можешь выйти и создать новый.</div>
+        <button class="banned-btn banned-btn-logout" id="bannedLogoutBtn">🚪 Выйти из аккаунта</button>
+        <button class="banned-btn banned-btn-register" id="bannedRegisterBtn">✨ Создать новый аккаунт</button>
+    </div>
 
     <!-- ══════════════════════════════════════
          ЭКРАН АВТОРИЗАЦИИ
@@ -2423,13 +2459,32 @@
 
         function showBanned5() {
             if (_banUnsubscribe5) { _banUnsubscribe5(); _banUnsubscribe5 = null; }
-            signOut(auth).catch(() => {});
-            showAuthError('🚫 Аккаунт ликвидирован. Доступ ограничен.');
-            authFormBlock.classList.remove('hidden');
-            authGate.classList.remove('hidden');
+            // Скрыть всё
+            authGate.classList.add('hidden');
             appRoot.classList.add('hidden');
             authPass.value = '';
             tearDownChat();
+            // Показать экран бана
+            const bannedScreen   = document.getElementById('bannedScreen');
+            const bannedSubText  = document.getElementById('bannedSubText');
+            const bannedLogout   = document.getElementById('bannedLogoutBtn');
+            const bannedRegister = document.getElementById('bannedRegisterBtn');
+            bannedScreen.classList.add('is-visible');
+
+            bannedLogout.onclick = async () => {
+                await signOut(auth).catch(() => {});
+                bannedSubText.innerHTML = 'Ты вышел из аккаунта.<br>Можешь создать новый.';
+                bannedLogout.style.display = 'none';
+                bannedRegister.style.display = 'block';
+            };
+            bannedRegister.onclick = () => {
+                bannedScreen.classList.remove('is-visible');
+                authGate.classList.remove('hidden');
+                // Переключить на режим регистрации
+                const btnRegisterMode = document.getElementById('btnRegisterMode');
+                if (btnRegisterMode) btnRegisterMode.click();
+                else registerMode(true);
+            };
         }
 
         onAuthStateChanged(auth, async (user) => {

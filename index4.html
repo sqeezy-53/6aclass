@@ -1835,9 +1835,54 @@ body::before {
   .rl-wheel-container { width: 220px; height: 220px; }
   #rl-canvas { width: 220px !important; height: 220px !important; }
 }
-</style>
+
+        /* ── БАН ЭКРАН ── */
+        #banned-screen {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 99999;
+            background: rgba(4,4,8,.98);
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            gap: 20px;
+            text-align: center;
+            padding: 32px;
+            font-family: var(--font, 'Outfit', sans-serif);
+        }
+        #banned-screen.is-visible { display: flex; }
+        .banned-skull { font-size: 4rem; filter: drop-shadow(0 0 24px rgba(239,68,68,.6)); }
+        .banned-title { color: #f87171; font-size: 1.5rem; font-weight: 900; letter-spacing: -0.02em; }
+        .banned-sub { color: #6b7280; font-size: 0.9rem; max-width: 300px; line-height: 1.6; }
+        .banned-btn {
+            padding: 13px 28px; border-radius: 12px; border: none; cursor: pointer;
+            font-size: 0.95rem; font-weight: 700; width: 100%; max-width: 260px;
+            transition: opacity .2s;
+        }
+        .banned-btn:hover { opacity: .85; }
+        .banned-btn-logout {
+            background: linear-gradient(135deg, #dc2626, #991b1b);
+            color: #fff;
+        }
+        .banned-btn-register {
+            background: rgba(255,255,255,.07);
+            border: 1px solid rgba(255,255,255,.12) !important;
+            color: #9ca3af;
+            display: none;
+        }
+    </style>
 </head>
 <body>
+
+<!-- ── ЭКРАН БАНА ── -->
+<div id="banned-screen">
+    <div class="banned-skull">☠️</div>
+    <div class="banned-title">Аккаунт ликвидирован</div>
+    <div class="banned-sub" id="banned-sub-text">Твой аккаунт был уничтожен.<br>Ты можешь выйти и создать новый.</div>
+    <button class="banned-btn banned-btn-logout" id="banned-logout-btn">🚪 Выйти из аккаунта</button>
+    <button class="banned-btn banned-btn-register" id="banned-register-btn">✨ Создать новый аккаунт</button>
+</div>
 
 <a href="mafia.html" class="back-to-site" title="В фотоальбом">📷 Альбом</a>
 
@@ -4010,11 +4055,25 @@ let _banUnsubscribe4 = null;
 
 function showBanned4() {
   if (_banUnsubscribe4) { _banUnsubscribe4(); _banUnsubscribe4 = null; }
-  signOut(auth).catch(() => {});
   currentUid = null;
-  el('auth-gate').style.display = 'block';
+  // Скрыть всё приложение
+  el('auth-gate').style.display = 'none';
   el('main-app').style.display = 'none';
-  el('auth-error').textContent = '🚫 Аккаунт ликвидирован. Доступ ограничен.';
+  // Показать экран бана
+  el('banned-screen').classList.add('is-visible');
+
+  el('banned-logout-btn').onclick = async () => {
+    await signOut(auth).catch(() => {});
+    el('banned-sub-text').innerHTML = 'Ты вышел из аккаунта.<br>Можешь создать новый.';
+    el('banned-logout-btn').style.display = 'none';
+    el('banned-register-btn').style.display = 'block';
+  };
+  el('banned-register-btn').onclick = () => {
+    el('banned-screen').classList.remove('is-visible');
+    el('auth-gate').style.display = 'block';
+    // Сразу переключить на режим регистрации
+    el('btn-register-mode').click();
+  };
 }
 
 onAuthStateChanged(auth, async user => {

@@ -2634,16 +2634,58 @@ function closeHitman() {
 
 // ── AUTH STATE ────────────────────────────────────────────────────
 function showBannedOverlay() {
-    signOut(auth).catch(() => {});
     currentUser = null;
-    const existing = document.getElementById('_bannedOverlay');
-    if (!existing) {
-        const ov = document.createElement('div');
-        ov.id = '_bannedOverlay';
-        ov.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(4,12,20,.97);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;font-family:Outfit,sans-serif;';
-        ov.innerHTML = '<div style="font-size:3rem;">🚫</div><div style="color:#f87171;font-size:1.4rem;font-weight:800;">Аккаунт ликвидирован</div><div style="color:#8a95a9;font-size:1rem;">Доступ ограничен.</div>';
-        document.body.appendChild(ov);
-    }
+    // Закрыть hitman модалку если открыта
+    const hmo = document.getElementById('hitmanOverlay');
+    if (hmo) hmo.classList.remove('is-open');
+    document.body.style.overflow = '';
+
+    let existing = document.getElementById('_bannedOverlay');
+    if (existing) { existing.style.display = 'flex'; return; }
+
+    const ov = document.createElement('div');
+    ov.id = '_bannedOverlay';
+    ov.style.cssText = `
+        position:fixed;inset:0;z-index:99999;
+        background:rgba(4,6,12,.98);
+        display:flex;align-items:center;justify-content:center;
+        flex-direction:column;gap:20px;
+        font-family:Outfit,sans-serif;
+        padding:32px;text-align:center;
+    `;
+    ov.innerHTML = `
+        <div style="font-size:4rem;filter:drop-shadow(0 0 24px rgba(239,68,68,.5));">☠️</div>
+        <div style="color:#f87171;font-size:1.6rem;font-weight:900;letter-spacing:-0.02em;">Аккаунт ликвидирован</div>
+        <div style="color:#6b7280;font-size:0.95rem;max-width:320px;line-height:1.6;">
+            Твой аккаунт был уничтожен.<br>Ты можешь выйти и создать новый.
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px;width:100%;max-width:280px;margin-top:8px;">
+            <button id="_bannedLogout" style="
+                padding:13px 24px;border-radius:12px;border:none;cursor:pointer;
+                background:linear-gradient(135deg,#dc2626,#991b1b);
+                color:#fff;font-family:Outfit,sans-serif;font-size:0.95rem;font-weight:700;
+                letter-spacing:0.01em;
+            ">🚪 Выйти из аккаунта</button>
+            <button id="_bannedRegister" style="
+                padding:13px 24px;border-radius:12px;border:1px solid rgba(255,255,255,.1);cursor:pointer;
+                background:rgba(255,255,255,.05);
+                color:#9ca3af;font-family:Outfit,sans-serif;font-size:0.9rem;font-weight:600;
+                display:none;
+            ">✨ Создать новый аккаунт</button>
+        </div>
+    `;
+    document.body.appendChild(ov);
+
+    document.getElementById('_bannedLogout').onclick = async () => {
+        await signOut(auth);
+        // После выхода показываем кнопку регистрации
+        document.getElementById('_bannedLogout').style.display = 'none';
+        document.getElementById('_bannedRegister').style.display = 'block';
+        ov.querySelector('div:nth-child(3)').textContent = 'Ты вышел из аккаунта. Можешь создать новый.';
+    };
+    document.getElementById('_bannedRegister').onclick = () => {
+        window.location.href = 'index5.html?register=1';
+    };
 }
 
 let _banUnsubscribe = null;
