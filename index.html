@@ -1,4 +1,4 @@
-\<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ru" data-theme="dark">
 <head>
     <meta charset="UTF-8">
@@ -329,7 +329,7 @@
             cursor: default;
             user-select: none;
         }
-        .nav-logo span {
+        .nav-logo-colored {
             display: inline-block;
             background: linear-gradient(100deg, #5ec8ff 0%, #a78bfa 40%, #5ec8ff 55%, #22d3ee 100%);
             background-size: 220% auto;
@@ -338,7 +338,7 @@
             color: transparent;
             animation: logoIridescent 10s ease-in-out infinite;
         }
-        [data-theme="light"] .nav-logo span {
+        [data-theme="light"] .nav-logo-colored {
             background: linear-gradient(100deg, #1d4ed8 0%, #6366f1 45%, #2563eb 60%, #0ea5e9 100%);
             background-size: 220% auto;
             -webkit-background-clip: text;
@@ -1689,7 +1689,7 @@
     <!-- ── НАВИГАЦИЯ ── -->
     <nav class="nav">
         <span class="nav-edge" aria-hidden="true"></span>
-        <div class="nav-logo" id="navLogo" title="Нажми 5 раз 👀">6<span> А</span> класс</div>
+        <div class="nav-logo" id="navLogo" title="Нажми 5 раз 👀"><span class="nav-logo-colored">6А</span> класс</div>
         <div class="nav-actions">
             <div class="nav-links">
                 <a href="#honor">Доска почёта</a>
@@ -2261,11 +2261,38 @@ $('btnAssassinate').onclick = async () => {
         showMsg('assassinateMsg', `Недостаточно звёзд. Нужно ${fmtNum(COST.assassinate)} ⭐, у тебя ${fmtNum(currentStars)} ⭐. Иди зарабатывай!`, 'info'); return;
     }
 
-    // Open confirm
-    $('hitmanConfirmText').innerHTML = `Ты точно хочешь навсегда удалить аккаунт<br><span class="hitman-confirm-target">«${nick}»</span>?<br><br>Действие необратимо. Никто никогда не узнает, что это был ты.`;
-    $('hitmanConfirm').classList.add('is-open');
-
-    pendingAction = { type: 'assassinate', nick };
+    // Pre-validate: find target BEFORE opening confirm, so user sees error immediately
+    $('btnAssassinate').disabled = true;
+    clearMsg('assassinateMsg');
+    try {
+        const allUsersSnap = await getDocs(collection(db, 'users'));
+        const matchedDocs = allUsersSnap.docs.filter(d =>
+            (d.data().displayName || '').toLowerCase() === nick.toLowerCase()
+        );
+        if (matchedDocs.length === 0) {
+            showMsg('assassinateMsg', `Пользователь «${nick}» не найден.`);
+            $('btnAssassinate').disabled = false;
+            return;
+        }
+        const targetDoc = matchedDocs[0];
+        const targetData = targetDoc.data();
+        // Check shield
+        if (targetData.hitmanShieldUntil) {
+            const t = targetData.hitmanShieldUntil.toDate ? targetData.hitmanShieldUntil.toDate() : new Date(targetData.hitmanShieldUntil);
+            if (t > new Date()) {
+                showMsg('assassinateMsg', `🛡 У «${nick}» активен Hitman Shield! Невозможно ликвидировать.`, 'info');
+                $('btnAssassinate').disabled = false;
+                return;
+            }
+        }
+        // All good — open confirm with pre-fetched target doc id
+        $('hitmanConfirmText').innerHTML = `Ты точно хочешь навсегда удалить аккаунт<br><span class="hitman-confirm-target">«${nick}»</span>?<br><br>Действие необратимо. Никто никогда не узнает, что это был ты.`;
+        $('hitmanConfirm').classList.add('is-open');
+        pendingAction = { type: 'assassinate', nick, targetDocId: targetDoc.id };
+    } catch(e) {
+        showMsg('assassinateMsg', 'Ошибка при проверке: ' + (e.message || e));
+    }
+    $('btnAssassinate').disabled = false;
 };
 
 // ── CHAOS ────────────────────────────────────────────────────────
@@ -2344,29 +2371,14 @@ $('btnConfirmYes').onclick = async () => {
 
     if (pendingAction.type === 'assassinate') {
         const nick = pendingAction.nick;
+        const targetDocId = pendingAction.targetDocId;
         $('btnAssassinate').disabled = true;
         clearMsg('assassinateMsg');
         try {
-            // Find target user — case-insensitive client-side search
-            const allUsersSnap = await getDocs(collection(db, 'users'));
-            const matchedDocs = allUsersSnap.docs.filter(d =>
-                (d.data().displayName || '').toLowerCase() === nick.toLowerCase()
-            );
-            if (matchedDocs.length === 0) { showMsg('assassinateMsg', `Пользователь «${nick}» не найден.`); $('btnAssassinate').disabled = false; return; }
-            const usersSnap = { docs: matchedDocs };
-
-            const targetDoc = usersSnap.docs[0];
-            const targetData = targetDoc.data();
-            // Check shield
-            if (targetData.hitmanShieldUntil) {
-                const t = targetData.hitmanShieldUntil.toDate ? targetData.hitmanShieldUntil.toDate() : new Date(targetData.hitmanShieldUntil);
-                if (t > new Date()) { showMsg('assassinateMsg', `🛡 У «${nick}» активен Hitman Shield! Невозможно ликвидировать.`, 'info'); $('btnAssassinate').disabled = false; return; }
-            }
-
             // Deduct stars from assassin
             await updateDoc(myRef, { stars: increment(-COST.assassinate) });
-            // Delete target
-            await deleteUserAccount(targetDoc.id);
+            // Delete target (already validated before confirm)
+            await deleteUserAccount(targetDocId);
             // Log hit
             await logHit(uid, nick, 'assassinate');
             currentStars -= COST.assassinate;
