@@ -807,93 +807,68 @@
         .news-section .section-head { text-align: center; }
 
         .news-stack {
-            max-width: 580px;
+            max-width: 600px;
             margin: 0 auto;
             display: flex;
             flex-direction: column;
-            gap: 20px;
+            gap: 0;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+            background: var(--surface);
+            box-shadow: 0 4px 24px rgba(0,0,0,.12);
+        }
+        [data-theme="light"] .news-stack {
+            box-shadow: 0 4px 20px rgba(15,20,32,.07);
         }
 
-        /* Премиум-карточка новости */
+        /* Компактная строка новости */
         .news-card {
             text-align: left;
-            padding: clamp(22px, 4vw, 30px);
-            border-radius: var(--radius-lg);
-            background: var(--surface);
-            border: 1px solid var(--border);
-            box-shadow: var(--card-shadow);
+            padding: clamp(20px, 3.5vw, 28px) clamp(20px, 3.5vw, 28px);
             position: relative;
             overflow: hidden;
             cursor: default;
-            transition:
-                transform 0.25s cubic-bezier(.34,.8,.56,1),
-                box-shadow 0.35s ease,
-                border-color 0.25s ease;
+            border-bottom: 1px solid var(--border);
+            transition: background 0.15s ease;
         }
-        [data-theme="dark"] .news-card {
-            box-shadow: 0 12px 40px rgba(0,0,0,.32);
-        }
+        .news-card:last-child { border-bottom: none; }
+        .news-card:hover { background: var(--surface-hover); }
 
-        /* Левый акцентный бордер */
         .news-card::before {
             content: '';
             position: absolute;
-            left: 0; top: 10%; bottom: 10%;
+            left: 0; top: 0; bottom: 0;
             width: 3px;
-            border-radius: 3px;
             background: linear-gradient(180deg, var(--accent), var(--accent-2));
-            transition: top 0.3s ease, bottom 0.3s ease, box-shadow 0.3s ease;
+            transform: scaleY(0);
+            transform-origin: center;
+            transition: transform 0.2s ease;
+            border-radius: 0 2px 2px 0;
         }
-        .news-card:hover::before {
-            top: 0%; bottom: 0%;
-            box-shadow: 0 0 16px var(--accent);
-        }
-
-        /* Блик при ховере */
-        .news-card::after {
-            content: '';
-            position: absolute;
-            top: 0; left: -60%;
-            width: 50%; height: 100%;
-            background: linear-gradient(105deg, transparent 0%, rgba(255,255,255,.03) 50%, transparent 100%);
-            transform: skewX(-20deg);
-            transition: left 0.5s ease;
-            pointer-events: none;
-        }
-        .news-card:hover::after { left: 130%; }
-
-        .news-card:hover {
-            transform: translateY(-5px);
-            border-color: var(--border-hover);
-        }
-        [data-theme="dark"] .news-card:hover {
-            box-shadow: 0 20px 56px rgba(0,0,0,.42), 0 0 0 1px rgba(94,200,255,.1);
-        }
-        [data-theme="light"] .news-card:hover {
-            box-shadow: 0 20px 48px rgba(15,20,32,.1), 0 0 0 1px rgba(37,99,235,.1);
-        }
+        .news-card:hover::before { transform: scaleY(1); }
+        .news-card::after { display: none; }
 
         .news-card__meta {
             display: flex;
             align-items: center;
-            gap: 10px;
-            margin-bottom: 13px;
+            gap: 9px;
+            margin-bottom: 7px;
             flex-wrap: wrap;
         }
 
         .news-card__date {
-            font-size: 0.7rem;
-            font-weight: 700;
+            font-size: 0.72rem;
+            font-weight: 600;
             text-transform: uppercase;
-            letter-spacing: 0.09em;
+            letter-spacing: 0.07em;
             color: var(--muted-soft);
         }
 
-        /* Тег с уникальными цветами */
         .news-card__tag {
             font-size: 0.67rem;
             font-weight: 700;
-            padding: 4px 10px;
+            padding: 3px 10px;
             border-radius: 999px;
             letter-spacing: 0.04em;
             text-transform: uppercase;
@@ -914,18 +889,129 @@
 
         .news-card__title {
             font-family: var(--font-display);
-            font-size: clamp(1.1rem, 2.5vw, 1.25rem);
+            font-size: clamp(1.05rem, 2.5vw, 1.2rem);
             font-weight: 800;
             letter-spacing: -0.03em;
-            line-height: 1.3;
-            margin-bottom: 10px;
+            line-height: 1.28;
+            margin-bottom: 6px;
         }
 
         .news-card__text {
             color: var(--muted);
             font-size: 0.93rem;
-            line-height: 1.65;
+            line-height: 1.6;
         }
+
+        /* ═══════════════════════════════════════
+           АНОНИМНЫЕ КОММЕНТАРИИ
+        ═══════════════════════════════════════ */
+        .anon-comments {
+            margin-top: 18px;
+            border-top: 1px solid var(--border);
+            padding-top: 16px;
+        }
+        .anon-comments__title {
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--muted-soft);
+            margin-bottom: 12px;
+        }
+        .anon-comments__list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 14px;
+            max-height: 260px;
+            overflow-y: auto;
+            scrollbar-width: thin;
+            scrollbar-color: var(--border) transparent;
+        }
+        .anon-comment-item {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 10px 14px;
+            font-size: 0.88rem;
+            color: var(--text);
+            line-height: 1.5;
+            animation: fadeInUp 0.3s ease both;
+        }
+        .anon-comment-item .anon-comment-meta {
+            font-size: 0.68rem;
+            color: var(--muted-soft);
+            margin-top: 4px;
+        }
+        .anon-comment-empty {
+            font-size: 0.85rem;
+            color: var(--muted-soft);
+            text-align: center;
+            padding: 12px 0;
+        }
+        .anon-comments__form {
+            display: flex;
+            gap: 8px;
+            align-items: flex-end;
+        }
+        .anon-comments__input {
+            flex: 1;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 10px 14px;
+            font-family: var(--font-body);
+            font-size: 0.88rem;
+            color: var(--text);
+            outline: none;
+            resize: none;
+            min-height: 40px;
+            max-height: 96px;
+            transition: border-color var(--transition);
+            line-height: 1.5;
+        }
+        .anon-comments__input:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-dim);
+        }
+        .anon-comments__input::placeholder { color: var(--muted-soft); }
+        .anon-comments__send {
+            flex-shrink: 0;
+            background: var(--accent-dim);
+            border: 1px solid rgba(94,200,255,.22);
+            border-radius: var(--radius-sm);
+            color: var(--accent);
+            font-family: var(--font-body);
+            font-size: 0.82rem;
+            font-weight: 700;
+            padding: 9px 16px;
+            cursor: pointer;
+            transition: background var(--transition), transform 0.15s ease, border-color var(--transition);
+            white-space: nowrap;
+        }
+        .anon-comments__send:hover {
+            background: rgba(94,200,255,.2);
+            border-color: rgba(94,200,255,.4);
+            transform: translateY(-1px);
+        }
+        .anon-comments__send:active { transform: scale(0.96); }
+        [data-theme="light"] .anon-comments__send {
+            background: rgba(37,99,235,.09);
+            border-color: rgba(37,99,235,.2);
+            color: var(--accent);
+        }
+        [data-theme="light"] .anon-comments__send:hover {
+            background: rgba(37,99,235,.15);
+            border-color: rgba(37,99,235,.35);
+        }
+        .anon-comments__status {
+            font-size: 0.75rem;
+            color: var(--muted-soft);
+            margin-top: 6px;
+            min-height: 16px;
+        }
+        .anon-comments__status.ok  { color: var(--accent-3); }
+        .anon-comments__status.err { color: #f87171; }
 
         /* Счётчик новостей */
         .news-count-badge {
@@ -941,7 +1027,61 @@
             border: 1px solid var(--border);
             padding: 5px 12px;
             border-radius: 999px;
-            margin-bottom: 24px;
+            margin-bottom: 16px;
+        }
+
+        /* Кнопка развернуть/свернуть новости */
+        .news-toggle-btn {
+            margin-top: 14px;
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            font-family: var(--font-body);
+            font-size: 0.84rem;
+            font-weight: 600;
+            color: var(--muted);
+            background: none;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 9px 18px;
+            cursor: pointer;
+            width: 100%;
+            max-width: 600px;
+            justify-content: center;
+            transition: color var(--transition), border-color var(--transition), background var(--transition);
+        }
+        .news-toggle-btn:hover {
+            color: var(--text);
+            border-color: var(--border-hover);
+            background: var(--surface);
+        }
+        .news-toggle-btn svg {
+            transition: transform 0.25s ease;
+            flex-shrink: 0;
+        }
+        .news-toggle-btn.expanded svg {
+            transform: rotate(180deg);
+        }
+
+        /* Скрытые новости */
+        .news-card.news-hidden {
+            display: none;
+        }
+
+        /* Подсказка голосовать — внутри карточки с комментами */
+        .anon-comments__hint {
+            font-size: 0.78rem;
+            color: var(--accent);
+            background: var(--accent-dim);
+            border: 1px solid rgba(94,200,255,.18);
+            border-radius: var(--radius-xs);
+            padding: 8px 12px;
+            margin-bottom: 12px;
+            text-align: center;
+            font-weight: 600;
+        }
+        [data-theme="light"] .anon-comments__hint {
+            border-color: rgba(37,99,235,.16);
         }
 
         /* ═══════════════════════════════════════
@@ -949,14 +1089,14 @@
         ═══════════════════════════════════════ */
         footer {
             padding:
-                44px
+                52px
                 max(24px, env(safe-area-inset-left, 0px))
                 max(52px, env(safe-area-inset-bottom, 0px))
                 max(24px, env(safe-area-inset-right, 0px));
             text-align: center;
-            color: var(--muted);
+            color: var(--muted-soft);
             border-top: 1px solid var(--border);
-            font-size: 0.82rem;
+            font-size: 0.8rem;
             font-weight: 500;
             letter-spacing: 0.04em;
             background: var(--bg-soft);
@@ -965,42 +1105,80 @@
         .footer-links {
             display: flex;
             flex-wrap: wrap;
-            gap: 12px 20px;
+            gap: 10px;
             justify-content: center;
-            margin-bottom: 16px;
+            margin-bottom: 20px;
         }
-        .footer-links a {
-            color: var(--accent);
-            font-weight: 600;
-            text-decoration: none;
-            font-size: 0.88rem;
-            transition: color var(--transition);
-        }
-        .footer-links a:hover { text-decoration: underline; }
 
+        /* Общий стиль всех кнопок футера */
+        .footer-links a {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            font-family: var(--font-body);
+            font-weight: 600;
+            font-size: 0.86rem;
+            text-decoration: none;
+            padding: 10px 20px;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border);
+            background: var(--bg-elevated);
+            color: var(--muted);
+            transition: color var(--transition), border-color var(--transition),
+                        background var(--transition), transform 0.15s ease, box-shadow var(--transition);
+        }
+        .footer-links a:hover {
+            color: var(--text);
+            border-color: var(--border-hover);
+            transform: translateY(-2px);
+            text-decoration: none;
+        }
+
+        /* Кнопка Чат — акцентная */
+        .footer-links a.footer-chat {
+            color: var(--accent);
+            border-color: rgba(94,200,255,.25);
+            background: var(--accent-dim);
+        }
+        .footer-links a.footer-chat:hover {
+            border-color: rgba(94,200,255,.5);
+            box-shadow: 0 0 20px rgba(94,200,255,.12);
+        }
+        [data-theme="light"] .footer-links a.footer-chat {
+            color: var(--accent);
+            border-color: rgba(37,99,235,.2);
+            background: rgba(37,99,235,.07);
+        }
+        [data-theme="light"] .footer-links a.footer-chat:hover {
+            border-color: rgba(37,99,235,.4);
+            box-shadow: 0 0 16px rgba(37,99,235,.1);
+        }
+
+        /* Кнопка Мафия */
         .footer-links a.footer-mafia {
             color: #dfc06a;
-            padding: 7px 16px;
-            border-radius: var(--radius-sm);
-            border: 1px solid rgba(201,162,39,.4);
-            background: rgba(24,20,14,.35);
-            text-decoration: none;
-            transition: border-color var(--transition), color var(--transition),
-                        background var(--transition), box-shadow var(--transition);
+            border-color: rgba(201,162,39,.35);
+            background: rgba(24,20,14,.4);
         }
         .footer-links a.footer-mafia:hover {
-            border-color: rgba(232,197,71,.65);
             color: #f0dc98;
-            box-shadow: 0 0 16px rgba(232,197,71,.12);
+            border-color: rgba(232,197,71,.6);
+            box-shadow: 0 0 16px rgba(232,197,71,.1);
         }
         [data-theme="light"] .footer-links a.footer-mafia {
             color: #7a5a0c;
             border-color: rgba(154,114,9,.35);
-            background: rgba(255,250,235,.6);
+            background: rgba(255,250,235,.7);
         }
         [data-theme="light"] .footer-links a.footer-mafia:hover {
             border-color: rgba(154,114,9,.55);
             color: #4a3808;
+        }
+
+        .footer-copy {
+            font-size: 0.76rem;
+            color: var(--muted-soft);
+            opacity: 0.7;
         }
 
         /* ═══════════════════════════════════════
@@ -1806,6 +1984,11 @@
                 <div class="news-stack" id="newsStack">
                     <!-- Новости рендерятся через JS из массива ниже -->
                 </div>
+
+                <button type="button" class="news-toggle-btn" id="newsToggleBtn" style="display:none;">
+                    <span id="newsToggleText">Показать все новости</span>
+                    <svg id="newsToggleArrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                </button>
             </div>
         </div>
     </section>
@@ -1813,10 +1996,10 @@
     <!-- ── ФУТЕР ── -->
     <footer>
         <div class="footer-links">
-            <a href="mafia.html" class="footer-mafia">🃏 Местная мафия</a>
-            <a href="index5.html">💬 Чат класса</a>
+            <a href="mafia.html" class="footer-mafia">🃏 Мафия</a>
+            <a href="index5.html" class="footer-chat">💬 Чат класса</a>
         </div>
-        Класс 6А · 6aclass.online · 2026
+        <div class="footer-copy">Класс 6А · 6aclass.online · 2026</div>
     </footer>
 
 </div><!-- /.page -->
@@ -1847,7 +2030,20 @@
 ═══════════════════════════════════════════════════════════════════════ */
 var NEWS = [
 
-    // ── НОВАЯ НОВОСТЬ (добавлено 14 апреля 2026) ──
+    // ── НОВАЯ НОВОСТЬ (добавлено 18 апреля 2026) ──
+
+    {
+        date:    '18 апреля 2026',
+        iso:     '2026-04-18',
+        tag:     '🏅 Доска почёта',
+        tagType: 'praise',
+        title:   'Кто будет на доске почёта?',
+        text:    'Пиши ниже — кто из класса достоин? Анонимно.',
+        hasComments: true,
+        commentsId:  'honor-board-april-2026'
+    },
+
+    // ── НОВОСТЬ (добавлено 14 апреля 2026) ──
 
     {
         date:    '15 апреля 2026',
@@ -1897,7 +2093,13 @@ var NEWS = [
 (function renderNews() {
     var stack = document.getElementById('newsStack');
     var countText = document.getElementById('newsCountText');
+    var toggleBtn = document.getElementById('newsToggleBtn');
+    var toggleText = document.getElementById('newsToggleText');
+    var toggleArrow = document.getElementById('newsToggleArrow');
     if (!stack) return;
+
+    var VISIBLE = 2; // сколько показывать по умолчанию
+    var expanded = false;
 
     countText.textContent = NEWS.length + ' ' + plural(NEWS.length, 'новость', 'новости', 'новостей');
 
@@ -1907,16 +2109,61 @@ var NEWS = [
 
         var article = document.createElement('article');
         article.className = 'news-card reveal reveal-delay-' + delay;
+        if (i >= VISIBLE) article.classList.add('news-hidden');
+
+        var commentsHtml = '';
+        if (item.hasComments && item.commentsId) {
+            var cid = esc(item.commentsId);
+            commentsHtml =
+                '<div class="anon-comments" id="comments-block-' + cid + '">' +
+                    '<div class="anon-comments__title">💬 Анонимные голоса</div>' +
+                    '<div class="anon-comments__list" id="comments-list-' + cid + '">' +
+                        '<div class="anon-comment-empty">Загрузка…</div>' +
+                    '</div>' +
+                    '<div class="anon-comments__form">' +
+                        '<textarea class="anon-comments__input" id="comments-input-' + cid + '" placeholder="Напиши анонимно…" maxlength="300" rows="1"></textarea>' +
+                        '<button type="button" class="anon-comments__send" data-cid="' + cid + '" id="comments-btn-' + cid + '">Отправить</button>' +
+                    '</div>' +
+                    '<div class="anon-comments__status" id="comments-status-' + cid + '"></div>' +
+                '</div>';
+        }
+
         article.innerHTML =
             '<div class="news-card__meta">' +
                 '<time class="news-card__date" datetime="' + esc(item.iso) + '">' + esc(item.date) + '</time>' +
                 '<span class="news-card__tag ' + tagClass + '">' + esc(item.tag) + '</span>' +
             '</div>' +
             '<h3 class="news-card__title">' + esc(item.title) + '</h3>' +
-            '<p class="news-card__text">' + esc(item.text) + '</p>';
+            '<p class="news-card__text">' + esc(item.text) + '</p>' +
+            commentsHtml;
 
         stack.appendChild(article);
     });
+
+    // Показываем кнопку только если новостей больше VISIBLE
+    if (NEWS.length > VISIBLE && toggleBtn) {
+        toggleBtn.style.display = 'flex';
+        var remaining = NEWS.length - VISIBLE;
+        toggleText.textContent = 'Показать ещё ' + remaining + ' ' + plural(remaining, 'новость', 'новости', 'новостей');
+
+        toggleBtn.addEventListener('click', function () {
+            expanded = !expanded;
+            var hidden = stack.querySelectorAll('.news-hidden');
+            if (expanded) {
+                hidden.forEach(function (el) { el.classList.remove('news-hidden'); });
+                toggleText.textContent = 'Свернуть';
+                toggleBtn.classList.add('expanded');
+            } else {
+                var cards = stack.querySelectorAll('.news-card');
+                cards.forEach(function (el, i) {
+                    if (i >= VISIBLE) el.classList.add('news-hidden');
+                });
+                toggleText.textContent = 'Показать ещё ' + remaining + ' ' + plural(remaining, 'новость', 'новости', 'новостей');
+                toggleBtn.classList.remove('expanded');
+            }
+            initReveal();
+        });
+    }
 
     // Запускаем IntersectionObserver после добавления элементов
     initReveal();
@@ -1963,6 +2210,113 @@ function initReveal() {
 initReveal();
 
 
+</script>
+
+<!-- ══════════════════════════════════════════════════════════
+     АНОНИМНЫЕ КОММЕНТАРИИ — Firebase module
+══════════════════════════════════════════════════════════ -->
+<script type="module">
+import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
+import {
+    getFirestore, collection, addDoc, onSnapshot,
+    orderBy, query, limit, serverTimestamp
+} from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
+
+const firebaseConfig = {
+    apiKey: 'AIzaSyCtVaVgIvQot9SJpwKyUKrClNwar6xX9fo',
+    authDomain: 'class6a-chat.firebaseapp.com',
+    projectId: 'class6a-chat',
+    storageBucket: 'class6a-chat.firebasestorage.app',
+    messagingSenderId: '656933440681',
+    appId: '1:656933440681:web:e7a8c2ae22181ec98f2db8'
+};
+const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
+const db  = getFirestore(app);
+
+function fmtRelative(ts) {
+    if (!ts) return '';
+    const d = ts.toDate ? ts.toDate() : new Date(ts);
+    const diff = Date.now() - d.getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1)  return 'только что';
+    if (mins < 60) return mins + ' мин. назад';
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24)  return hrs + ' ч. назад';
+    return d.toLocaleDateString('ru', { day: '2-digit', month: 'short' });
+}
+
+function initAnonComments(commentsId) {
+    const listEl   = document.getElementById('comments-list-'   + commentsId);
+    const inputEl  = document.getElementById('comments-input-'  + commentsId);
+    const btnEl    = document.getElementById('comments-btn-'    + commentsId);
+    const statusEl = document.getElementById('comments-status-' + commentsId);
+    if (!listEl || !inputEl || !btnEl) return;
+
+    const colRef = collection(db, 'anonComments', commentsId, 'comments');
+    const q = query(colRef, orderBy('createdAt', 'desc'), limit(50));
+
+    // Realtime listener
+    onSnapshot(q, snap => {
+        if (snap.empty) {
+            listEl.innerHTML = '<div class="anon-comment-empty">Пока никто не написал — будь первым 👇</div>';
+            return;
+        }
+        listEl.innerHTML = '';
+        snap.docs.forEach(d => {
+            const data = d.data();
+            const item = document.createElement('div');
+            item.className = 'anon-comment-item';
+            const txt = String(data.text || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+            item.innerHTML =
+                txt +
+                '<div class="anon-comment-meta">' + fmtRelative(data.createdAt) + '</div>';
+            listEl.appendChild(item);
+        });
+    }, () => {
+        listEl.innerHTML = '<div class="anon-comment-empty">Ошибка загрузки 😕</div>';
+    });
+
+    // Auto-resize textarea
+    inputEl.addEventListener('input', () => {
+        inputEl.style.height = 'auto';
+        inputEl.style.height = Math.min(inputEl.scrollHeight, 96) + 'px';
+    });
+
+    async function sendComment() {
+        const text = inputEl.value.trim();
+        if (!text) return;
+        if (text.length > 300) {
+            statusEl.textContent = 'Слишком длинно (макс. 300 символов)';
+            statusEl.className = 'anon-comments__status err';
+            return;
+        }
+        btnEl.disabled = true;
+        statusEl.textContent = '';
+        try {
+            await addDoc(colRef, { text, createdAt: serverTimestamp() });
+            inputEl.value = '';
+            inputEl.style.height = 'auto';
+            statusEl.textContent = 'Отправлено ✓';
+            statusEl.className = 'anon-comments__status ok';
+            setTimeout(() => { statusEl.textContent = ''; statusEl.className = 'anon-comments__status'; }, 2500);
+        } catch(e) {
+            statusEl.textContent = 'Не удалось отправить 😕';
+            statusEl.className = 'anon-comments__status err';
+        }
+        btnEl.disabled = false;
+    }
+
+    btnEl.addEventListener('click', sendComment);
+    inputEl.addEventListener('keydown', e => {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendComment(); }
+    });
+}
+
+// Init all comment blocks rendered on page
+document.querySelectorAll('[id^="comments-btn-"]').forEach(btn => {
+    const cid = btn.dataset.cid;
+    if (cid) initAnonComments(cid);
+});
 </script>
 <!-- ══════════════════════════════════════════════════════════
      HITMAN AGENCY MODAL
