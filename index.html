@@ -2414,7 +2414,7 @@ $('btnConfirmYes').onclick = async () => {
             // Deduct stars
             await updateDoc(myRef, { stars: increment(-COST.chaos) });
             // Delete target
-            await deleteUserAccount(targetUid, nick);
+            await deleteUserAccount(target.id, targetNick);
             // Log hit
             await logHit(uid, targetNick, 'chaos');
             currentStars -= COST.chaos;
