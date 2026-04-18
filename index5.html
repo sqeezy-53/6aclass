@@ -1755,6 +1755,15 @@
                 if (!nick) { showAuthError('Введите ник'); return; }
                 const cred = await createUserWithEmailAndPassword(auth, nickToEmail(authNick.value), authPass.value);
                 await updateProfile(cred.user, { displayName: nick });
+                // Сохраняем displayName в Firestore сразу при регистрации (нужно для ликвидации)
+                try {
+                    await setDoc(doc(db, 'users', cred.user.uid), {
+                        displayName: nick,
+                        uid: cred.user.uid,
+                        email: cred.user.email || '',
+                        stars: 0
+                    }, { merge: true });
+                } catch(_) {}
             } catch (e) {
                 showAuthError(e.message || String(e));
             } finally {
@@ -2410,8 +2419,22 @@
             startTypingListeners();
         }
 
+        let _banUnsubscribe5 = null;
+
+        function showBanned5() {
+            if (_banUnsubscribe5) { _banUnsubscribe5(); _banUnsubscribe5 = null; }
+            signOut(auth).catch(() => {});
+            showAuthError('🚫 Аккаунт ликвидирован. Доступ ограничен.');
+            authFormBlock.classList.remove('hidden');
+            authGate.classList.remove('hidden');
+            appRoot.classList.add('hidden');
+            authPass.value = '';
+            tearDownChat();
+        }
+
         onAuthStateChanged(auth, async (user) => {
             authChecking.classList.add('hidden');
+            if (_banUnsubscribe5) { _banUnsubscribe5(); _banUnsubscribe5 = null; }
             if (!user) {
                 authFormBlock.classList.remove('hidden');
                 authGate.classList.remove('hidden');
@@ -2420,21 +2443,29 @@
                 tearDownChat();
                 return;
             }
-            // ── ПРОВЕРКА БАНА ──────────────────────────────────────
+            // ── ПРОВЕРКА БАНА при входе ────────────────────────────
             try {
                 const userSnap = await getDoc(doc(db, 'users', user.uid));
                 if (userSnap.exists() && userSnap.data().banned === true) {
-                    await signOut(auth);
-                    showAuthError('🚫 Аккаунт ликвидирован. Доступ ограничен.');
-                    authFormBlock.classList.remove('hidden');
-                    authGate.classList.remove('hidden');
-                    appRoot.classList.add('hidden');
-                    authPass.value = '';
-                    tearDownChat();
-                    return;
+                    showBanned5(); return;
                 }
             } catch (e) { console.warn('ban check error:', e); }
+            // ── REALTIME: мгновенно реагируем на ликвидацию ───────
+            _banUnsubscribe5 = onSnapshot(doc(db, 'users', user.uid), snap => {
+                if (snap.exists() && snap.data().banned === true) showBanned5();
+            });
             // ───────────────────────────────────────────────────────
+            // Гарантируем что displayName сохранён в Firestore (важно для ликвидации)
+            try {
+                const u = auth.currentUser;
+                if (u) {
+                    await setDoc(doc(db, 'users', u.uid), {
+                        displayName: displayNick(u),
+                        uid: u.uid,
+                        email: u.email || ''
+                    }, { merge: true });
+                }
+            } catch(_) {}
             authFormBlock.classList.add('hidden');
             authGate.classList.add('hidden');
             appRoot.classList.remove('hidden');

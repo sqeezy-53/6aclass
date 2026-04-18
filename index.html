@@ -2092,7 +2092,7 @@ import { getAuth, onAuthStateChanged, signOut }
 import {
     getFirestore, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc,
     collection, query, where, orderBy, limit, runTransaction,
-    serverTimestamp, increment, Timestamp
+    serverTimestamp, increment, Timestamp, onSnapshot
 } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
 
 const firebaseConfig = {
@@ -2198,7 +2198,7 @@ async function loadShield(uid) {
 }
 
 // ── delete account helper ────────────────────────────────────────
-async function deleteUserAccount(uid) {
+async function deleteUserAccount(uid, targetNick) {
     // Ban + скрыть имя (у ассасина нет прав удалять чужие документы по правилам Firestore,
     // поэтому вместо deleteDoc ставим banned: true — onAuthStateChanged у жертвы сразу выбросит её)
     await updateDoc(doc(db, 'users', uid), { banned: true, displayName: '[удалён]' });
@@ -2211,10 +2211,10 @@ async function deleteUserAccount(uid) {
         for (const d of b2.docs) await deleteDoc(d.ref);
     } catch(_) {}
 
-    // Системное сообщение в чат (uid — реальный uid ассасина, иначе правила не пропустят)
+    // Системное сообщение в чат
     try {
         await setDoc(doc(collection(db, 'messages')), {
-            text: '💀 В 6А произошёл хаос… кто-то только что исчез навсегда.',
+            text: `💀 В 6А произошёл хаос… «${targetNick || '???'}» только что исчез навсегда.`,
             uid: currentUser.uid,
             author: '💀 HITMAN',
             createdAt: serverTimestamp(),
@@ -2378,7 +2378,7 @@ $('btnConfirmYes').onclick = async () => {
             // Deduct stars from assassin
             await updateDoc(myRef, { stars: increment(-COST.assassinate) });
             // Delete target (already validated before confirm)
-            await deleteUserAccount(targetDocId);
+            await deleteUserAccount(targetDocId, nick);
             // Log hit
             await logHit(uid, nick, 'assassinate');
             currentStars -= COST.assassinate;
@@ -2414,12 +2414,12 @@ $('btnConfirmYes').onclick = async () => {
             // Deduct stars
             await updateDoc(myRef, { stars: increment(-COST.chaos) });
             // Delete target
-            await deleteUserAccount(target.id);
+            await deleteUserAccount(targetUid, nick);
             // Log hit
-            await logHit(uid, '???', 'chaos');
+            await logHit(uid, targetNick, 'chaos');
             currentStars -= COST.chaos;
             $('hitmanBalance').textContent = fmtNum(currentStars);
-            showMsg('chaosMsg', '💥 Хаос запущен. Кто-то только что исчез навсегда.', 'success');
+            showMsg('chaosMsg', `💥 Хаос запущен. «${targetNick}» только что исчез навсегда.`, 'success');
             playEliminated();
             loadHistory(uid);
         } catch(e) {
@@ -2534,7 +2534,7 @@ async function executeBounty(bid, nick, reward, targetUid, placerUid) {
     // Deduct assassin's cost (they pay 500k like normal) then get reward + 500k back
     // Net: assassin spends 500k, gets reward + 500k → net gain = reward
     await updateDoc(doc(db, 'users', currentUser.uid), { stars: increment(reward) }); // net: +reward (500k - 500k = 0, just the bounty reward)
-    await deleteUserAccount(targetUid);
+    await deleteUserAccount(targetUid, nick);
     await deleteDoc(doc(db, 'hitBounties', bid));
     await logHit(currentUser.uid, nick, 'assassinate');
 
@@ -2633,26 +2633,33 @@ function closeHitman() {
 }
 
 // ── AUTH STATE ────────────────────────────────────────────────────
+function showBannedOverlay() {
+    signOut(auth).catch(() => {});
+    currentUser = null;
+    const existing = document.getElementById('_bannedOverlay');
+    if (!existing) {
+        const ov = document.createElement('div');
+        ov.id = '_bannedOverlay';
+        ov.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(4,12,20,.97);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;font-family:Outfit,sans-serif;';
+        ov.innerHTML = '<div style="font-size:3rem;">🚫</div><div style="color:#f87171;font-size:1.4rem;font-weight:800;">Аккаунт ликвидирован</div><div style="color:#8a95a9;font-size:1rem;">Доступ ограничен.</div>';
+        document.body.appendChild(ov);
+    }
+}
+
+let _banUnsubscribe = null;
+
 onAuthStateChanged(auth, async user => {
+    // Отписываемся от предыдущего слушателя если был
+    if (_banUnsubscribe) { _banUnsubscribe(); _banUnsubscribe = null; }
+
     if (user) {
         try {
             const userRef = doc(db, 'users', user.uid);
             const snap = await getDoc(userRef);
 
-            // ── ПРОВЕРКА БАНА ──────────────────────────────────────
+            // ── ПРОВЕРКА БАНА при входе ────────────────────────────
             if (snap.exists() && snap.data().banned === true) {
-                await signOut(auth);
-                currentUser = null;
-                // Показываем сообщение о бане поверх страницы
-                const existing = document.getElementById('_bannedOverlay');
-                if (!existing) {
-                    const ov = document.createElement('div');
-                    ov.id = '_bannedOverlay';
-                    ov.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(4,12,20,.97);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;font-family:Outfit,sans-serif;';
-                    ov.innerHTML = '<div style="font-size:3rem;">🚫</div><div style="color:#f87171;font-size:1.4rem;font-weight:800;">Аккаунт ликвидирован</div><div style="color:#8a95a9;font-size:1rem;">Доступ ограничен.</div>';
-                    document.body.appendChild(ov);
-                }
-                return;
+                showBannedOverlay(); return;
             }
             // ───────────────────────────────────────────────────────
 
@@ -2663,6 +2670,15 @@ onAuthStateChanged(auth, async user => {
             } else {
                 await setDoc(userRef, { uid: user.uid, displayName, email: user.email, stars: 0, createdAt: serverTimestamp(), lastSeen: serverTimestamp() });
             }
+
+            // ── REALTIME: мгновенно реагируем на ликвидацию ───────
+            _banUnsubscribe = onSnapshot(userRef, docSnap => {
+                if (docSnap.exists() && docSnap.data().banned === true) {
+                    showBannedOverlay();
+                }
+            });
+            // ───────────────────────────────────────────────────────
+
         } catch(e) { console.warn('profile save error:', e); }
     } else {
         currentUser = null;

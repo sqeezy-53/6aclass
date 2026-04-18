@@ -3819,7 +3819,7 @@ import {
   signOut, updateProfile
 } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
 import {
-  getFirestore, doc, getDoc, setDoc
+  getFirestore, doc, getDoc, setDoc, onSnapshot
 } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
 
 const firebaseConfig = {
@@ -3966,6 +3966,10 @@ el('btn-register').onclick = async () => {
     if (el('auth-pass').value.length < 6) { el('auth-error').textContent = 'Пароль мин. 6 символов'; return; }
     const cred = await createUserWithEmailAndPassword(auth, nickToEmail(nick), el('auth-pass').value);
     await updateProfile(cred.user, { displayName: nick });
+    // Сохраняем displayName в Firestore сразу при регистрации
+    try {
+      await setDoc(doc(db, 'users', cred.user.uid), { displayName: nick, uid: cred.user.uid, stars: 1000, email: cred.user.email || '' }, { merge: true });
+    } catch(_) {}
   } catch(e) {
     el('auth-error').textContent = e.code === 'auth/email-already-in-use' ? 'Этот ник уже занят' : (e.message || String(e));
   } finally { el('btn-register').disabled = false; }
@@ -4002,7 +4006,19 @@ window.adminGetMillion = async function() {
 };
 
 // ── AUTH STATE ───────────────────────────────────────
+let _banUnsubscribe4 = null;
+
+function showBanned4() {
+  if (_banUnsubscribe4) { _banUnsubscribe4(); _banUnsubscribe4 = null; }
+  signOut(auth).catch(() => {});
+  currentUid = null;
+  el('auth-gate').style.display = 'block';
+  el('main-app').style.display = 'none';
+  el('auth-error').textContent = '🚫 Аккаунт ликвидирован. Доступ ограничен.';
+}
+
 onAuthStateChanged(auth, async user => {
+  if (_banUnsubscribe4) { _banUnsubscribe4(); _banUnsubscribe4 = null; }
   if (!user) {
     currentUid = null;
     el('auth-gate').style.display = 'block';
@@ -4010,25 +4026,29 @@ onAuthStateChanged(auth, async user => {
     return;
   }
 
-  // ── ПРОВЕРКА БАНА ──────────────────────────────────────
+  // ── ПРОВЕРКА БАНА при входе ────────────────────────────
   try {
     const banSnap = await getDoc(doc(db, 'users', user.uid));
     if (banSnap.exists() && banSnap.data().banned === true) {
-      await signOut(auth);
-      currentUid = null;
-      el('auth-gate').style.display = 'block';
-      el('main-app').style.display = 'none';
-      el('auth-error').textContent = '🚫 Аккаунт ликвидирован. Доступ ограничен.';
-      return;
+      showBanned4(); return;
     }
   } catch(e) { console.warn('ban check error:', e); }
+  // ── REALTIME: мгновенно реагируем на ликвидацию ───────
+  _banUnsubscribe4 = onSnapshot(doc(db, 'users', user.uid), snap => {
+    if (snap.exists() && snap.data().banned === true) showBanned4();
+  });
   // ───────────────────────────────────────────────────────
 
   currentUid = user.uid;
 
+  // Гарантируем что displayName сохранён в Firestore (важно для ликвидации)
+  const nick = displayNick(user);
+  try {
+    await setDoc(doc(db, 'users', user.uid), { displayName: nick, uid: user.uid, email: user.email || '' }, { merge: true });
+  } catch(_) {}
+
   // Update nav immediately (не ждём загрузки звёзд)
   const av = el('nav-avatar');
-  const nick = displayNick(user);
   av.style.background = avatarGrad(user.uid);
   av.textContent = initials(nick);
   el('nav-username').textContent = nick;
