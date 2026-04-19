@@ -1854,6 +1854,247 @@
             margin-top: 20px;
         }
         .hitman-section-label:first-child { margin-top: 0; }
+
+        /* ═══════════════════════════════════════
+           РАСПИСАНИЕ + ДЗ — СЕКЦИЯ
+        ═══════════════════════════════════════ */
+        .schedule-dz-section {
+            padding: clamp(48px, 8vw, 80px) 0 clamp(40px, 7vw, 72px);
+            border-top: 1px solid var(--border);
+        }
+        .sched-dz-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 28px;
+            align-items: start;
+        }
+        @media (max-width: 680px) {
+            .sched-dz-grid { grid-template-columns: 1fr; }
+        }
+
+        /* — Заголовки блоков — */
+        .sched-block-title {
+            font-family: var(--font-display);
+            font-size: clamp(1.25rem, 3vw, 1.55rem);
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            color: var(--text);
+            margin-bottom: 4px;
+        }
+        .sched-block-hint {
+            font-size: 0.82rem;
+            color: var(--muted);
+            margin-bottom: 18px;
+        }
+
+        /* — Кнопка расписание — */
+        .schedule-img-btn {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 13px 20px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            color: var(--text);
+            font-family: var(--font-display);
+            font-weight: 700;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: background var(--transition), border-color var(--transition), transform 0.18s;
+            width: 100%;
+            justify-content: center;
+            margin-bottom: 14px;
+        }
+        .schedule-img-btn:hover {
+            background: var(--surface-hover);
+            border-color: var(--border-hover);
+            transform: translateY(-1px);
+        }
+        .schedule-img-btn svg { flex-shrink: 0; }
+
+        /* — Модалка расписания — */
+        .schedule-modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 500;
+            background: rgba(0,0,0,.75);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .schedule-modal-overlay.is-open { display: flex; }
+        .schedule-modal {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            max-width: min(680px, 100%);
+            width: 100%;
+            max-height: 90vh;
+            overflow: auto;
+            animation: fadeInScale .22s ease;
+        }
+        .schedule-modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 18px 22px 14px;
+            border-bottom: 1px solid var(--border);
+        }
+        .schedule-modal-title {
+            font-family: var(--font-display);
+            font-weight: 800;
+            font-size: 1.05rem;
+            color: var(--text);
+        }
+        .schedule-modal-close {
+            background: none;
+            border: none;
+            color: var(--muted);
+            cursor: pointer;
+            padding: 6px;
+            border-radius: 8px;
+            transition: background var(--transition), color var(--transition);
+            line-height: 1;
+        }
+        .schedule-modal-close:hover { background: var(--surface-hover); color: var(--text); }
+        .schedule-modal-img {
+            width: 100%;
+            display: block;
+            border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+        }
+        .schedule-no-img {
+            padding: 48px 24px;
+            text-align: center;
+            color: var(--muted);
+            font-size: 0.9rem;
+        }
+        .schedule-no-img-icon { font-size: 2.8rem; display: block; margin-bottom: 10px; }
+
+        /* — ДЗ — */
+        .dz-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 14px;
+            min-height: 48px;
+        }
+        .dz-item {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 11px 15px;
+            animation: fadeInUp .22s ease;
+        }
+        .dz-item-subject {
+            font-family: var(--font-display);
+            font-weight: 700;
+            font-size: 0.82rem;
+            color: var(--accent);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin-bottom: 3px;
+        }
+        .dz-item-task {
+            font-size: 0.9rem;
+            color: var(--text);
+            line-height: 1.5;
+        }
+        .dz-item-meta {
+            font-size: 0.72rem;
+            color: var(--muted-soft);
+            margin-top: 4px;
+        }
+        .dz-item-delete {
+            float: right;
+            background: none;
+            border: none;
+            color: var(--muted-soft);
+            cursor: pointer;
+            font-size: 0.78rem;
+            padding: 0 0 0 8px;
+            transition: color var(--transition);
+        }
+        .dz-item-delete:hover { color: #ef4444; }
+        .dz-empty {
+            text-align: center;
+            padding: 18px 0;
+            color: var(--muted-soft);
+            font-size: 0.85rem;
+        }
+        .dz-loading {
+            text-align: center;
+            padding: 18px 0;
+            color: var(--muted-soft);
+            font-size: 0.85rem;
+        }
+
+        /* — Форма добавления ДЗ (только ADMIN) — */
+        .dz-admin-form {
+            display: none;
+            flex-direction: column;
+            gap: 8px;
+            border-top: 1px solid var(--border);
+            padding-top: 14px;
+            margin-top: 6px;
+        }
+        .dz-admin-form.is-visible { display: flex; }
+        .dz-admin-row {
+            display: grid;
+            grid-template-columns: 1fr 2fr auto;
+            gap: 8px;
+            align-items: center;
+        }
+        @media (max-width: 480px) {
+            .dz-admin-row { grid-template-columns: 1fr; }
+        }
+        .dz-admin-input {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-xs);
+            color: var(--text);
+            font-family: var(--font-body);
+            font-size: 0.85rem;
+            padding: 9px 12px;
+            outline: none;
+            transition: border-color var(--transition);
+        }
+        .dz-admin-input:focus { border-color: var(--accent); }
+        .dz-admin-input::placeholder { color: var(--muted-soft); }
+        .dz-admin-btn {
+            background: var(--accent);
+            color: var(--accent-text);
+            border: none;
+            border-radius: var(--radius-xs);
+            font-family: var(--font-display);
+            font-weight: 700;
+            font-size: 0.82rem;
+            padding: 9px 16px;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: opacity var(--transition), transform 0.18s;
+        }
+        .dz-admin-btn:hover { opacity: .85; transform: translateY(-1px); }
+        .dz-admin-label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--accent);
+            margin-bottom: 4px;
+        }
+        .dz-admin-dot {
+            width: 6px; height: 6px;
+            border-radius: 50%;
+            background: var(--accent);
+            animation: heroPulse 2s ease-in-out infinite;
+        }
     </style>
 </head>
 <body>
@@ -1993,11 +2234,72 @@
         </div>
     </section>
 
+    <!-- ── РАСПИСАНИЕ + ДЗ ── -->
+    <section class="schedule-dz-section" id="schedule">
+        <div class="container">
+            <div class="sched-dz-grid">
+
+                <!-- РАСПИСАНИЕ -->
+                <div>
+                    <h2 class="sched-block-title">📅 Расписание</h2>
+                    <p class="sched-block-hint">Актуальное расписание на неделю</p>
+                    <button class="schedule-img-btn" id="btnOpenSchedule">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                        Открыть расписание
+                    </button>
+                </div>
+
+                <!-- ДЗ -->
+                <div>
+                    <h2 class="sched-block-title">📝 Домашние задания</h2>
+                    <p class="sched-block-hint">Актуальные задания от учителей</p>
+                    <div class="dz-list" id="dzList">
+                        <div class="dz-loading">Загрузка…</div>
+                    </div>
+
+                    <!-- Форма для ADMIN -->
+                    <div class="dz-admin-form" id="dzAdminForm">
+                        <div class="dz-admin-label">
+                            <span class="dz-admin-dot"></span>
+                            Режим администратора
+                        </div>
+                        <div class="dz-admin-row">
+                            <input class="dz-admin-input" id="dzSubject" placeholder="Предмет (Матем.)" maxlength="30">
+                            <input class="dz-admin-input" id="dzTask" placeholder="Задание…" maxlength="200">
+                            <button class="dz-admin-btn" id="dzAddBtn">+ Добавить</button>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+    <!-- ── МОДАЛКА РАСПИСАНИЯ ── -->
+    <div class="schedule-modal-overlay" id="scheduleOverlay">
+        <div class="schedule-modal">
+            <div class="schedule-modal-header">
+                <span class="schedule-modal-title">📅 Расписание</span>
+                <button class="schedule-modal-close" id="btnCloseSchedule" aria-label="Закрыть">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+            <img class="schedule-modal-img" id="scheduleImg" src="raspisanie.jpg" alt="Расписание"
+                onerror="this.style.display='none';document.getElementById('scheduleNoImg').style.display='block'">
+            <div class="schedule-no-img" id="scheduleNoImg" style="display:none">
+                <span class="schedule-no-img-icon">🗓️</span>
+                Фото расписания пока не добавлено.<br>
+                Положи файл <strong>raspisanie.jpg</strong> рядом с сайтом.
+            </div>
+        </div>
+    </div>
+
     <!-- ── ФУТЕР ── -->
     <footer>
         <div class="footer-links">
             <a href="mafia.html" class="footer-mafia">🃏 Мафия</a>
             <a href="index5.html" class="footer-chat">💬 Чат класса</a>
+            <a href="#schedule" class="footer-chat">📅 Расписание</a>
         </div>
         <div class="footer-copy">Класс 6А · 6aclass.online · 2026</div>
     </footer>
@@ -2316,6 +2618,142 @@ function initAnonComments(commentsId) {
 document.querySelectorAll('[id^="comments-btn-"]').forEach(btn => {
     const cid = btn.dataset.cid;
     if (cid) initAnonComments(cid);
+});
+</script>
+
+<!-- ══════════════════════════════════════════════════════════
+     РАСПИСАНИЕ — модалка
+══════════════════════════════════════════════════════════ -->
+<script>
+(function() {
+    const overlay = document.getElementById('scheduleOverlay');
+    const btnOpen  = document.getElementById('btnOpenSchedule');
+    const btnClose = document.getElementById('btnCloseSchedule');
+    if (!overlay || !btnOpen) return;
+
+    btnOpen.addEventListener('click', () => {
+        overlay.classList.add('is-open');
+        document.body.style.overflow = 'hidden';
+    });
+    function close() {
+        overlay.classList.remove('is-open');
+        document.body.style.overflow = '';
+    }
+    btnClose.addEventListener('click', close);
+    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+})();
+</script>
+
+<!-- ══════════════════════════════════════════════════════════
+     ДЗ — Firebase
+══════════════════════════════════════════════════════════ -->
+<script type="module">
+import { initializeApp, getApps }   from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
+import { getAuth, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
+import {
+    getFirestore, collection, addDoc, deleteDoc, doc,
+    onSnapshot, orderBy, query, serverTimestamp
+} from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
+
+const firebaseConfig = {
+    apiKey: 'AIzaSyCtVaVgIvQot9SJpwKyUKrClNwar6xX9fo',
+    authDomain: 'class6a-chat.firebaseapp.com',
+    projectId: 'class6a-chat',
+    storageBucket: 'class6a-chat.firebasestorage.app',
+    messagingSenderId: '656933440681',
+    appId: '1:656933440681:web:e7a8c2ae22181ec98f2db8'
+};
+const app  = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
+const db   = getFirestore(app);
+const auth = getAuth(app);
+
+const ADMIN_UID = 'ВСТАВЬ_UID_ADMIN_СЮДА'; // ← замени на свой UID из Firebase Console
+
+const dzList    = document.getElementById('dzList');
+const dzForm    = document.getElementById('dzAdminForm');
+const dzSubject = document.getElementById('dzSubject');
+const dzTask    = document.getElementById('dzTask');
+const dzAddBtn  = document.getElementById('dzAddBtn');
+
+function fmtDate(ts) {
+    if (!ts) return '';
+    const d = ts.toDate ? ts.toDate() : new Date(ts);
+    return d.toLocaleDateString('ru', { day: 'numeric', month: 'short' });
+}
+
+// Realtime listener
+const dzQuery = query(collection(db, 'homework'), orderBy('createdAt', 'desc'));
+onSnapshot(dzQuery, snap => {
+    if (snap.empty) {
+        dzList.innerHTML = '<div class="dz-empty">Пока нет заданий 🎉</div>';
+        return;
+    }
+    dzList.innerHTML = '';
+    snap.docs.forEach(d => {
+        const data = d.data();
+        const item = document.createElement('div');
+        item.className = 'dz-item';
+        const subj = String(data.subject || '').replace(/</g,'&lt;');
+        const task = String(data.task    || '').replace(/</g,'&lt;');
+        const date = fmtDate(data.createdAt);
+        item.innerHTML =
+            '<div class="dz-item-subject">' + subj + '</div>' +
+            '<div class="dz-item-task">' + task + '</div>' +
+            '<div class="dz-item-meta">' + date +
+                '<button class="dz-item-delete" data-id="' + d.id + '" style="display:none">✕ удалить</button>' +
+            '</div>';
+        dzList.appendChild(item);
+    });
+    // Показать кнопки удаления если ADMIN
+    if (auth.currentUser && auth.currentUser.uid === ADMIN_UID) {
+        dzList.querySelectorAll('.dz-item-delete').forEach(btn => {
+            btn.style.display = 'inline';
+            btn.addEventListener('click', async () => {
+                if (confirm('Удалить задание?')) {
+                    await deleteDoc(doc(db, 'homework', btn.dataset.id));
+                }
+            });
+        });
+    }
+}, () => {
+    dzList.innerHTML = '<div class="dz-empty">Ошибка загрузки 😕</div>';
+});
+
+// Auth — показываем форму только ADMIN
+onAuthStateChanged(auth, user => {
+    if (user && user.uid === ADMIN_UID) {
+        dzForm.classList.add('is-visible');
+        // Повторно показать кнопки удаления
+        dzList.querySelectorAll('.dz-item-delete').forEach(btn => {
+            btn.style.display = 'inline';
+        });
+    } else {
+        dzForm.classList.remove('is-visible');
+    }
+});
+
+// Добавление ДЗ
+async function addHomework() {
+    const subject = dzSubject.value.trim();
+    const task    = dzTask.value.trim();
+    if (!subject || !task) return;
+    dzAddBtn.disabled = true;
+    try {
+        await addDoc(collection(db, 'homework'), {
+            subject,
+            task,
+            createdAt: serverTimestamp()
+        });
+        dzSubject.value = '';
+        dzTask.value = '';
+    } catch(e) { alert('Ошибка: ' + e.message); }
+    dzAddBtn.disabled = false;
+}
+
+dzAddBtn.addEventListener('click', addHomework);
+dzTask.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); addHomework(); }
 });
 </script>
 <!-- ══════════════════════════════════════════════════════════

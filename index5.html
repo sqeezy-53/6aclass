@@ -1388,6 +1388,336 @@
         .banned-btn:hover { opacity: .85; }
         .banned-btn-logout { background: linear-gradient(135deg,#dc2626,#991b1b); color:#fff; }
         .banned-btn-register { background:rgba(255,255,255,.07); border:1px solid rgba(255,255,255,.12)!important; color:#9ca3af; display:none; }
+        /* ═══════════════════════════════════════
+           КТО ОНЛАЙН — бар под шапкой
+        ═══════════════════════════════════════ */
+        .online-bar {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 7px max(14px, env(safe-area-inset-right)) 7px max(14px, env(safe-area-inset-left));
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            overflow-x: auto;
+            scrollbar-width: none;
+            flex-shrink: 0;
+        }
+        .online-bar::-webkit-scrollbar { display: none; }
+        .online-bar-label {
+            font-size: 0.7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--muted-soft);
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+        .online-pill {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            padding: 3px 9px 3px 5px;
+            border-radius: 999px;
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text);
+            white-space: nowrap;
+            flex-shrink: 0;
+            cursor: pointer;
+            transition: background var(--transition), border-color var(--transition);
+        }
+        .online-pill:hover { background: var(--surface-3); border-color: var(--border-hover); }
+        .online-pill-av {
+            width: 18px; height: 18px;
+            border-radius: 50%;
+            display: grid; place-items: center;
+            font-size: 0.55rem;
+            font-weight: 800;
+            color: #fff;
+            flex-shrink: 0;
+        }
+        .online-dot {
+            width: 6px; height: 6px;
+            border-radius: 50%;
+            background: #22c55e;
+            flex-shrink: 0;
+        }
+
+        /* ═══════════════════════════════════════
+           REPLY PREVIEW (над composer)
+        ═══════════════════════════════════════ */
+        .reply-banner {
+            display: none;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 14px;
+            margin-bottom: 8px;
+            border-radius: var(--radius-sm);
+            background: rgba(94,200,255,.06);
+            border-left: 3px solid var(--accent);
+            font-size: 0.82rem;
+            color: var(--muted);
+            animation: fadeInUp 0.22s ease;
+        }
+        .reply-banner.is-on { display: flex; }
+        .reply-banner-nick { font-weight: 700; color: var(--accent); margin-right: 4px; }
+        .reply-banner-text { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+        .reply-banner-close {
+            margin-left: auto; border: none; background: transparent;
+            color: var(--muted); font-size: 1.2rem; cursor: pointer;
+            padding: 2px 6px; border-radius: 6px; line-height: 1;
+            transition: color var(--transition), background var(--transition);
+        }
+        .reply-banner-close:hover { color: var(--text); background: var(--surface-3); }
+
+        /* Reply preview inside bubble */
+        .msg-reply-quote {
+            padding: 6px 10px;
+            margin-bottom: 6px;
+            border-left: 3px solid var(--accent);
+            border-radius: 4px;
+            background: rgba(94,200,255,.07);
+            font-size: 0.78rem;
+            color: var(--muted);
+            max-height: 56px;
+            overflow: hidden;
+            cursor: pointer;
+        }
+        .msg-reply-quote-nick { font-weight: 700; color: var(--accent); display: block; margin-bottom: 2px; }
+        .msg-reply-quote-text { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; display: block; }
+        .msg-bubble--me .msg-reply-quote { border-left-color: rgba(255,255,255,.5); background: rgba(255,255,255,.1); color: rgba(255,255,255,.75); }
+        .msg-bubble--me .msg-reply-quote-nick { color: #fff; }
+
+        /* ═══════════════════════════════════════
+           РЕАКЦИИ
+        ═══════════════════════════════════════ */
+        .msg-reactions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            margin-top: 4px;
+        }
+        .reaction-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            padding: 2px 8px;
+            border-radius: 999px;
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            font-size: 0.82rem;
+            cursor: pointer;
+            transition: background var(--transition), border-color var(--transition), transform 0.12s;
+            user-select: none;
+        }
+        .reaction-chip:hover { background: var(--surface-3); transform: scale(1.08); }
+        .reaction-chip.is-mine {
+            background: var(--accent-dim);
+            border-color: rgba(94,200,255,.3);
+        }
+        .reaction-chip-count { font-size: 0.72rem; font-weight: 700; color: var(--muted); }
+        .reaction-add-btn {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 26px; height: 26px; border-radius: 999px;
+            border: 1px dashed var(--border); background: transparent;
+            font-size: 0.8rem; cursor: pointer; color: var(--muted-soft);
+            transition: background var(--transition), border-color var(--transition);
+        }
+        .reaction-add-btn:hover { background: var(--surface-2); border-color: var(--accent); color: var(--accent); }
+
+        /* Reaction picker popover */
+        .reaction-picker {
+            position: fixed;
+            z-index: 350;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 10px;
+            box-shadow: 0 16px 48px rgba(0,0,0,.4);
+            display: flex; flex-wrap: wrap; gap: 4px;
+            width: 220px;
+            animation: sheetPop 0.18s cubic-bezier(0.34,1.2,0.64,1);
+        }
+        .rp-btn {
+            width: 36px; height: 36px; border: none; background: transparent;
+            font-size: 1.2rem; border-radius: 8px; cursor: pointer;
+            transition: background var(--transition), transform 0.1s;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .rp-btn:hover { background: var(--accent-dim); transform: scale(1.15); }
+
+        /* ═══════════════════════════════════════
+           АВАТАРКИ ИЗ НАБОРА — модалка
+        ═══════════════════════════════════════ */
+        .avatar-modal-backdrop {
+            position: fixed; inset: 0; background: rgba(0,0,0,.6);
+            backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+            z-index: 250; display: none; place-items: center; padding: 20px;
+        }
+        .avatar-modal-backdrop.is-open { display: grid; }
+        .avatar-modal {
+            width: 100%; max-width: 440px;
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--radius-lg); padding: 24px 22px;
+            box-shadow: var(--shadow-card); animation: sheetPop .25s cubic-bezier(0.34,1.2,0.64,1);
+        }
+        .avatar-modal h3 {
+            font-family: var(--font-display); font-size: 1.1rem; font-weight: 800;
+            letter-spacing: -0.02em; margin-bottom: 16px;
+        }
+        .avatar-current-row {
+            display: flex; align-items: center; gap: 14px; margin-bottom: 18px;
+        }
+        .avatar-current-big {
+            width: 56px; height: 56px; border-radius: 50%;
+            display: grid; place-items: center;
+            font-size: 1.3rem; font-weight: 800; color: #fff;
+            flex-shrink: 0; border: 2px solid var(--border);
+            overflow: hidden;
+        }
+        .avatar-current-big img { width: 100%; height: 100%; object-fit: cover; }
+        .avatar-grid {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));
+            gap: 8px; max-height: 260px; overflow-y: auto;
+            padding-right: 4px; margin-bottom: 16px;
+        }
+        .avatar-grid::-webkit-scrollbar { width: 4px; }
+        .avatar-grid::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+        .avatar-option {
+            width: 52px; height: 52px; border-radius: 50%;
+            border: 2px solid var(--border); cursor: pointer;
+            overflow: hidden; transition: border-color var(--transition), transform 0.15s;
+            display: grid; place-items: center;
+            font-size: 1.3rem; font-weight: 800; color: #fff;
+        }
+        .avatar-option:hover { border-color: var(--accent); transform: scale(1.06); }
+        .avatar-option.is-selected { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
+        .avatar-option img { width: 100%; height: 100%; object-fit: cover; }
+        .avatar-modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+        /* ═══════════════════════════════════════
+           ЛС — панель
+        ═══════════════════════════════════════ */
+        .dm-overlay {
+            position: fixed; inset: 0; z-index: 180;
+            background: rgba(0,0,0,.45); backdrop-filter: blur(4px);
+            display: none; align-items: flex-end; justify-content: flex-end;
+            padding: 0;
+        }
+        .dm-overlay.is-open { display: flex; }
+        .dm-panel {
+            width: min(400px, 100vw); height: 100dvh;
+            background: var(--bg-base); border-left: 1px solid var(--border);
+            display: flex; flex-direction: column;
+            animation: slideInRight .28s cubic-bezier(0.4,0,0.2,1);
+        }
+        @keyframes slideInRight {
+            from { transform: translateX(100%); }
+            to   { transform: translateX(0); }
+        }
+        .dm-header {
+            padding: 14px 18px; border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; gap: 12px; flex-shrink: 0;
+        }
+        .dm-header-title {
+            font-family: var(--font-display); font-weight: 800;
+            font-size: 1rem; letter-spacing: -0.02em; flex: 1;
+        }
+        .dm-close {
+            background: none; border: none; color: var(--muted);
+            cursor: pointer; padding: 6px; border-radius: 8px;
+            transition: background var(--transition), color var(--transition);
+            line-height: 1;
+        }
+        .dm-close:hover { background: var(--surface-hover); color: var(--text); }
+        .dm-list {
+            flex: 1; overflow-y: auto; padding: 12px;
+            display: flex; flex-direction: column; gap: 6px;
+        }
+        .dm-conv-item {
+            display: flex; align-items: center; gap: 10px;
+            padding: 10px 12px; border-radius: var(--radius-sm);
+            background: var(--surface); border: 1px solid var(--border);
+            cursor: pointer; transition: background var(--transition), border-color var(--transition);
+        }
+        .dm-conv-item:hover { background: var(--surface-hover); border-color: var(--border-hover); }
+        .dm-conv-av {
+            width: 36px; height: 36px; border-radius: 50%;
+            display: grid; place-items: center;
+            font-size: 0.85rem; font-weight: 800; color: #fff; flex-shrink: 0;
+            overflow: hidden;
+        }
+        .dm-conv-av img { width: 100%; height: 100%; object-fit: cover; }
+        .dm-conv-name { font-weight: 600; font-size: 0.9rem; flex: 1; }
+        .dm-conv-preview { font-size: 0.78rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px; }
+        .dm-unread {
+            min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px;
+            background: var(--accent); color: var(--accent-text);
+            font-size: 0.68rem; font-weight: 800; display: grid; place-items: center;
+        }
+
+        .dm-chat-panel {
+            display: none; flex-direction: column; height: 100%;
+        }
+        .dm-chat-panel.is-visible { display: flex; }
+        .dm-list-view { display: flex; flex-direction: column; height: 100%; }
+        .dm-list-view.is-hidden { display: none; }
+
+        .dm-chat-messages {
+            flex: 1; overflow-y: auto; padding: 12px;
+            display: flex; flex-direction: column; gap: 6px;
+        }
+        .dm-bubble-row { display: flex; gap: 6px; }
+        .dm-bubble-row.dm-me { flex-direction: row-reverse; }
+        .dm-bubble {
+            max-width: 75%; padding: 9px 14px;
+            border-radius: var(--radius-bubble-other);
+            background: var(--bubble-other-bg);
+            border: 1px solid var(--bubble-other-border);
+            font-size: 0.9rem; line-height: 1.5; word-break: break-word;
+        }
+        .dm-bubble-row.dm-me .dm-bubble {
+            background: var(--bubble-me-bg);
+            border: none; border-radius: var(--radius-bubble-me);
+            color: var(--bubble-me-text);
+        }
+        .dm-bubble-time { font-size: 0.68rem; color: var(--muted-soft); margin-top: 3px; text-align: right; }
+
+        .dm-composer {
+            padding: 10px 12px; border-top: 1px solid var(--border); display: flex; gap: 8px; flex-shrink: 0;
+        }
+        .dm-input {
+            flex: 1; background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--radius-sm); color: var(--text);
+            font-family: inherit; font-size: 0.9rem; padding: 9px 12px;
+            outline: none; transition: border-color var(--transition);
+            resize: none; min-height: 40px; max-height: 100px;
+        }
+        .dm-input:focus { border-color: var(--accent); }
+        .dm-send-btn {
+            width: 40px; height: 40px; border-radius: 50%; border: none; flex-shrink: 0;
+            background: var(--accent); color: var(--accent-text);
+            display: flex; align-items: center; justify-content: center; cursor: pointer;
+            transition: opacity var(--transition), transform 0.15s;
+        }
+        .dm-send-btn:hover { opacity: .85; transform: scale(1.05); }
+        .dm-empty { text-align: center; padding: 32px 16px; color: var(--muted); font-size: 0.88rem; }
+
+        /* ЛС кнопка в шапке */
+        .dm-fab {
+            position: relative;
+        }
+        .dm-badge {
+            position: absolute; top: -4px; right: -4px;
+            min-width: 16px; height: 16px; padding: 0 4px;
+            border-radius: 999px; background: #ef4444;
+            font-size: 0.6rem; font-weight: 800; color: #fff;
+            display: none; place-items: center; border: 2px solid var(--bg-base);
+        }
+        .dm-badge.is-visible { display: grid; }
+
     </style>
 </head>
 <body>
@@ -1456,11 +1786,14 @@
                 </a>
                 <h1 class="chat-title">Чат <span>6А</span></h1>
                 <div class="top-actions">
-                    <button type="button" class="icon-btn" id="btnSettings" title="Изменить ник" aria-label="Настройки">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                            <circle cx="12" cy="8" r="4"/>
-                            <path d="M4 20c1.5-4 5-6 8-6s6.5 2 8 6"/>
-                        </svg>
+                    <div class="dm-fab">
+                        <button type="button" class="icon-btn" id="btnOpenDM" title="Личные сообщения" aria-label="ЛС">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                        </button>
+                        <span class="dm-badge" id="dmBadge"></span>
+                    </div>
+                    <button type="button" class="icon-btn" id="btnAvatarPicker" title="Сменить аватарку" aria-label="Аватарка">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
                     </button>
                     <button type="button" class="theme-toggle icon-btn" id="themeToggle" aria-label="Сменить тему">
                         <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -1491,6 +1824,11 @@
             </div>
         </header>
 
+        <!-- Кто онлайн -->
+        <div class="online-bar" id="onlineBar">
+            <span class="online-bar-label">Онлайн</span>
+        </div>
+
         <!-- Тело чата -->
         <div class="chat-main">
             <div class="chat-scroll-area">
@@ -1516,6 +1854,13 @@
                     ✏️ <strong>Редактирование</strong>
                     <span>Измените текст и нажмите сохранить</span>
                     <button type="button" id="editBannerCancel" aria-label="Отменить редактирование">×</button>
+                </div>
+                <!-- Reply banner -->
+                <div class="reply-banner" id="replyBanner">
+                    ↩️ <span>Ответ на:</span>
+                    <span class="reply-banner-nick" id="replyBannerNick"></span>
+                    <span class="reply-banner-text" id="replyBannerText"></span>
+                    <button class="reply-banner-close" id="replyBannerClose" aria-label="Отменить ответ">×</button>
                 </div>
                 <div class="footer-identity">
                     <div class="mini-avatar" id="footerAvatar"></div>
@@ -1562,6 +1907,66 @@
     <div class="ctx-menu" id="ctxMenu" role="menu" aria-hidden="true"></div>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
+    <!-- Reaction picker -->
+    <div class="reaction-picker" id="reactionPicker" style="display:none"></div>
+
+    <!-- ══ АВАТАРКА — модалка ══ -->
+    <div class="avatar-modal-backdrop" id="avatarModalBackdrop">
+        <div class="avatar-modal">
+            <h3>🖼 Выбери аватарку</h3>
+            <div class="avatar-current-row">
+                <div class="avatar-current-big" id="avatarCurrentBig"></div>
+                <div style="font-size:0.85rem;color:var(--muted);line-height:1.5">
+                    Текущая аватарка.<br>
+                    Выбери новую из набора ниже.
+                </div>
+            </div>
+            <div class="avatar-grid" id="avatarGrid"></div>
+            <div class="avatar-modal-actions">
+                <button type="button" class="btn btn-ghost" id="avatarModalCancel">Отмена</button>
+                <button type="button" class="btn btn-primary" id="avatarModalSave">Сохранить</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══ ЛС — панель ══ -->
+    <div class="dm-overlay" id="dmOverlay">
+        <div class="dm-panel">
+            <!-- Список диалогов -->
+            <div class="dm-list-view" id="dmListView">
+                <div class="dm-header">
+                    <span class="dm-header-title">💬 Личные сообщения</span>
+                    <button class="dm-close" id="dmClose" aria-label="Закрыть">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                </div>
+                <div class="dm-list" id="dmConvList">
+                    <div class="dm-empty">Начни переписку — нажми на ник<br>в чате или на кого-то в «Онлайн»</div>
+                </div>
+            </div>
+            <!-- Открытый диалог -->
+            <div class="dm-chat-panel" id="dmChatPanel">
+                <div class="dm-header">
+                    <button class="dm-close" id="dmBackToList" aria-label="Назад" style="margin-right:4px">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+                    </button>
+                    <div class="dm-conv-av" id="dmPeerAv" style="width:32px;height:32px;font-size:0.8rem"></div>
+                    <span class="dm-header-title" id="dmPeerName" style="font-size:0.95rem"></span>
+                    <button class="dm-close" id="dmClose2" aria-label="Закрыть">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                </div>
+                <div class="dm-chat-messages" id="dmMessages"></div>
+                <div class="dm-composer">
+                    <textarea class="dm-input" id="dmInput" placeholder="Сообщение…" rows="1" maxlength="2000"></textarea>
+                    <button class="dm-send-btn" id="dmSend" aria-label="Отправить">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z"/></svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- ══════════════════════════════════════
          FIREBASE + ЛОГИКА (не тронуто)
     ══════════════════════════════════════ -->
@@ -1588,7 +1993,11 @@
             deleteDoc,
             setDoc,
             getDoc,
-            deleteField
+            deleteField,
+            limit,
+            where,
+            getDocs,
+            increment
         } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
 
         const firebaseConfig = {
@@ -1608,6 +2017,25 @@
         const TYPING_MAX_MS     = 4500;
         const SCROLL_THRESHOLD  = 120;
         const SPAM_INTERVAL_MS  = 1500;
+        const AVATAR_KEY        = 'index6a_avatar';
+        const ONLINE_TTL_MS     = 25000;
+
+        /* ——— Набор аватарок (emoji + цвет фона) — добавляй свои файлы сюда ——— */
+        // Формат: { type:'emoji', val:'😎' } или { type:'img', val:'avatars/cat.png' }
+        // Когда сделаешь свои картинки — замени на { type:'img', val:'avatars/NAME.png' }
+        const AVATAR_SET = [
+            {type:'emoji',val:'😎'},{type:'emoji',val:'🐱'},{type:'emoji',val:'🦊'},
+            {type:'emoji',val:'🐼'},{type:'emoji',val:'🦁'},{type:'emoji',val:'🐸'},
+            {type:'emoji',val:'🤖'},{type:'emoji',val:'👾'},{type:'emoji',val:'🧙'},
+            {type:'emoji',val:'🥷'},{type:'emoji',val:'🧛'},{type:'emoji',val:'🦸'},
+            {type:'emoji',val:'🐉'},{type:'emoji',val:'🦄'},{type:'emoji',val:'🐧'},
+            {type:'emoji',val:'🦋'},{type:'emoji',val:'🌚'},{type:'emoji',val:'🌝'},
+            {type:'emoji',val:'💀'},{type:'emoji',val:'👻'},{type:'emoji',val:'🤡'},
+            {type:'emoji',val:'🎃'},{type:'emoji',val:'🍕'},{type:'emoji',val:'🍔'},
+        ];
+
+        /* ——— Quick reaction emojis ——— */
+        const QUICK_REACTIONS = ['👍','❤️','😂','😮','😢','🔥','👏','💀'];
 
         /* ——— Фильтр мата ——— */
         function cleanContent(text) {
@@ -1710,6 +2138,29 @@
         const settingsSave    = document.getElementById('settingsSave');
         const settingsCancel  = document.getElementById('settingsCancel');
 
+        // Новые элементы
+        const replyBanner      = document.getElementById('replyBanner');
+        const replyBannerNick  = document.getElementById('replyBannerNick');
+        const replyBannerText  = document.getElementById('replyBannerText');
+        const replyBannerClose = document.getElementById('replyBannerClose');
+        const onlineBar        = document.getElementById('onlineBar');
+        const reactionPicker   = document.getElementById('reactionPicker');
+        const avatarModalBackdrop = document.getElementById('avatarModalBackdrop');
+        const avatarCurrentBig = document.getElementById('avatarCurrentBig');
+        const avatarGrid       = document.getElementById('avatarGrid');
+        const avatarModalCancel = document.getElementById('avatarModalCancel');
+        const avatarModalSave  = document.getElementById('avatarModalSave');
+        const dmOverlay        = document.getElementById('dmOverlay');
+        const dmConvList       = document.getElementById('dmConvList');
+        const dmListView       = document.getElementById('dmListView');
+        const dmChatPanel      = document.getElementById('dmChatPanel');
+        const dmMessages       = document.getElementById('dmMessages');
+        const dmInput          = document.getElementById('dmInput');
+        const dmSend           = document.getElementById('dmSend');
+        const dmPeerAv         = document.getElementById('dmPeerAv');
+        const dmPeerName       = document.getElementById('dmPeerName');
+        const dmBadge          = document.getElementById('dmBadge');
+
         /* ——— Состояние ——— */
         let stickToBottom         = true;
         let messagesUnsub         = null;
@@ -1724,6 +2175,15 @@
         let lastOutboundAt        = 0;
         let toastTimer            = null;
         let searchDebounceTimer   = null;
+
+        // Новые
+        let replyingTo            = null; // { id, author, text }
+        let selectedAvatar        = null; // { type, val }
+        let onlineUnsub           = null;
+        let dmUnsub               = null;
+        let dmCurrentPeerUid      = null;
+        let dmCurrentPeerName     = null;
+        let rpActiveFor           = null; // msgId для которого открыт reaction picker
 
         function getMyUid() {
             const u = auth.currentUser;
@@ -1820,11 +2280,9 @@
 
         document.getElementById('btnLogout').addEventListener('click', () => signOut(auth));
 
-        document.getElementById('btnSettings').addEventListener('click', () => {
-            const u = auth.currentUser;
-            if (!u) return;
-            settingsName.value = u.displayName || '';
-            settingsBackdrop.classList.add('is-open');
+        // Настройки ника — открываем из avatar modal
+        document.getElementById('btnAvatarPicker').addEventListener('click', () => {
+            openAvatarModal();
         });
 
         settingsCancel.addEventListener('click', () => settingsBackdrop.classList.remove('is-open'));
@@ -1862,10 +2320,47 @@
             return ch.toUpperCase();
         }
 
-        function renderAvatarCircle(el, uid, displayName, fallbackLabel) {
+        // Cache uid -> avatar data {type,val}
+        const avatarCache = {};
+
+        function applyAvatarToEl(el, uid, displayName, fallback, avatarData) {
             el.innerHTML = '';
-            el.style.background = avatarGradient(uid);
-            el.textContent = firstLetter(displayName, fallbackLabel);
+            if (avatarData && avatarData.type === 'emoji') {
+                el.style.background = avatarGradient(uid);
+                el.style.fontSize = '1.1em';
+                el.textContent = avatarData.val;
+            } else if (avatarData && avatarData.type === 'img') {
+                el.style.background = 'none';
+                el.style.fontSize = '';
+                const img = document.createElement('img');
+                img.src = avatarData.val;
+                img.alt = '';
+                img.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:50%';
+                el.appendChild(img);
+            } else {
+                el.style.background = avatarGradient(uid);
+                el.style.fontSize = '';
+                el.textContent = firstLetter(displayName, fallback);
+            }
+        }
+
+        async function renderAvatarCircle(el, uid, displayName, fallbackLabel) {
+            // First render immediately with cached/default
+            const cached = avatarCache[uid];
+            applyAvatarToEl(el, uid, displayName, fallbackLabel, cached || null);
+            // Then fetch from Firestore if not cached
+            if (!avatarCache[uid] && uid) {
+                try {
+                    const snap = await getDoc(doc(db, 'users', uid));
+                    if (snap.exists()) {
+                        const av = snap.data().avatar;
+                        if (av) {
+                            avatarCache[uid] = av;
+                            applyAvatarToEl(el, uid, displayName, fallbackLabel, av);
+                        }
+                    }
+                } catch(_) {}
+            }
         }
 
         function renderFooterIdentity() {
@@ -1874,6 +2369,366 @@
             const name = displayNick(u);
             renderAvatarCircle(footerAvatar, u.uid, u.displayName, name);
             footerName.textContent = name;
+        }
+
+        /* ═══ АВАТАР МОДАЛКА ═══ */
+        function openAvatarModal() {
+            const u = auth.currentUser;
+            if (!u) return;
+            // Показать текущую аватарку
+            const cur = avatarCache[u.uid] || null;
+            applyAvatarToEl(avatarCurrentBig, u.uid, u.displayName, displayNick(u), cur);
+            // Заполнить грид
+            avatarGrid.innerHTML = '';
+            selectedAvatar = cur ? {...cur} : null;
+            AVATAR_SET.forEach((av, i) => {
+                const opt = document.createElement('div');
+                opt.className = 'avatar-option' + (selectedAvatar && selectedAvatar.val === av.val ? ' is-selected' : '');
+                opt.style.background = avatarGradient(u.uid + i);
+                if (av.type === 'emoji') {
+                    opt.style.fontSize = '1.5rem';
+                    opt.textContent = av.val;
+                } else {
+                    const img = document.createElement('img');
+                    img.src = av.val; img.alt = '';
+                    opt.appendChild(img);
+                }
+                opt.addEventListener('click', () => {
+                    avatarGrid.querySelectorAll('.avatar-option').forEach(o => o.classList.remove('is-selected'));
+                    opt.classList.add('is-selected');
+                    selectedAvatar = av;
+                    applyAvatarToEl(avatarCurrentBig, u.uid, u.displayName, displayNick(u), av);
+                });
+                avatarGrid.appendChild(opt);
+            });
+            avatarModalBackdrop.classList.add('is-open');
+        }
+
+        avatarModalCancel.addEventListener('click', () => avatarModalBackdrop.classList.remove('is-open'));
+        avatarModalBackdrop.addEventListener('click', e => { if (e.target === avatarModalBackdrop) avatarModalBackdrop.classList.remove('is-open'); });
+
+        avatarModalSave.addEventListener('click', async () => {
+            const u = auth.currentUser;
+            if (!u || !selectedAvatar) { avatarModalBackdrop.classList.remove('is-open'); return; }
+            try {
+                await updateDoc(doc(db, 'users', u.uid), { avatar: selectedAvatar });
+                avatarCache[u.uid] = selectedAvatar;
+                renderFooterIdentity();
+                avatarModalBackdrop.classList.remove('is-open');
+                showToast('Аватарка обновлена ✓');
+            } catch(e) { showToast('Ошибка: ' + e.message); }
+        });
+
+        /* ═══ REPLY ═══ */
+        function startReply(msgId, author, text) {
+            replyingTo = { id: msgId, author, text };
+            replyBannerNick.textContent = author;
+            replyBannerText.textContent = text;
+            replyBanner.classList.add('is-on');
+            chatInput.focus();
+        }
+
+        function cancelReply() {
+            replyingTo = null;
+            replyBanner.classList.remove('is-on');
+        }
+
+        replyBannerClose.addEventListener('click', cancelReply);
+
+        /* ═══ РЕАКЦИИ ═══ */
+        function closeReactionPicker() {
+            reactionPicker.style.display = 'none';
+            rpActiveFor = null;
+            document.removeEventListener('click', closeReactionPicker, true);
+        }
+
+        function openReactionPicker(msgId, anchorEl) {
+            if (rpActiveFor === msgId) { closeReactionPicker(); return; }
+            rpActiveFor = msgId;
+            reactionPicker.innerHTML = '';
+            QUICK_REACTIONS.forEach(em => {
+                const btn = document.createElement('button');
+                btn.className = 'rp-btn';
+                btn.textContent = em;
+                btn.addEventListener('click', e => {
+                    e.stopPropagation();
+                    toggleReaction(msgId, em);
+                    closeReactionPicker();
+                });
+                reactionPicker.appendChild(btn);
+            });
+            reactionPicker.style.display = 'flex';
+            const rect = anchorEl.getBoundingClientRect();
+            let top = rect.top - reactionPicker.offsetHeight - 8;
+            let left = rect.left;
+            if (top < 8) top = rect.bottom + 8;
+            if (left + 220 > innerWidth - 8) left = innerWidth - 228;
+            reactionPicker.style.top  = top  + 'px';
+            reactionPicker.style.left = left + 'px';
+            setTimeout(() => document.addEventListener('click', closeReactionPicker, true), 10);
+        }
+
+        async function toggleReaction(msgId, emoji) {
+            const u = auth.currentUser;
+            if (!u) return;
+            const rRef = doc(db, 'messages', msgId, 'reactions', emoji);
+            try {
+                const snap = await getDoc(rRef);
+                if (snap.exists()) {
+                    const uids = snap.data().uids || [];
+                    const mine = uids.includes(u.uid);
+                    if (mine) {
+                        const next = uids.filter(x => x !== u.uid);
+                        if (next.length === 0) await deleteDoc(rRef);
+                        else await updateDoc(rRef, { uids: next, count: next.length });
+                    } else {
+                        await updateDoc(rRef, { uids: [...uids, u.uid], count: uids.length + 1 });
+                    }
+                } else {
+                    await setDoc(rRef, { emoji, uids: [u.uid], count: 1 });
+                }
+            } catch(e) { console.warn('reaction error', e); }
+        }
+
+        async function loadAndRenderReactions(msgId, containerEl) {
+            const reactCol = collection(db, 'messages', msgId, 'reactions');
+            onSnapshot(reactCol, snap => {
+                containerEl.innerHTML = '';
+                const u = auth.currentUser;
+                snap.docs.forEach(d => {
+                    const data = d.data();
+                    if (!data.count) return;
+                    const chip = document.createElement('button');
+                    chip.className = 'reaction-chip' + (u && data.uids?.includes(u.uid) ? ' is-mine' : '');
+                    chip.innerHTML = `${data.emoji} <span class="reaction-chip-count">${data.count}</span>`;
+                    chip.addEventListener('click', e => { e.stopPropagation(); toggleReaction(msgId, data.emoji); });
+                    containerEl.appendChild(chip);
+                });
+            });
+        }
+
+        /* ═══ КТО ОНЛАЙН ═══ */
+        const presenceRef = doc(db, 'presence', 'online');
+
+        async function pingOnline() {
+            const u = auth.currentUser;
+            if (!u) return;
+            try {
+                await setDoc(presenceRef,
+                    { users: { [u.uid]: { n: displayNick(u), t: serverTimestamp(), uid: u.uid } } },
+                    { merge: true }
+                );
+            } catch(_) {}
+        }
+
+        function startOnlineBar() {
+            pingOnline();
+            const pingTimer = setInterval(pingOnline, 15000);
+
+            onlineUnsub = onSnapshot(presenceRef, snap => {
+                if (!snap.exists()) return;
+                const users = snap.data().users || {};
+                const now = Date.now();
+                const active = Object.values(users).filter(v => {
+                    if (!v || !v.t) return false;
+                    const ms = typeof v.t.toMillis === 'function' ? v.t.toMillis() : 0;
+                    return (now - ms) < ONLINE_TTL_MS;
+                });
+                // Rebuild bar
+                const prev = onlineBar.querySelectorAll('.online-pill');
+                prev.forEach(p => p.remove());
+                active.forEach(v => {
+                    const pill = document.createElement('button');
+                    pill.className = 'online-pill';
+                    pill.type = 'button';
+                    const av = document.createElement('span');
+                    av.className = 'online-pill-av';
+                    applyAvatarToEl(av, v.uid, v.n, v.n, avatarCache[v.uid] || null);
+                    av.style.cssText += 'width:18px;height:18px;display:grid;place-items:center;border-radius:50%;font-size:0.6rem;font-weight:800;color:#fff;overflow:hidden;';
+                    pill.appendChild(av);
+                    const dot = document.createElement('span');
+                    dot.className = 'online-dot';
+                    pill.appendChild(dot);
+                    const name = document.createElement('span');
+                    const myUid = auth.currentUser ? auth.currentUser.uid : '';
+                    name.textContent = v.uid === myUid ? v.n + ' (ты)' : v.n;
+                    pill.appendChild(name);
+                    // Click → open DM
+                    if (v.uid !== myUid) {
+                        pill.addEventListener('click', () => openDMWith(v.uid, v.n));
+                    }
+                    onlineBar.appendChild(pill);
+                });
+            });
+
+            return () => { clearInterval(pingTimer); if (onlineUnsub) onlineUnsub(); };
+        }
+
+        /* ═══ ЛС (DM) ═══ */
+        function dmConvId(uid1, uid2) {
+            return [uid1, uid2].sort().join('_');
+        }
+
+        function openDMOverlay() {
+            dmOverlay.classList.add('is-open');
+            loadDMList();
+        }
+
+        function closeDMOverlay() {
+            dmOverlay.classList.remove('is-open');
+            if (dmUnsub) { dmUnsub(); dmUnsub = null; }
+            dmCurrentPeerUid = null;
+            dmChatPanel.classList.remove('is-visible');
+            dmListView.classList.remove('is-hidden');
+        }
+
+        document.getElementById('btnOpenDM').addEventListener('click', openDMOverlay);
+        document.getElementById('dmClose').addEventListener('click', closeDMOverlay);
+        document.getElementById('dmClose2').addEventListener('click', closeDMOverlay);
+        document.getElementById('dmBackToList').addEventListener('click', () => {
+            if (dmUnsub) { dmUnsub(); dmUnsub = null; }
+            dmCurrentPeerUid = null;
+            dmChatPanel.classList.remove('is-visible');
+            dmListView.classList.remove('is-hidden');
+            loadDMList();
+        });
+        dmOverlay.addEventListener('click', e => { if (e.target === dmOverlay) closeDMOverlay(); });
+
+        async function loadDMList() {
+            const u = auth.currentUser;
+            if (!u) return;
+            dmConvList.innerHTML = '<div class="dm-empty">Загрузка…</div>';
+            try {
+                const snap = await getDocs(
+                    query(collection(db, 'dmConvs'), where('members', 'array-contains', u.uid), orderBy('lastAt', 'desc'), limit(20))
+                );
+                if (snap.empty) {
+                    dmConvList.innerHTML = '<div class="dm-empty">Нет диалогов.<br>Нажми на человека в «Онлайн» чтобы написать.</div>';
+                    return;
+                }
+                dmConvList.innerHTML = '';
+                snap.docs.forEach(d => {
+                    const data = d.data();
+                    const peerUid  = data.members.find(m => m !== u.uid) || '';
+                    const peerName = data.names?.[peerUid] || '???';
+                    const item = document.createElement('div');
+                    item.className = 'dm-conv-item';
+                    const av = document.createElement('div');
+                    av.className = 'dm-conv-av';
+                    applyAvatarToEl(av, peerUid, peerName, peerName, avatarCache[peerUid] || null);
+                    av.style.background = avatarGradient(peerUid);
+                    item.appendChild(av);
+                    const info = document.createElement('div');
+                    info.style.cssText = 'flex:1;min-width:0';
+                    info.innerHTML = `<div class="dm-conv-name">${escapeHtml(peerName)}</div><div class="dm-conv-preview">${escapeHtml(data.lastText || '')}</div>`;
+                    item.appendChild(info);
+                    const unread = (data.unread || {})[u.uid] || 0;
+                    if (unread > 0) {
+                        const badge = document.createElement('span');
+                        badge.className = 'dm-unread';
+                        badge.textContent = unread > 9 ? '9+' : unread;
+                        item.appendChild(badge);
+                    }
+                    item.addEventListener('click', () => openDMWith(peerUid, peerName));
+                    dmConvList.appendChild(item);
+                });
+            } catch(e) { dmConvList.innerHTML = '<div class="dm-empty">Ошибка загрузки</div>'; }
+        }
+
+        async function openDMWith(peerUid, peerName) {
+            const u = auth.currentUser;
+            if (!u) return;
+            dmCurrentPeerUid  = peerUid;
+            dmCurrentPeerName = peerName;
+            dmPeerName.textContent = peerName;
+            applyAvatarToEl(dmPeerAv, peerUid, peerName, peerName, avatarCache[peerUid] || null);
+            dmPeerAv.style.background = avatarGradient(peerUid);
+            dmListView.classList.add('is-hidden');
+            dmChatPanel.classList.add('is-visible');
+            if (!dmOverlay.classList.contains('is-open')) dmOverlay.classList.add('is-open');
+            dmMessages.innerHTML = '<div class="dm-empty">Загрузка…</div>';
+
+            const convId = dmConvId(u.uid, peerUid);
+            const convRef = doc(db, 'dmConvs', convId);
+            // Ensure conv doc exists
+            try {
+                await setDoc(convRef, {
+                    members: [u.uid, peerUid],
+                    names: { [u.uid]: displayNick(u), [peerUid]: peerName }
+                }, { merge: true });
+                // Reset unread for me
+                await updateDoc(convRef, { [`unread.${u.uid}`]: 0 }).catch(() => {});
+            } catch(_) {}
+
+            if (dmUnsub) dmUnsub();
+            const msgsQ = query(collection(db, 'dmConvs', convId, 'messages'), orderBy('createdAt', 'asc'), limit(80));
+            dmUnsub = onSnapshot(msgsQ, snap => {
+                if (snap.empty) { dmMessages.innerHTML = '<div class="dm-empty">Напиши первое сообщение!</div>'; return; }
+                dmMessages.innerHTML = '';
+                snap.docs.forEach(d => {
+                    const data = d.data();
+                    const isMe = data.uid === u.uid;
+                    const row = document.createElement('div');
+                    row.className = 'dm-bubble-row' + (isMe ? ' dm-me' : '');
+                    const bubble = document.createElement('div');
+                    bubble.className = 'dm-bubble';
+                    bubble.innerHTML = escapeHtml(data.text || '').replace(/\n/g,'<br>');
+                    const time = document.createElement('div');
+                    time.className = 'dm-bubble-time';
+                    time.textContent = data.createdAt?.toDate?.()?.toLocaleTimeString('ru',{hour:'2-digit',minute:'2-digit'}) || '';
+                    bubble.appendChild(time);
+                    row.appendChild(bubble);
+                    dmMessages.appendChild(row);
+                });
+                dmMessages.scrollTop = dmMessages.scrollHeight;
+            });
+        }
+
+        async function sendDM() {
+            const u = auth.currentUser;
+            if (!u || !dmCurrentPeerUid) return;
+            const text = dmInput.value.trim();
+            if (!text) return;
+            dmInput.value = '';
+            const convId = dmConvId(u.uid, dmCurrentPeerUid);
+            const convRef = doc(db, 'dmConvs', convId);
+            try {
+                await addDoc(collection(db, 'dmConvs', convId, 'messages'), {
+                    uid: u.uid, author: displayNick(u), text, createdAt: serverTimestamp()
+                });
+                await setDoc(convRef, {
+                    lastText: text, lastAt: serverTimestamp(),
+                    [`unread.${dmCurrentPeerUid}`]: increment(1)
+                }, { merge: true });
+            } catch(e) { showToast('Ошибка: ' + e.message); }
+        }
+
+        dmSend.addEventListener('click', sendDM);
+        dmInput.addEventListener('keydown', e => {
+            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendDM(); }
+        });
+        dmInput.addEventListener('input', () => {
+            dmInput.style.height = 'auto';
+            dmInput.style.height = Math.min(dmInput.scrollHeight, 100) + 'px';
+        });
+
+        // DM unread badge
+        function watchDMBadge() {
+            const u = auth.currentUser;
+            if (!u) return;
+            onSnapshot(
+                query(collection(db, 'dmConvs'), where('members', 'array-contains', u.uid)),
+                snap => {
+                    let total = 0;
+                    snap.docs.forEach(d => { total += (d.data().unread || {})[u.uid] || 0; });
+                    if (total > 0) {
+                        dmBadge.textContent = total > 9 ? '9+' : total;
+                        dmBadge.classList.add('is-visible');
+                    } else {
+                        dmBadge.classList.remove('is-visible');
+                    }
+                }
+            );
         }
 
         /* ——— Emoji picker ——— */
@@ -2179,7 +3034,6 @@
             const myUid = getMyUid();
             const isMe  = String(d.uid || '') === myUid && myUid !== '';
 
-            // Определяем, нужен ли отступ (смена автора)
             const prevUid = prevDocSnap ? (prevDocSnap.data().uid || '') : null;
             const sameAuthor = prevUid && String(prevUid) === String(d.uid || '');
 
@@ -2198,17 +3052,33 @@
             const stack = document.createElement('div');
             stack.className = 'msg-stack';
 
-            // Показываем имя автора только для первого в группе (чужие)
             if (!isMe && !sameAuthor) {
                 const authorEl = document.createElement('div');
                 authorEl.className = 'msg-author';
                 authorEl.textContent = authorLabel;
+                // Click author → open DM
+                if (d.uid && d.uid !== myUid) {
+                    authorEl.style.cursor = 'pointer';
+                    authorEl.addEventListener('click', () => openDMWith(d.uid, authorLabel));
+                }
                 stack.appendChild(authorEl);
             }
 
             const bubble = document.createElement('div');
             bubble.className = 'msg-bubble ' + (isMe ? 'msg-bubble--me' : 'msg-bubble--other');
             if (isMe) bubble.classList.add('is-own');
+
+            // Reply quote
+            if (d.replyTo) {
+                const quote = document.createElement('div');
+                quote.className = 'msg-reply-quote';
+                quote.innerHTML = `<span class="msg-reply-quote-nick">${escapeHtml(d.replyTo.author || '')}</span><span class="msg-reply-quote-text">${escapeHtml(d.replyTo.text || '')}</span>`;
+                quote.addEventListener('click', () => {
+                    const target = chatMessages.querySelector(`[data-msg-id="${d.replyTo.id}"]`);
+                    if (target) { target.scrollIntoView({ behavior: 'smooth', block: 'center' }); target.style.outline = '2px solid var(--accent)'; setTimeout(() => target.style.outline = '', 1200); }
+                });
+                bubble.appendChild(quote);
+            }
 
             bubble.appendChild(renderMessageBody(d.text || ''));
 
@@ -2228,22 +3098,47 @@
             }
             bubble.appendChild(foot);
             stack.appendChild(bubble);
+
+            // Reactions bar
+            const reactBar = document.createElement('div');
+            reactBar.className = 'msg-reactions';
+            // Add-reaction button
+            const addBtn = document.createElement('button');
+            addBtn.className = 'reaction-add-btn';
+            addBtn.textContent = '+';
+            addBtn.title = 'Добавить реакцию';
+            addBtn.addEventListener('click', e => { e.stopPropagation(); openReactionPicker(id, addBtn); });
+            reactBar.appendChild(addBtn);
+            stack.appendChild(reactBar);
+            loadAndRenderReactions(id, reactBar);
+
             row.appendChild(av);
             row.appendChild(stack);
 
-            if (isMe) {
-                bubble.addEventListener('click', (e) => {
-                    if (e.target.closest('img.gif-inline')) return;
-                    e.stopPropagation();
-                    e.preventDefault();
-                    showMessageContextMenu(e.clientX, e.clientY, id, d);
-                });
-                bubble.addEventListener('contextmenu', (e) => {
-                    e.preventDefault();
-                    if (e.target.closest('img.gif-inline')) return;
-                    showMessageContextMenu(e.clientX, e.clientY, id, d);
-                });
-            }
+            // Context menu (right-click or long-press)
+            const showCtx = (x, y) => {
+                if (e => e.target.closest('img.gif-inline')) return;
+                const items = [
+                    { label: 'Ответить', icon: '↩️', onClick: () => startReply(id, authorLabel, d.text || '') },
+                    { label: 'Копировать', icon: '📋', onClick: () => copyMessageText(d.text || '') },
+                ];
+                if (isMe) {
+                    items.push({ label: '---' });
+                    items.push({ label: 'Изменить', icon: '✏️', onClick: () => startEditMessage(id, d.text || '') });
+                    items.push({ label: 'Удалить', icon: '🗑️', danger: true, onClick: async () => {
+                        if (!confirm('Удалить сообщение?')) return;
+                        try { await deleteDoc(doc(db, 'messages', id)); } catch (err) { globalStatus.textContent = err.message; globalStatus.classList.add('is-error'); }
+                    }});
+                }
+                openCtxMenu(x, y, items);
+            };
+
+            bubble.addEventListener('contextmenu', e => { e.preventDefault(); showCtx(e.clientX, e.clientY); });
+            // Long press on mobile
+            let lpTimer;
+            bubble.addEventListener('touchstart', () => { lpTimer = setTimeout(() => showCtx(0, innerHeight * 0.4), 500); }, { passive: true });
+            bubble.addEventListener('touchend',   () => clearTimeout(lpTimer));
+            bubble.addEventListener('touchmove',  () => clearTimeout(lpTimer));
 
             return row;
         }
@@ -2397,8 +3292,10 @@
                         author: displayNick(u),
                         text,
                         createdAt: serverTimestamp(),
-                        edited: false
+                        edited: false,
+                        ...(replyingTo ? { replyTo: { id: replyingTo.id, author: replyingTo.author, text: replyingTo.text.slice(0, 100) } } : {})
                     });
+                    cancelReply();
                     lastOutboundAt = Date.now();
                     chatInput.value = '';
                 }
@@ -2424,12 +3321,14 @@
             if (messagesUnsub) { messagesUnsub(); messagesUnsub = null; }
             if (typingUnsub)   { typingUnsub();   typingUnsub   = null; }
             if (typingInterval) { clearInterval(typingInterval); typingInterval = null; }
+            if (onlineUnsub)   { onlineUnsub();   onlineUnsub   = null; }
             chatMessages.querySelectorAll('.msg-row').forEach((n) => n.remove());
             chatEmpty.style.display = '';
             typingBar.innerHTML = '';
             lastKnownLastMessageId = null;
             unreadBelow = 0;
             cancelEditMessage();
+            cancelReply();
             scrollDownFab.classList.add('hidden');
             if (msgSearchInput) msgSearchInput.value = '';
             if (searchHint) searchHint.textContent = '';
@@ -2453,6 +3352,8 @@
                 }
             );
             startTypingListeners();
+            startOnlineBar();
+            watchDMBadge();
         }
 
         let _banUnsubscribe5 = null;
