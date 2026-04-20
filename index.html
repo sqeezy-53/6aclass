@@ -2711,43 +2711,48 @@ function fmtDue(str) {
 
 let isAdminMode = false;
 
-// Realtime listener
+// Realtime listener — запускается внутри onAuthStateChanged
 const dzQuery = query(collection(db, 'homework'), orderBy('createdAt', 'desc'));
-onSnapshot(dzQuery, snap => {
-    if (snap.empty) {
-        dzList.innerHTML = '<div class="dz-empty">Пока нет заданий 🎉</div>';
-        return;
-    }
-    dzList.innerHTML = '';
-    snap.docs.forEach(d => {
-        const data = d.data();
-        const item = document.createElement('div');
-        item.className = 'dz-item';
-        const subj = String(data.subject || '').replace(/[<>&"]/g, c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
-        const task = String(data.task    || '').replace(/[<>&"]/g, c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
-        const due  = data.dueDate ? '<span class="dz-due">📅 до ' + fmtDue(data.dueDate) + '</span>' : '';
-        const addedDate = fmtDate(data.createdAt);
-        item.innerHTML =
-            '<div class="dz-item-subject">' + subj + due + '</div>' +
-            '<div class="dz-item-task">' + task + '</div>' +
-            '<div class="dz-item-meta">Добавлено ' + addedDate +
-                (isAdminMode ? '<button class="dz-item-delete" data-id="' + d.id + '">✕ удалить</button>' : '') +
-            '</div>';
-        dzList.appendChild(item);
-    });
-    if (isAdminMode) {
-        dzList.querySelectorAll('.dz-item-delete').forEach(btn => {
-            btn.addEventListener('click', async () => {
-                if (confirm('Удалить задание?')) await deleteDoc(doc(db, 'homework', btn.dataset.id));
-            });
-        });
-    }
-}, err => {
-    console.error('DZ error:', err);
-    dzList.innerHTML = '<div class="dz-empty">Ошибка загрузки 😕<br><small>' + err.message + '</small></div>';
-});
+let dzUnsubscribe = null;
 
-// Auth
+function startDzListener() {
+    if (dzUnsubscribe) dzUnsubscribe();
+    dzUnsubscribe = onSnapshot(dzQuery, snap => {
+        if (snap.empty) {
+            dzList.innerHTML = '<div class="dz-empty">Пока нет заданий 🎉</div>';
+            return;
+        }
+        dzList.innerHTML = '';
+        snap.docs.forEach(d => {
+            const data = d.data();
+            const item = document.createElement('div');
+            item.className = 'dz-item';
+            const subj = String(data.subject || '').replace(/[<>&"]/g, c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
+            const task = String(data.task    || '').replace(/[<>&"]/g, c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
+            const due  = data.dueDate ? '<span class="dz-due">📅 до ' + fmtDue(data.dueDate) + '</span>' : '';
+            const addedDate = fmtDate(data.createdAt);
+            item.innerHTML =
+                '<div class="dz-item-subject">' + subj + due + '</div>' +
+                '<div class="dz-item-task">' + task + '</div>' +
+                '<div class="dz-item-meta">Добавлено ' + addedDate +
+                    (isAdminMode ? '<button class="dz-item-delete" data-id="' + d.id + '">✕ удалить</button>' : '') +
+                '</div>';
+            dzList.appendChild(item);
+        });
+        if (isAdminMode) {
+            dzList.querySelectorAll('.dz-item-delete').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    if (confirm('Удалить задание?')) await deleteDoc(doc(db, 'homework', btn.dataset.id));
+                });
+            });
+        }
+    }, err => {
+        console.error('DZ error:', err);
+        dzList.innerHTML = '<div class="dz-empty">Ошибка загрузки 😕<br><small>' + err.message + '</small></div>';
+    });
+}
+
+// Auth — сначала определяем права, потом запускаем слушатель
 onAuthStateChanged(auth, user => {
     isAdminMode = !!(user && (user.displayName === 'ADMIN' || user.email === 'ADMIN@6a.ru'));
     if (isAdminMode) {
@@ -2757,6 +2762,7 @@ onAuthStateChanged(auth, user => {
         dzForm.classList.remove('is-visible');
         if (dzClearBtn) dzClearBtn.style.display = 'none';
     }
+    startDzListener();
 });
 
 // Добавление ДЗ
