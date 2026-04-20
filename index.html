@@ -2078,6 +2078,17 @@
             transition: opacity var(--transition), transform 0.18s;
         }
         .dz-admin-btn:hover { opacity: .85; transform: translateY(-1px); }
+        .dz-due {
+            display: inline-block;
+            font-size: 0.7rem;
+            font-weight: 700;
+            padding: 1px 7px;
+            border-radius: 999px;
+            background: rgba(251,191,36,.15);
+            color: var(--accent-warm);
+            margin-left: 8px;
+            vertical-align: middle;
+        }
         .dz-admin-label {
             display: flex;
             align-items: center;
@@ -2266,7 +2277,11 @@
                         <div class="dz-admin-row">
                             <input class="dz-admin-input" id="dzSubject" placeholder="Предмет (Матем.)" maxlength="30">
                             <input class="dz-admin-input" id="dzTask" placeholder="Задание…" maxlength="200">
+                            <input class="dz-admin-input" id="dzDueDate" type="date" title="Срок сдачи" style="max-width:140px">
                             <button class="dz-admin-btn" id="dzAddBtn">+ Добавить</button>
+                        </div>
+                        <div style="margin-top:8px;">
+                            <button class="dz-admin-btn" id="dzClearBtn" style="background:rgba(239,68,68,.15);color:#f87171;border:1px solid rgba(239,68,68,.3);display:none">🗑 Удалить все ДЗ</button>
                         </div>
                     </div>
                 </div>
@@ -2515,13 +2530,15 @@ initReveal();
 </script>
 
 <!-- ══════════════════════════════════════════════════════════
-     АНОНИМНЫЕ КОММЕНТАРИИ — Firebase module
+     ГОЛОСОВАНИЕ → ОТПРАВИТЬ ОДНО СООБЩЕНИЕ В ОСНОВНОЙ ЧАТ
 ══════════════════════════════════════════════════════════ -->
 <script type="module">
 import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
+import { getAuth } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
 import {
     getFirestore, collection, addDoc, onSnapshot,
-    orderBy, query, limit, serverTimestamp
+    orderBy, query, limit, serverTimestamp,
+    doc, setDoc, getDoc
 } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
 
 const firebaseConfig = {
@@ -2532,32 +2549,22 @@ const firebaseConfig = {
     messagingSenderId: '656933440681',
     appId: '1:656933440681:web:e7a8c2ae22181ec98f2db8'
 };
-const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
-const db  = getFirestore(app);
+const app  = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
+const db   = getFirestore(app);
+const auth = getAuth(app);
 
-function fmtRelative(ts) {
-    if (!ts) return '';
-    const d = ts.toDate ? ts.toDate() : new Date(ts);
-    const diff = Date.now() - d.getTime();
-    const mins = Math.floor(diff / 60000);
-    if (mins < 1)  return 'только что';
-    if (mins < 60) return mins + ' мин. назад';
-    const hrs = Math.floor(mins / 60);
-    if (hrs < 24)  return hrs + ' ч. назад';
-    return d.toLocaleDateString('ru', { day: '2-digit', month: 'short' });
-}
-
-function initAnonComments(commentsId) {
+// Рендерим «опрос → одно сообщение в чат»
+async function initPollBlock(commentsId) {
     const listEl   = document.getElementById('comments-list-'   + commentsId);
     const inputEl  = document.getElementById('comments-input-'  + commentsId);
     const btnEl    = document.getElementById('comments-btn-'    + commentsId);
     const statusEl = document.getElementById('comments-status-' + commentsId);
     if (!listEl || !inputEl || !btnEl) return;
 
+    // Слушаем список голосов из Firestore
     const colRef = collection(db, 'anonComments', commentsId, 'comments');
-    const q = query(colRef, orderBy('createdAt', 'desc'), limit(50));
+    const q = query(colRef, orderBy('createdAt', 'desc'), limit(30));
 
-    // Realtime listener
     onSnapshot(q, snap => {
         if (snap.empty) {
             listEl.innerHTML = '<div class="anon-comment-empty">Пока никто не написал — будь первым 👇</div>';
@@ -2569,57 +2576,63 @@ function initAnonComments(commentsId) {
             const item = document.createElement('div');
             item.className = 'anon-comment-item';
             const txt = String(data.text || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-            item.innerHTML =
-                txt +
-                '<div class="anon-comment-meta">' + fmtRelative(data.createdAt) + '</div>';
+            const mins = data.createdAt ? Math.floor((Date.now() - (data.createdAt.toMillis?.() || 0)) / 60000) : null;
+            const time = mins === null ? '' : mins < 1 ? 'только что' : mins < 60 ? mins + ' мин. назад' : Math.floor(mins/60) + ' ч. назад';
+            item.innerHTML = txt + '<div class="anon-comment-meta">' + time + '</div>';
             listEl.appendChild(item);
         });
-    }, () => {
-        listEl.innerHTML = '<div class="anon-comment-empty">Ошибка загрузки 😕</div>';
     });
 
-    // Auto-resize textarea
-    inputEl.addEventListener('input', () => {
-        inputEl.style.height = 'auto';
-        inputEl.style.height = Math.min(inputEl.scrollHeight, 96) + 'px';
-    });
-
-    async function sendComment() {
+    async function sendVote() {
         const text = inputEl.value.trim();
         if (!text) return;
-        if (text.length > 300) {
-            statusEl.textContent = 'Слишком длинно (макс. 300 символов)';
-            statusEl.className = 'anon-comments__status err';
-            return;
-        }
         btnEl.disabled = true;
         statusEl.textContent = '';
+
+        // 1. Сохранить в аnonComments (показываем список)
         try {
             await addDoc(colRef, { text, createdAt: serverTimestamp() });
+        } catch(e) { /* ignore if rules deny */ }
+
+        // 2. Отправить одно сообщение в основной чат от имени пользователя (или анонимно)
+        try {
+            const u = auth.currentUser;
+            const author = u?.displayName || '(анонимно)';
+            const uid    = u?.uid || 'anon';
+            await addDoc(collection(db, 'messages'), {
+                uid,
+                author,
+                text: '🗳️ ' + text,
+                createdAt: serverTimestamp(),
+                edited: false
+            });
             inputEl.value = '';
-            inputEl.style.height = 'auto';
-            statusEl.textContent = 'Отправлено ✓';
+            statusEl.textContent = '✓ Голос отправлен в чат';
             statusEl.className = 'anon-comments__status ok';
             setTimeout(() => { statusEl.textContent = ''; statusEl.className = 'anon-comments__status'; }, 2500);
         } catch(e) {
-            statusEl.textContent = 'Не удалось отправить 😕';
+            statusEl.textContent = 'Войди в чат, чтобы голосовать';
             statusEl.className = 'anon-comments__status err';
         }
         btnEl.disabled = false;
     }
 
-    btnEl.addEventListener('click', sendComment);
+    btnEl.addEventListener('click', sendVote);
     inputEl.addEventListener('keydown', e => {
-        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendComment(); }
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendVote(); }
+    });
+    inputEl.addEventListener('input', () => {
+        inputEl.style.height = 'auto';
+        inputEl.style.height = Math.min(inputEl.scrollHeight, 96) + 'px';
     });
 }
 
-// Init all comment blocks rendered on page
 document.querySelectorAll('[id^="comments-btn-"]').forEach(btn => {
     const cid = btn.dataset.cid;
-    if (cid) initAnonComments(cid);
+    if (cid) initPollBlock(cid);
 });
 </script>
+
 
 <!-- ══════════════════════════════════════════════════════════
      РАСПИСАНИЕ — модалка
@@ -2646,14 +2659,14 @@ document.querySelectorAll('[id^="comments-btn-"]').forEach(btn => {
 </script>
 
 <!-- ══════════════════════════════════════════════════════════
-     ДЗ — Firebase
+     ДЗ — Firebase (ADMIN = пользователь с именем "ADMIN")
 ══════════════════════════════════════════════════════════ -->
 <script type="module">
 import { initializeApp, getApps }   from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
 import { getAuth, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
 import {
     getFirestore, collection, addDoc, deleteDoc, doc,
-    onSnapshot, orderBy, query, serverTimestamp
+    onSnapshot, orderBy, query, serverTimestamp, getDocs
 } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
 
 const firebaseConfig = {
@@ -2668,19 +2681,35 @@ const app  = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
 const db   = getFirestore(app);
 const auth = getAuth(app);
 
-const ADMIN_UID = 'ВСТАВЬ_UID_ADMIN_СЮДА'; // ← замени на свой UID из Firebase Console
+// ADMIN — любой кто вошёл с ником "ADMIN" (displayName === 'ADMIN')
+function isAdmin() {
+    const u = auth.currentUser;
+    return u && (u.displayName === 'ADMIN' || u.email === 'ADMIN@6a.ru');
+}
 
-const dzList    = document.getElementById('dzList');
-const dzForm    = document.getElementById('dzAdminForm');
-const dzSubject = document.getElementById('dzSubject');
-const dzTask    = document.getElementById('dzTask');
-const dzAddBtn  = document.getElementById('dzAddBtn');
+const dzList      = document.getElementById('dzList');
+const dzForm      = document.getElementById('dzAdminForm');
+const dzSubject   = document.getElementById('dzSubject');
+const dzTask      = document.getElementById('dzTask');
+const dzDueDate   = document.getElementById('dzDueDate');
+const dzAddBtn    = document.getElementById('dzAddBtn');
+const dzClearBtn  = document.getElementById('dzClearBtn');
 
 function fmtDate(ts) {
     if (!ts) return '';
     const d = ts.toDate ? ts.toDate() : new Date(ts);
     return d.toLocaleDateString('ru', { day: 'numeric', month: 'short' });
 }
+
+function fmtDue(str) {
+    if (!str) return '';
+    const d = new Date(str);
+    if (isNaN(d)) return str;
+    const opts = { weekday: 'short', day: 'numeric', month: 'short' };
+    return d.toLocaleDateString('ru', opts);
+}
+
+let isAdminMode = false;
 
 // Realtime listener
 const dzQuery = query(collection(db, 'homework'), orderBy('createdAt', 'desc'));
@@ -2694,42 +2723,39 @@ onSnapshot(dzQuery, snap => {
         const data = d.data();
         const item = document.createElement('div');
         item.className = 'dz-item';
-        const subj = String(data.subject || '').replace(/</g,'&lt;');
-        const task = String(data.task    || '').replace(/</g,'&lt;');
-        const date = fmtDate(data.createdAt);
+        const subj = String(data.subject || '').replace(/[<>&"]/g, c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
+        const task = String(data.task    || '').replace(/[<>&"]/g, c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
+        const due  = data.dueDate ? '<span class="dz-due">📅 до ' + fmtDue(data.dueDate) + '</span>' : '';
+        const addedDate = fmtDate(data.createdAt);
         item.innerHTML =
-            '<div class="dz-item-subject">' + subj + '</div>' +
+            '<div class="dz-item-subject">' + subj + due + '</div>' +
             '<div class="dz-item-task">' + task + '</div>' +
-            '<div class="dz-item-meta">' + date +
-                '<button class="dz-item-delete" data-id="' + d.id + '" style="display:none">✕ удалить</button>' +
+            '<div class="dz-item-meta">Добавлено ' + addedDate +
+                (isAdminMode ? '<button class="dz-item-delete" data-id="' + d.id + '">✕ удалить</button>' : '') +
             '</div>';
         dzList.appendChild(item);
     });
-    // Показать кнопки удаления если ADMIN
-    if (auth.currentUser && auth.currentUser.uid === ADMIN_UID) {
+    if (isAdminMode) {
         dzList.querySelectorAll('.dz-item-delete').forEach(btn => {
-            btn.style.display = 'inline';
             btn.addEventListener('click', async () => {
-                if (confirm('Удалить задание?')) {
-                    await deleteDoc(doc(db, 'homework', btn.dataset.id));
-                }
+                if (confirm('Удалить задание?')) await deleteDoc(doc(db, 'homework', btn.dataset.id));
             });
         });
     }
-}, () => {
-    dzList.innerHTML = '<div class="dz-empty">Ошибка загрузки 😕</div>';
+}, err => {
+    console.error('DZ error:', err);
+    dzList.innerHTML = '<div class="dz-empty">Ошибка загрузки 😕<br><small>' + err.message + '</small></div>';
 });
 
-// Auth — показываем форму только ADMIN
+// Auth
 onAuthStateChanged(auth, user => {
-    if (user && user.uid === ADMIN_UID) {
+    isAdminMode = !!(user && (user.displayName === 'ADMIN' || user.email === 'ADMIN@6a.ru'));
+    if (isAdminMode) {
         dzForm.classList.add('is-visible');
-        // Повторно показать кнопки удаления
-        dzList.querySelectorAll('.dz-item-delete').forEach(btn => {
-            btn.style.display = 'inline';
-        });
+        if (dzClearBtn) dzClearBtn.style.display = 'inline-flex';
     } else {
         dzForm.classList.remove('is-visible');
+        if (dzClearBtn) dzClearBtn.style.display = 'none';
     }
 });
 
@@ -2737,23 +2763,39 @@ onAuthStateChanged(auth, user => {
 async function addHomework() {
     const subject = dzSubject.value.trim();
     const task    = dzTask.value.trim();
-    if (!subject || !task) return;
+    const dueDate = dzDueDate ? dzDueDate.value : '';
+    if (!subject || !task) { alert('Заполни предмет и задание'); return; }
     dzAddBtn.disabled = true;
     try {
         await addDoc(collection(db, 'homework'), {
-            subject,
-            task,
+            subject, task,
+            dueDate: dueDate || null,
             createdAt: serverTimestamp()
         });
         dzSubject.value = '';
         dzTask.value = '';
+        if (dzDueDate) dzDueDate.value = '';
+        dzAddBtn.textContent = '✓ Добавлено';
+        setTimeout(() => { dzAddBtn.textContent = '+ Добавить'; }, 1500);
     } catch(e) { alert('Ошибка: ' + e.message); }
     dzAddBtn.disabled = false;
 }
 
+// Удалить всё (ADMIN)
+if (dzClearBtn) {
+    dzClearBtn.addEventListener('click', async () => {
+        if (!confirm('Удалить ВСЕ домашние задания?')) return;
+        const snap = await getDocs(collection(db, 'homework'));
+        await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
+        alert('Всё удалено');
+    });
+}
+
 dzAddBtn.addEventListener('click', addHomework);
-dzTask.addEventListener('keydown', e => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); addHomework(); }
+[dzSubject, dzTask].forEach(el => {
+    el && el.addEventListener('keydown', e => {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); addHomework(); }
+    });
 });
 </script>
 <!-- ══════════════════════════════════════════════════════════
