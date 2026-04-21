@@ -374,6 +374,26 @@
         .compose-shell:focus-within { border-color:rgba(94,200,255,.28); box-shadow:0 0 0 3px rgba(94,200,255,.07),var(--shadow-bubble); }
         .chat-input { flex:1; background:transparent; border:none; color:var(--text); font-family:inherit; font-size:.93rem; line-height:1.5; resize:none; min-height:24px; max-height:140px; padding:3px 0; outline:none; scrollbar-width:thin; }
         .chat-input::placeholder { color:var(--muted-soft); }
+        /* Image attach button */
+        .btn-attach { width:34px; height:34px; border-radius:50%; border:none; background:transparent; color:var(--muted); display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; transition:color var(--transition),background var(--transition); }
+        .btn-attach:hover { color:var(--accent); background:var(--accent-dim); }
+        .btn-attach svg { width:17px; height:17px; }
+        .btn-attach input[type="file"] { display:none; }
+        /* Image preview bar (above compose) */
+        .img-preview-bar { display:none; align-items:center; gap:10px; padding:8px 14px; background:var(--surface-2); border-top:1px solid var(--border); border-radius:var(--radius-sm) var(--radius-sm) 0 0; }
+        .img-preview-bar.is-visible { display:flex; }
+        .img-preview-thumb { width:52px; height:52px; border-radius:var(--radius-xs); object-fit:cover; border:1px solid var(--border); }
+        .img-preview-info { flex:1; font-size:.78rem; color:var(--muted); }
+        .img-preview-info strong { display:block; color:var(--text); font-size:.82rem; }
+        .img-preview-cancel { background:none; border:none; color:var(--muted-soft); cursor:pointer; font-size:1.1rem; padding:4px; border-radius:50%; transition:color var(--transition),background var(--transition); }
+        .img-preview-cancel:hover { color:var(--danger); background:var(--danger-dim); }
+        /* Image inside message bubble */
+        .msg-img { max-width:260px; width:100%; border-radius:var(--radius-sm); display:block; cursor:pointer; margin-bottom:4px; transition:opacity var(--transition); }
+        .msg-img:hover { opacity:.9; }
+        /* Full-screen image lightbox */
+        .img-lightbox { display:none; position:fixed; inset:0; z-index:9999; background:rgba(0,0,0,.92); backdrop-filter:blur(10px); align-items:center; justify-content:center; cursor:zoom-out; }
+        .img-lightbox.is-open { display:flex; }
+        .img-lightbox img { max-width:92vw; max-height:90vh; border-radius:var(--radius); box-shadow:0 32px 80px rgba(0,0,0,.6); }
 
         .btn-send { width:40px; height:40px; border-radius:50%; border:none; background:linear-gradient(135deg,var(--accent-strong),var(--accent)); color:var(--accent-text); display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; transition:filter var(--transition),transform .15s ease,opacity var(--transition); box-shadow:0 4px 16px var(--bubble-me-glow); }
         .btn-send:disabled{opacity:.35;cursor:default;box-shadow:none}
@@ -509,6 +529,7 @@
         .avatar-modal-backdrop.is-open{display:grid}
         .avatar-modal{width:100%;max-width:440px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:24px 22px;box-shadow:var(--shadow-card);animation:sheetPop .25s cubic-bezier(.34,1.2,.64,1)}
         .avatar-modal h3{font-family:var(--font-display);font-size:1.1rem;font-weight:800;letter-spacing:-.02em;margin-bottom:16px}
+        #avatarUploadLabel:hover{background:var(--accent-dim)}
         .avatar-current-row{display:flex;align-items:center;gap:14px;margin-bottom:18px}
         .avatar-current-big{width:56px;height:56px;border-radius:50%;display:grid;place-items:center;font-size:1.3rem;font-weight:800;color:#fff;flex-shrink:0;border:2px solid var(--border);overflow:hidden}
         .avatar-current-big img{width:100%;height:100%;object-fit:cover}
@@ -698,6 +719,11 @@
                 <div class="autodel-banner" id="autodelBanner">⏱️ <span id="autodelBannerText">Авто-удаление включено</span></div>
                 <div class="edit-banner" id="editBanner">✏️ <strong>Редактирование</strong><span>Измените текст и нажмите ✓</span><button type="button" class="banner-close" id="editBannerCancel">×</button></div>
                 <div class="reply-banner" id="replyBanner">↩️ <span>Ответ:</span><span class="reply-banner-nick" id="replyBannerNick"></span><span class="reply-banner-text" id="replyBannerText"></span><button class="banner-close" id="replyBannerClose">×</button></div>
+                <div class="img-preview-bar" id="imgPreviewBar">
+                    <img class="img-preview-thumb" id="imgPreviewThumb" src="" alt="">
+                    <div class="img-preview-info"><strong id="imgPreviewName"></strong><span id="imgPreviewSize"></span></div>
+                    <button type="button" class="img-preview-cancel" id="imgPreviewCancel" title="Отмена">✕</button>
+                </div>
                 <div class="compose-shell">
                     <div class="emoji-wrap">
                         <button type="button" class="icon-btn" id="btnEmoji" style="font-size:1.15rem">😊</button>
@@ -707,6 +733,10 @@
                         </div>
                     </div>
                     <textarea id="chatInput" class="chat-input" rows="1" placeholder="Сообщение…" maxlength="4000"></textarea>
+                    <label class="btn-attach" title="Прикрепить картинку">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                        <input type="file" id="imgFileInput" accept="image/*">
+                    </label>
                     <button type="button" class="btn-send" id="chatSend" disabled>
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z"/></svg>
                     </button>
@@ -829,7 +859,15 @@
             <h3>🖼 Выбери аватарку</h3>
             <div class="avatar-current-row">
                 <div class="avatar-current-big" id="avatarCurrentBig"></div>
-                <div style="font-size:.85rem;color:var(--muted);line-height:1.5">Текущая аватарка.<br>Выбери новую из набора ниже.</div>
+                <div style="display:flex;flex-direction:column;gap:8px">
+                    <div style="font-size:.85rem;color:var(--muted);line-height:1.5">Текущая аватарка.<br>Выбери из набора или загрузи своё фото.</div>
+                    <label style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:var(--radius-sm);border:1px dashed var(--accent);color:var(--accent);font-size:.78rem;font-weight:600;cursor:pointer;transition:background var(--transition);width:fit-content" id="avatarUploadLabel">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                        Загрузить фото
+                        <input type="file" id="avatarFileInput" accept="image/*" style="display:none">
+                    </label>
+                    <span id="avatarUploadStatus" style="font-size:.75rem;color:var(--muted)"></span>
+                </div>
             </div>
             <div class="avatar-grid" id="avatarGrid"></div>
             <div class="avatar-modal-actions">
@@ -844,6 +882,11 @@
     <div class="ctx-menu" id="ctxMenu" role="menu"></div>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <div class="reaction-picker" id="reactionPicker" style="display:none"></div>
+
+    <!-- Image lightbox -->
+    <div class="img-lightbox" id="imgLightbox">
+        <img id="imgLightboxImg" src="" alt="">
+    </div>
 
     <!-- ══════════════════════════════════════════
          FIREBASE + LOGIC
@@ -991,6 +1034,7 @@
         let sidebarDMUnsub        = null;
         let peerReadUnsub         = null;           // listener for peer's unread count
         let peerHasRead           = false;          // true = peer read our last msg
+        let pendingImageBase64    = null;           // base64 image waiting to be sent
         let rpActiveFor           = null;
         let currentChatMode       = 'group';        // 'group' | 'dm'
         let currentDMPeerUid      = null;
@@ -1121,6 +1165,92 @@
         const autodelBanner  = document.getElementById('autodelBanner');
         const autodelBannerText= document.getElementById('autodelBannerText');
         const folderBar      = document.getElementById('folderBar');
+        const imgFileInput   = document.getElementById('imgFileInput');
+        const imgPreviewBar  = document.getElementById('imgPreviewBar');
+        const imgPreviewThumb= document.getElementById('imgPreviewThumb');
+        const imgPreviewName = document.getElementById('imgPreviewName');
+        const imgPreviewSize = document.getElementById('imgPreviewSize');
+        const imgPreviewCancel=document.getElementById('imgPreviewCancel');
+        const imgLightbox    = document.getElementById('imgLightbox');
+        const imgLightboxImg = document.getElementById('imgLightboxImg');
+
+        /* ══════════════════════════════
+           IMAGE COMPRESS + PREVIEW
+        ══════════════════════════════ */
+        function compressImage(file, maxPx=900, quality=0.72) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onerror = reject;
+                reader.onload = e => {
+                    const img = new Image();
+                    img.onerror = reject;
+                    img.onload = () => {
+                        let {width:w, height:h} = img;
+                        if (w > maxPx || h > maxPx) {
+                            if (w > h) { h = Math.round(h * maxPx / w); w = maxPx; }
+                            else       { w = Math.round(w * maxPx / h); h = maxPx; }
+                        }
+                        const canvas = document.createElement('canvas');
+                        canvas.width = w; canvas.height = h;
+                        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+                        resolve(canvas.toDataURL('image/jpeg', quality));
+                    };
+                    img.src = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+
+        function fmtBytes(b) {
+            if (b < 1024) return b + ' Б';
+            if (b < 1024*1024) return (b/1024).toFixed(0) + ' КБ';
+            return (b/1024/1024).toFixed(1) + ' МБ';
+        }
+
+        function clearImagePreview() {
+            pendingImageBase64 = null;
+            imgPreviewBar.classList.remove('is-visible');
+            imgPreviewThumb.src = '';
+            imgPreviewName.textContent = '';
+            imgPreviewSize.textContent = '';
+            imgFileInput.value = '';
+            // Re-disable send if no text either
+            chatSend.disabled = !chatInput.value.trim() && !pendingImageBase64;
+        }
+
+        imgFileInput.addEventListener('change', async () => {
+            const file = imgFileInput.files[0];
+            if (!file) return;
+            if (!file.type.startsWith('image/')) { showToast('Только картинки!'); return; }
+            if (file.size > 10 * 1024 * 1024) { showToast('❌ Файл больше 10 МБ'); return; }
+            showToast('🖼 Сжимаю картинку…');
+            try {
+                const b64 = await compressImage(file);
+                // Check Firestore 900KB limit on base64
+                if (b64.length > 900_000) {
+                    const b64small = await compressImage(file, 600, 0.6);
+                    pendingImageBase64 = b64small;
+                } else {
+                    pendingImageBase64 = b64;
+                }
+                imgPreviewThumb.src = pendingImageBase64;
+                imgPreviewName.textContent = file.name;
+                const kb = Math.round(pendingImageBase64.length * 0.75 / 1024);
+                imgPreviewSize.textContent = `~${kb} КБ после сжатия`;
+                imgPreviewBar.classList.add('is-visible');
+                chatSend.disabled = false;
+            } catch(e) { showToast('❌ Не удалось обработать картинку'); }
+        });
+
+        imgPreviewCancel.addEventListener('click', clearImagePreview);
+
+        /* Lightbox */
+        function openLightbox(src) {
+            imgLightboxImg.src = src;
+            imgLightbox.classList.add('is-open');
+        }
+        imgLightbox.addEventListener('click', () => imgLightbox.classList.remove('is-open'));
+        document.addEventListener('keydown', e => { if (e.key==='Escape') imgLightbox.classList.remove('is-open'); });
 
         /* ══════════════════════════════
            THEME
@@ -1449,21 +1579,37 @@
             } catch(_){}
         }
 
-        /* Watch whether the peer has read our messages (unread[peerUid] == 0) */
+        /* Watch whether the peer has read our messages.
+           Logic: peerUnread > 0 means peer has unread msgs from us → ✓ (sent)
+                  peerUnread == 0 BUT we need to make sure peer actually opened it,
+                  not that it was just 0 from the start.
+           We track lastSentAt and only show ✓✓ if peer's unread went from >0 → 0
+           after we actually sent something this session, OR if we load and peer already read.
+        */
+        let _peerHadUnread = false; // true once we saw peerUnread > 0 in this session
+
         function startPeerReadListener(convId, peerUid) {
             if (peerReadUnsub) { peerReadUnsub(); peerReadUnsub=null; }
-            peerHasRead=false;
+            peerHasRead = false;
+            _peerHadUnread = false;
             peerReadUnsub = onSnapshot(doc(db,'dmConvs',convId), snap=>{
                 if (!snap.exists()) return;
-                const data=snap.data();
-                const peerUnread=(data.unread||{})[peerUid]??0;
-                const nowRead = peerUnread===0;
-                if (nowRead!==peerHasRead) {
-                    peerHasRead=nowRead;
-                    // Update all "my" ticks in DOM
+                const data = snap.data();
+                const peerUnread = (data.unread||{})[peerUid] ?? 0;
+                const myUnread   = (data.unread||{})[auth.currentUser?.uid||''] ?? 0;
+
+                // Track when peer gets unread msgs (we sent something)
+                if (peerUnread > 0) _peerHadUnread = true;
+
+                // ✓✓ only if peer HAD unread and now it's 0 (they opened the chat)
+                // OR if lastRead timestamp exists and is recent
+                const nowRead = _peerHadUnread && peerUnread === 0;
+
+                if (nowRead !== peerHasRead) {
+                    peerHasRead = nowRead;
                     chatMessages.querySelectorAll('.msg-read-tick').forEach(t=>{
-                        t.textContent=peerHasRead?'✓✓':'✓';
-                        t.style.color=peerHasRead?'var(--accent)':'';
+                        t.textContent = peerHasRead ? '✓✓' : '✓';
+                        t.style.color  = peerHasRead ? 'var(--accent)' : '';
                     });
                 }
             });
@@ -1809,9 +1955,12 @@
             const cur=avatarCache[u.uid]||null;
             applyAvatarToEl(avatarCurrentBig,u.uid,u.displayName,displayNick(u),cur);
             avatarGrid.innerHTML=''; selectedAvatar=cur?{...cur}:null;
+            document.getElementById('avatarUploadStatus').textContent='';
+            document.getElementById('avatarFileInput').value='';
+
             AVATAR_SET.forEach((av,i)=>{
                 const opt=document.createElement('div');
-                opt.className='avatar-option'+(selectedAvatar&&selectedAvatar.val===av.val?' is-selected':'');
+                opt.className='avatar-option'+(selectedAvatar&&selectedAvatar.type==='emoji'&&selectedAvatar.val===av.val?' is-selected':'');
                 opt.style.background=avatarGradient(u.uid+i);
                 if (av.type==='emoji'){opt.style.fontSize='1.5rem';opt.textContent=av.val;}
                 else {const img=document.createElement('img');img.src=av.val;img.alt='';opt.appendChild(img);}
@@ -1824,6 +1973,33 @@
             });
             avatarModalBackdrop.classList.add('is-open');
         }
+
+        // Handle custom photo upload for avatar
+        document.getElementById('avatarFileInput').addEventListener('change', async function() {
+            const file = this.files[0]; if (!file) return;
+            if (!file.type.startsWith('image/')) { showToast('Только картинки!'); return; }
+            if (file.size > 8 * 1024 * 1024) { showToast('❌ Файл больше 8 МБ'); return; }
+            const statusEl = document.getElementById('avatarUploadStatus');
+            statusEl.textContent = '⏳ Обрабатываю…';
+            const u = auth.currentUser; if (!u) return;
+            try {
+                // Compress to small square-ish avatar
+                const b64 = await compressImage(file, 300, 0.82);
+                const av = { type: 'img', val: b64 };
+                selectedAvatar = av;
+                // Show preview in current big avatar
+                applyAvatarToEl(avatarCurrentBig, u.uid, u.displayName, displayNick(u), av);
+                // Deselect grid items
+                avatarGrid.querySelectorAll('.avatar-option').forEach(o=>o.classList.remove('is-selected'));
+                statusEl.textContent = '✅ Фото готово — нажми «Сохранить»';
+                statusEl.style.color = 'var(--accent-3)';
+            } catch(e) {
+                statusEl.textContent = '❌ Ошибка обработки';
+                statusEl.style.color = 'var(--danger)';
+            }
+            this.value = '';
+        });
+
         avatarModalCancel.addEventListener('click',()=>avatarModalBackdrop.classList.remove('is-open'));
         avatarModalBackdrop.addEventListener('click',e=>{if(e.target===avatarModalBackdrop)avatarModalBackdrop.classList.remove('is-open');});
         avatarModalSave.addEventListener('click',async()=>{
@@ -2118,9 +2294,21 @@
             // Forwarded badge
             if (d.forwarded){const fw=document.createElement('div');fw.style.cssText='font-size:.72rem;color:var(--accent);margin-bottom:4px;font-weight:600';fw.textContent='↗️ Переслано';bubble.appendChild(fw);}
 
-            bubble.appendChild(renderMessageBody(d.text||''));
+            // Image (if any)
+            if (d.imageBase64) {
+                const msgImg = document.createElement('img');
+                msgImg.className = 'msg-img';
+                msgImg.src = d.imageBase64;
+                msgImg.alt = '🖼';
+                msgImg.loading = 'lazy';
+                msgImg.addEventListener('click', e => { e.stopPropagation(); openLightbox(d.imageBase64); });
+                bubble.appendChild(msgImg);
+            }
 
-            // URL preview (non-GIF links)
+            // Text body (skip if empty)
+            if (d.text) bubble.appendChild(renderMessageBody(d.text));
+
+            // URL preview (non-GIF links) — only if there's text
             if (d.text&&!d.text.match(GIF_URL)) buildUrlPreview(d.text, bubble);
 
             // Footer
@@ -2280,7 +2468,8 @@
         async function submitComposer(){
             const u=auth.currentUser; if (!u) return;
             let text=cleanContent(chatInput.value).trim();
-            if (!text){globalStatus.textContent='Введите текст';globalStatus.classList.add('is-error');return;}
+            const hasImg = !!pendingImageBase64;
+            if (!text && !hasImg){globalStatus.textContent='Введите текст или выберите картинку';globalStatus.classList.add('is-error');return;}
             if (!editingMessageId){
                 if (Date.now()-lastOutboundAt<SPAM_INTERVAL_MS){showToast('⏳ Не спамь!');return;}
             }
@@ -2288,23 +2477,32 @@
             globalStatus.textContent=''; globalStatus.classList.remove('is-error');
             try {
                 if (editingMessageId){
+                    // Editing — text only, no image change
                     if (currentChatMode==='group') await updateDoc(doc(db,'messages',editingMessageId),{text,edited:true});
                     else await updateDoc(doc(db,'dmConvs',currentDMConvId,'messages',editingMessageId),{text,edited:true});
                     cancelEditMessage();
                 } else {
-                    const msgData={uid:u.uid,author:displayNick(u),text,createdAt:serverTimestamp(),edited:false,
-                        ...(replyingTo?{replyTo:{id:replyingTo.id,author:replyingTo.author,text:replyingTo.text.slice(0,100)}}:{})};
+                    const msgData={
+                        uid:u.uid, author:displayNick(u),
+                        text: text || '',
+                        createdAt:serverTimestamp(), edited:false,
+                        ...(hasImg ? {imageBase64: pendingImageBase64} : {}),
+                        ...(replyingTo?{replyTo:{id:replyingTo.id,author:replyingTo.author,text:replyingTo.text.slice(0,100)}}:{})
+                    };
                     if (currentChatMode==='group'){
                         await addDoc(messagesCol,msgData);
                     } else {
                         await addDoc(collection(db,'dmConvs',currentDMConvId,'messages'),msgData);
                         const convRef=doc(db,'dmConvs',currentDMConvId);
-                        await setDoc(convRef,{lastText:text,lastAt:serverTimestamp(),[`unread.${currentDMPeerUid}`]:increment(1)},{merge:true});
+                        const previewText = hasImg ? (text ? text : '🖼 Картинка') : text;
+                        await setDoc(convRef,{lastText:previewText,lastAt:serverTimestamp(),[`unread.${currentDMPeerUid}`]:increment(1)},{merge:true});
                     }
-                    cancelReply(); lastOutboundAt=Date.now(); chatInput.value=''; chatInput.style.height='auto';
+                    cancelReply(); lastOutboundAt=Date.now();
+                    chatInput.value=''; chatInput.style.height='auto';
+                    clearImagePreview();
                 }
             } catch(e){globalStatus.textContent=e.message||String(e);globalStatus.classList.add('is-error');}
-            finally{chatSend.disabled=!chatInput.value.trim();}
+            finally{chatSend.disabled=!chatInput.value.trim()&&!pendingImageBase64;}
         }
         chatSend.addEventListener('click',submitComposer);
         chatInput.addEventListener('keydown',e=>{
@@ -2320,7 +2518,7 @@
         chatInput.addEventListener('input',()=>{
             chatInput.style.height='auto';
             chatInput.style.height=Math.min(chatInput.scrollHeight,140)+'px';
-            chatSend.disabled=!chatInput.value.trim();
+            chatSend.disabled=!chatInput.value.trim()&&!pendingImageBase64;
             if (currentChatMode==='group') scheduleTypingPing();
         });
 
@@ -2352,6 +2550,7 @@
             if (typingInterval){clearInterval(typingInterval);typingInterval=null;}
             if (peerReadUnsub){peerReadUnsub();peerReadUnsub=null;}
             peerHasRead=false;
+            clearImagePreview();
             // Clear auto-delete timers
             Object.values(autodelTimers).forEach(t=>clearTimeout(t));
             Object.keys(autodelTimers).forEach(k=>delete autodelTimers[k]);
