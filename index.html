@@ -1974,6 +1974,51 @@
         }
         .schedule-no-img-icon { font-size: 2.8rem; display: block; margin-bottom: 10px; }
 
+        /* — Кнопка загрузки расписания (ADMIN) — */
+        .schedule-upload-bar {
+            display: none;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 16px;
+            border-top: 1px solid var(--border);
+            background: rgba(94,200,255,0.04);
+        }
+        .schedule-upload-bar.is-visible { display: flex; }
+        .schedule-upload-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            padding: 7px 14px;
+            border-radius: var(--radius-sm);
+            border: 1px dashed var(--accent);
+            color: var(--accent);
+            font-size: 0.82rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background var(--transition), border-color var(--transition);
+            white-space: nowrap;
+        }
+        .schedule-upload-label:hover { background: var(--accent-dim); }
+        .schedule-upload-label input[type="file"] { display: none; }
+        .schedule-upload-status {
+            font-size: 0.8rem;
+            color: var(--muted);
+            flex: 1;
+        }
+        .schedule-upload-del {
+            padding: 7px 12px;
+            border-radius: var(--radius-sm);
+            border: 1px solid rgba(239,68,68,.3);
+            background: rgba(239,68,68,.08);
+            color: #f87171;
+            font-size: 0.8rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background var(--transition);
+            white-space: nowrap;
+        }
+        .schedule-upload-del:hover { background: rgba(239,68,68,.18); }
+
         /* — ДЗ — */
         .dz-list {
             display: flex;
@@ -2302,12 +2347,20 @@
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                 </button>
             </div>
-            <img class="schedule-modal-img" id="scheduleImg" src="raspisanie.jpg" alt="Расписание"
-                onerror="this.style.display='none';document.getElementById('scheduleNoImg').style.display='block'">
-            <div class="schedule-no-img" id="scheduleNoImg" style="display:none">
+            <!-- Admin upload bar (hidden for non-admins) -->
+            <div class="schedule-upload-bar" id="scheduleUploadBar">
+                <label class="schedule-upload-label">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    Загрузить картинку
+                    <input type="file" id="scheduleFileInput" accept="image/*">
+                </label>
+                <span class="schedule-upload-status" id="scheduleUploadStatus"></span>
+                <button class="schedule-upload-del" id="scheduleDelBtn">🗑 Удалить</button>
+            </div>
+            <img class="schedule-modal-img" id="scheduleImg" alt="Расписание" style="display:none">
+            <div class="schedule-no-img" id="scheduleNoImg">
                 <span class="schedule-no-img-icon">🗓️</span>
-                Фото расписания пока не добавлено.<br>
-                Положи файл <strong>raspisanie.jpg</strong> рядом с сайтом.
+                Фото расписания пока не добавлено.
             </div>
         </div>
     </div>
@@ -2645,27 +2698,120 @@ document.querySelectorAll('[id^="comments-btn-"]').forEach(btn => {
 
 
 <!-- ══════════════════════════════════════════════════════════
-     РАСПИСАНИЕ — модалка
+     РАСПИСАНИЕ — модалка + Firebase upload (ADMIN only)
 ══════════════════════════════════════════════════════════ -->
-<script>
-(function() {
-    const overlay = document.getElementById('scheduleOverlay');
-    const btnOpen  = document.getElementById('btnOpenSchedule');
-    const btnClose = document.getElementById('btnCloseSchedule');
-    if (!overlay || !btnOpen) return;
+<script type="module">
+import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
+import { getAuth, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
+import { getFirestore, doc, getDoc, setDoc, deleteDoc, onSnapshot }
+    from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
 
-    btnOpen.addEventListener('click', () => {
-        overlay.classList.add('is-open');
-        document.body.style.overflow = 'hidden';
-    });
-    function close() {
-        overlay.classList.remove('is-open');
-        document.body.style.overflow = '';
+const firebaseConfig = {
+    apiKey: 'AIzaSyCtVaVgIvQot9SJpwKyUKrClNwar6xX9fo',
+    authDomain: 'class6a-chat.firebaseapp.com',
+    projectId: 'class6a-chat',
+    storageBucket: 'class6a-chat.firebasestorage.app',
+    messagingSenderId: '656933440681',
+    appId: '1:656933440681:web:e7a8c2ae22181ec98f2db8'
+};
+const app  = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
+const db   = getFirestore(app);
+const auth = getAuth(app);
+
+const overlay      = document.getElementById('scheduleOverlay');
+const btnOpen      = document.getElementById('btnOpenSchedule');
+const btnClose     = document.getElementById('btnCloseSchedule');
+const scheduleImg  = document.getElementById('scheduleImg');
+const scheduleNoImg= document.getElementById('scheduleNoImg');
+const uploadBar    = document.getElementById('scheduleUploadBar');
+const fileInput    = document.getElementById('scheduleFileInput');
+const uploadStatus = document.getElementById('scheduleUploadStatus');
+const delBtn       = document.getElementById('scheduleDelBtn');
+
+const scheduleDocRef = doc(db, 'siteSettings', 'schedule');
+
+// ── Открыть / закрыть модалку ──
+function openModal()  { overlay.classList.add('is-open'); document.body.style.overflow = 'hidden'; }
+function closeModal() { overlay.classList.remove('is-open'); document.body.style.overflow = ''; }
+btnOpen.addEventListener('click', openModal);
+btnClose.addEventListener('click', closeModal);
+overlay.addEventListener('click', e => { if (e.target === overlay) closeModal(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+// ── Показать / скрыть картинку ──
+function showImage(dataUrl) {
+    scheduleImg.src = dataUrl;
+    scheduleImg.style.display = 'block';
+    scheduleNoImg.style.display = 'none';
+}
+function showNoImage() {
+    scheduleImg.src = '';
+    scheduleImg.style.display = 'none';
+    scheduleNoImg.style.display = 'block';
+}
+
+// ── Real-time слушатель — обновляет картинку для всех ──
+onSnapshot(scheduleDocRef, snap => {
+    if (snap.exists() && snap.data().imageBase64) {
+        showImage(snap.data().imageBase64);
+    } else {
+        showNoImage();
     }
-    btnClose.addEventListener('click', close);
-    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
-    document.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
-})();
+}, () => showNoImage());
+
+// ── ADMIN: проверка прав ──
+function isAdmin(user) {
+    return user && (user.displayName === 'ADMIN' || user.email === 'ADMIN@6a.ru');
+}
+
+onAuthStateChanged(auth, user => {
+    if (isAdmin(user)) {
+        uploadBar.classList.add('is-visible');
+    } else {
+        uploadBar.classList.remove('is-visible');
+    }
+});
+
+// ── ADMIN: загрузка картинки ──
+fileInput.addEventListener('change', async () => {
+    const file = fileInput.files[0];
+    if (!file) return;
+    if (file.size > 4 * 1024 * 1024) {
+        uploadStatus.textContent = '❌ Файл слишком большой (макс. 4 МБ)';
+        uploadStatus.style.color = '#f87171';
+        return;
+    }
+    uploadStatus.textContent = '⏳ Загружаю…';
+    uploadStatus.style.color = 'var(--muted)';
+    try {
+        const dataUrl = await new Promise((res, rej) => {
+            const reader = new FileReader();
+            reader.onload = () => res(reader.result);
+            reader.onerror = rej;
+            reader.readAsDataURL(file);
+        });
+        await setDoc(scheduleDocRef, { imageBase64: dataUrl, updatedAt: new Date().toISOString() });
+        uploadStatus.textContent = '✅ Расписание обновлено!';
+        uploadStatus.style.color = 'var(--accent-3)';
+        setTimeout(() => { uploadStatus.textContent = ''; }, 2500);
+    } catch(e) {
+        uploadStatus.textContent = '❌ Ошибка: ' + e.message;
+        uploadStatus.style.color = '#f87171';
+    }
+    fileInput.value = '';
+});
+
+// ── ADMIN: удалить расписание ──
+delBtn.addEventListener('click', async () => {
+    if (!confirm('Удалить картинку расписания?')) return;
+    try {
+        await deleteDoc(scheduleDocRef);
+        uploadStatus.textContent = '🗑 Удалено';
+        setTimeout(() => { uploadStatus.textContent = ''; }, 1500);
+    } catch(e) {
+        uploadStatus.textContent = '❌ ' + e.message;
+    }
+});
 </script>
 
 <!-- ══════════════════════════════════════════════════════════
