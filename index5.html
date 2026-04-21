@@ -719,9 +719,7 @@
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z"/></svg>
                     </button>
                 </div>
-                <p style="font-size:.67rem;color:var(--muted-soft);padding:4px 14px 0;display:flex;gap:16px;flex-wrap:wrap">
-                    <span>Enter — отправить</span><span>Shift+Enter — перенос строки</span><span>Ctrl+K — поиск</span><span>Ctrl+/ — горячие клавиши</span>
-                </p>
+
             </div>
         </div>
     </div>
@@ -1699,6 +1697,7 @@
         /* ══════════════════════════════
            WATCHDM / ONLINE
         ══════════════════════════════ */
+        let _sidebarDebounceTimer = null;
         function watchDMBadge() {
             const u=auth.currentUser; if (!u) return;
             if (sidebarDMUnsub) sidebarDMUnsub();
@@ -1716,7 +1715,8 @@
                     });
                     items.sort((a,b)=>(b.lastAt?.toMillis?.()??0)-(a.lastAt?.toMillis?.()??0));
                     sidebarItems=items;
-                    buildSidebarList(sidebarSearch.value);
+                    clearTimeout(_sidebarDebounceTimer);
+                    _sidebarDebounceTimer = setTimeout(()=>buildSidebarList(sidebarSearch.value), 300);
                 }
             );
         }
@@ -1758,7 +1758,8 @@
                     if (v.uid!==myUid) pill.addEventListener('click',()=>openDMWith(v.uid,v.n));
                     onlineBar.appendChild(pill);
                 });
-                buildSidebarList(sidebarSearch.value);
+                clearTimeout(_sidebarDebounceTimer);
+                _sidebarDebounceTimer = setTimeout(()=>buildSidebarList(sidebarSearch.value), 300);
             });
             return ()=>{ clearInterval(pingTimer); if(onlineUnsub)onlineUnsub(); };
         }
@@ -2381,7 +2382,7 @@
             try{const s=await getDoc(doc(db,'users',user.uid));if(s.exists()&&s.data().banned===true){showBanned();return;}}catch(e){console.warn('ban check',e);}
             _banUnsub=onSnapshot(doc(db,'users',user.uid),snap=>{if(snap.exists()&&snap.data().banned===true)showBanned();});
             // Save user doc
-            try{const u=auth.currentUser;if(u)await setDoc(doc(db,'users',u.uid),{displayName:displayNick(u),uid:u.uid,email:u.email||''},{merge:true});}catch(_){}
+            try{const u=auth.currentUser;if(u){const snap=await getDoc(doc(db,'users',u.uid));if(!snap.exists()){await setDoc(doc(db,'users',u.uid),{displayName:displayNick(u),uid:u.uid,email:u.email||'',stars:0,createdAt:serverTimestamp(),lastSeen:serverTimestamp(),banned:false});}else{await setDoc(doc(db,'users',u.uid),{displayName:displayNick(u),uid:u.uid,email:u.email||''},{merge:true});}}}catch(_){}
             // Check admin
             userIsAdmin = ADMIN_UIDS.has(user.uid);
             // Load cached avatar
