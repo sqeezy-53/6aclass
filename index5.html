@@ -638,16 +638,8 @@
             <div class="sidebar-footer">
                 <div class="sidebar-user-av" id="sidebarUserAv" title="Профиль"></div>
                 <span class="sidebar-user-name" id="sidebarUserName" title="Профиль"></span>
-                <button type="button" class="icon-btn" id="btnAvatarPicker" title="Аватарка" style="width:30px;height:30px">
+                <button type="button" class="icon-btn" id="btnAvatarPicker" title="Аккаунт" style="width:30px;height:30px">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
-                </button>
-                <button type="button" class="theme-toggle icon-btn" id="themeToggle" title="Сменить тему" style="width:30px;height:30px;position:relative">
-                    <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;position:absolute;transition:opacity .28s,transform .4s cubic-bezier(.34,1.56,.64,1)">
-                        <circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
-                    </svg>
-                    <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;position:absolute;transition:opacity .28s,transform .4s cubic-bezier(.34,1.56,.64,1)">
-                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
-                    </svg>
                 </button>
                 <button type="button" class="icon-btn" id="btnLogout" title="Выйти" style="width:30px;height:30px">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
@@ -714,7 +706,7 @@
                             <div class="emoji-grid-wrap"><div class="emoji-grid" id="emojiGrid"></div></div>
                         </div>
                     </div>
-                    <textarea id="chatInput" class="chat-input" rows="1" placeholder="Сообщение… (Enter — отправить)" maxlength="4000"></textarea>
+                    <textarea id="chatInput" class="chat-input" rows="1" placeholder="Сообщение…" maxlength="4000"></textarea>
                     <button type="button" class="btn-send" id="chatSend" disabled>
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z"/></svg>
                     </button>
@@ -743,9 +735,10 @@
         <div class="modal-box">
             <h3>👤 Профиль</h3>
             <div class="profile-av-row">
-                <div class="profile-av-big" id="profileAvBig" title="Сменить аватарку"></div>
-                <div>
+                <div class="profile-av-big" id="profileAvBig" title="Сменить аватарку" style="cursor:pointer"></div>
+                <div style="display:flex;flex-direction:column;gap:8px">
                     <div style="font-size:.82rem;color:var(--muted);line-height:1.5">Нажми на аватарку, чтобы сменить её.<br>Ник виден всем участникам чата.</div>
+                    <button type="button" class="btn btn-ghost" id="btnChangeAvatarInProfile" style="padding:7px 12px;font-size:.8rem;width:fit-content">🖼 Сменить аватарку</button>
                 </div>
             </div>
             <div class="modal-field">
@@ -996,6 +989,8 @@
         let selectedAvatar        = null;
         let onlineUnsub           = null;
         let sidebarDMUnsub        = null;
+        let peerReadUnsub         = null;           // listener for peer's unread count
+        let peerHasRead           = false;          // true = peer read our last msg
         let rpActiveFor           = null;
         let currentChatMode       = 'group';        // 'group' | 'dm'
         let currentDMPeerUid      = null;
@@ -1144,10 +1139,6 @@
             if (sun) { sun.style.opacity = isDark?'1':'0'; sun.style.transform = isDark?'scale(1)':'scale(0.4) rotate(-90deg)'; sun.style.color='var(--accent)'; }
             if (moon) { moon.style.opacity = isDark?'0':'1'; moon.style.transform = isDark?'scale(0.4) rotate(90deg)':'scale(1)'; moon.style.color='var(--accent)'; }
         }
-        document.getElementById('themeToggle').addEventListener('click', () => {
-            const cur = document.documentElement.getAttribute('data-theme')||'dark';
-            setTheme(cur==='dark'?'light':'dark');
-        });
         new MutationObserver(updateThemeIcons).observe(document.documentElement, {attributes:true,attributeFilter:['data-theme']});
         updateThemeIcons();
 
@@ -1449,6 +1440,35 @@
         ══════════════════════════════ */
         function dmConvId(uid1, uid2) { return [uid1,uid2].sort().join('_'); }
 
+        /* Mark DM as read for current user */
+        async function markDMRead() {
+            const u=auth.currentUser;
+            if (!u||currentChatMode!=='dm'||!currentDMConvId) return;
+            try {
+                await updateDoc(doc(db,'dmConvs',currentDMConvId),{[`unread.${u.uid}`]:0});
+            } catch(_){}
+        }
+
+        /* Watch whether the peer has read our messages (unread[peerUid] == 0) */
+        function startPeerReadListener(convId, peerUid) {
+            if (peerReadUnsub) { peerReadUnsub(); peerReadUnsub=null; }
+            peerHasRead=false;
+            peerReadUnsub = onSnapshot(doc(db,'dmConvs',convId), snap=>{
+                if (!snap.exists()) return;
+                const data=snap.data();
+                const peerUnread=(data.unread||{})[peerUid]??0;
+                const nowRead = peerUnread===0;
+                if (nowRead!==peerHasRead) {
+                    peerHasRead=nowRead;
+                    // Update all "my" ticks in DOM
+                    chatMessages.querySelectorAll('.msg-read-tick').forEach(t=>{
+                        t.textContent=peerHasRead?'✓✓':'✓';
+                        t.style.color=peerHasRead?'var(--accent)':'';
+                    });
+                }
+            });
+        }
+
         async function openDMWith(peerUid, peerName) {
             const u = auth.currentUser; if (!u) return;
             if (currentChatMode==='dm'&&currentDMPeerUid===peerUid) return;
@@ -1469,7 +1489,7 @@
             buildSidebarList(sidebarSearch.value);
             tearDownChat();
 
-            // Ensure conversation document exists
+            // Ensure conversation document exists + mark as read
             const convRef=doc(db,'dmConvs',currentDMConvId);
             try {
                 await setDoc(convRef,{members:[u.uid,peerUid],names:{[u.uid]:displayNick(u),[peerUid]:peerName}},{merge:true});
@@ -1479,9 +1499,10 @@
             // Subscribe DM messages
             const msgsQ = query(collection(db,'dmConvs',currentDMConvId,'messages'),orderBy('createdAt','asc'),limit(100));
             messagesUnsub = onSnapshot(msgsQ,
-                snap=>{ globalStatus.textContent=''; globalStatus.classList.remove('is-error'); updateMessagesDOM(snap); },
+                snap=>{ globalStatus.textContent=''; globalStatus.classList.remove('is-error'); updateMessagesDOM(snap); markDMRead(); },
                 ()=>{ globalStatus.textContent='Не удалось загрузить сообщения.'; globalStatus.classList.add('is-error'); }
             );
+            startPeerReadListener(currentDMConvId, peerUid);
             updateAutodelBanner(currentDMConvId);
             animateChatOpen();
         }
@@ -1553,6 +1574,7 @@
             document.getElementById('profileModal').classList.add('is-open');
         }
         document.getElementById('profileAvBig').addEventListener('click', openAvatarModal);
+        document.getElementById('btnChangeAvatarInProfile').addEventListener('click', openAvatarModal);
         document.querySelectorAll('.status-chip').forEach(c=>c.addEventListener('click',()=>{
             document.querySelectorAll('.status-chip').forEach(x=>x.classList.remove('is-active'));
             c.classList.add('is-active');
@@ -1578,7 +1600,7 @@
         // Open profile on click on sidebar user
         sidebarUserAv.addEventListener('click', openProfileModal);
         sidebarUserName.addEventListener('click', openProfileModal);
-        document.getElementById('btnAvatarPicker').addEventListener('click', openAvatarModal);
+        document.getElementById('btnAvatarPicker').addEventListener('click', openProfileModal);
 
         /* ══════════════════════════════
            CONFIRM MODAL
@@ -1988,8 +2010,8 @@
             else if (!isNearBottom(chatMessages)){scrollDownFab.classList.remove('hidden');scrollDownBadge.classList.add('hidden');}
             else{scrollDownFab.classList.add('hidden');scrollDownBadge.classList.add('hidden');}
         }
-        scrollDownFab.addEventListener('click',()=>{unreadBelow=0;stickToBottom=true;chatMessages.scrollTo({top:chatMessages.scrollHeight,behavior:'smooth'});updateScrollFab();});
-        chatMessages.addEventListener('scroll',()=>{const near=isNearBottom(chatMessages);stickToBottom=near;if(near)unreadBelow=0;updateScrollFab();});
+        scrollDownFab.addEventListener('click',()=>{unreadBelow=0;stickToBottom=true;chatMessages.scrollTo({top:chatMessages.scrollHeight,behavior:'smooth'});updateScrollFab();markDMRead();});
+        chatMessages.addEventListener('scroll',()=>{const near=isNearBottom(chatMessages);stickToBottom=near;if(near){unreadBelow=0;markDMRead();}updateScrollFab();});
 
         /* ══════════════════════════════
            RENDER MESSAGE ROW
@@ -2105,7 +2127,7 @@
             const foot=document.createElement('div'); foot.className='msg-footer';
             const timeSpan=document.createElement('span'); timeSpan.textContent=formatTime2(d.createdAt); foot.appendChild(timeSpan);
             if (d.edited){const ed=document.createElement('span');ed.className='msg-edited';ed.textContent='(изм.)';foot.appendChild(ed);}
-            if (isMe){const tick=document.createElement('span');tick.className='msg-read-tick';tick.textContent='✓';foot.appendChild(tick);}
+            if (isMe&&currentChatMode==='dm'){const tick=document.createElement('span');tick.className='msg-read-tick';tick.textContent=peerHasRead?'✓✓':'✓';tick.style.color=peerHasRead?'var(--accent)':'';foot.appendChild(tick);}
             bubble.appendChild(foot);
             stack.appendChild(bubble);
 
@@ -2328,6 +2350,8 @@
             if (messagesUnsub){messagesUnsub();messagesUnsub=null;}
             if (typingUnsub){typingUnsub();typingUnsub=null;}
             if (typingInterval){clearInterval(typingInterval);typingInterval=null;}
+            if (peerReadUnsub){peerReadUnsub();peerReadUnsub=null;}
+            peerHasRead=false;
             // Clear auto-delete timers
             Object.values(autodelTimers).forEach(t=>clearTimeout(t));
             Object.keys(autodelTimers).forEach(k=>delete autodelTimers[k]);
