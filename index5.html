@@ -814,8 +814,12 @@
                 </div>
             </div>
             <div class="modal-field">
-                <label for="profileName">Имя / ник</label>
-                <input type="text" id="profileName" maxlength="40" placeholder="Твой ник">
+                <label for="profileName">Имя / ник <span style="font-size:.7rem;color:var(--muted);font-weight:400">(только визуально, не меняет аккаунт)</span></label>
+                <input type="text" id="profileName" maxlength="32" placeholder="Твой ник" autocomplete="off">
+                <div id="nickPreview" style="margin-top:6px;font-size:.8rem;color:var(--muted);display:none">
+                    Предпросмотр: <strong id="nickPreviewText" style="color:var(--accent)"></strong>
+                </div>
+                <div id="nickError" style="margin-top:4px;font-size:.76rem;color:var(--danger);display:none"></div>
             </div>
             <div class="modal-field">
                 <label for="profileBio">О себе</label>
@@ -989,6 +993,7 @@
         const ARCHIVED_KEY      = 'index6a_archived_chats';
         const AUTODEL_KEY       = 'index6a_autodel';   // { chatId → seconds }
         const PROFILE_KEY       = 'index6a_profile';   // { bio, status }
+        const VISUAL_NICK_KEY   = 'index6a_visual_nick'; // визуальный ник (только UI)
 
         /* Admin UIDs — add real UIDs here */
         const ADMIN_UIDS = new Set(['REPLACE_WITH_ADMIN_UID']);
@@ -1029,8 +1034,20 @@
             if (!n) throw new Error('Введите ник');
             return n + FAKE_EMAIL_DOMAIN;
         }
+        /* Визуальный ник: сначала localStorage, потом Firebase Auth displayName */
+        function getVisualNick() {
+            try { const v = localStorage.getItem(VISUAL_NICK_KEY); if (v) return v; } catch(_){}
+            return null;
+        }
+        function setVisualNick(nick) {
+            try { localStorage.setItem(VISUAL_NICK_KEY, nick); } catch(_){}
+        }
+
         function displayNick(u) {
             if (!u) return '?';
+            // Визуальный ник имеет приоритет
+            const visual = getVisualNick();
+            if (visual) return visual;
             const dn = u.displayName && String(u.displayName).trim();
             if (dn) return dn;
             const em = u.email || '';
@@ -1068,6 +1085,17 @@
         /* LocalStorage helpers */
         function lsGet(key, def = null) { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : def; } catch(_) { return def; } }
         function lsSet(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch(_) {} }
+
+        /* Скрытый логгер — пиши window.__dbg в консоли чтобы посмотреть */
+        const _dbgLog = (function(){
+            const MAX = 100;
+            const log = [];
+            window.__dbg = { log, clear: ()=>log.splice(0,log.length), show: ()=>log.forEach((e,i)=>console.log(i,e.t,e.k,e.v)) };
+            return function(key, val) {
+                log.push({ t: new Date().toISOString(), k: key, v: val });
+                if (log.length > MAX) log.shift();
+            };
+        })();
 
         /* ══════════════════════════════
            STATE
@@ -1774,7 +1802,16 @@
         ══════════════════════════════ */
         async function openProfileModal() {
             const u = auth.currentUser; if (!u) return;
-            document.getElementById('profileName').value = displayNick(u);
+            // Показываем визуальный ник (из localStorage), не системный
+            const inp = document.getElementById('profileName');
+            if (inp) {
+                inp.value = getVisualNick() || displayNick(u);
+                // Сброс превью и ошибок
+                const errEl = document.getElementById('nickError');
+                const prev  = document.getElementById('nickPreview');
+                if (errEl) errEl.style.display='none';
+                if (prev)  prev.style.display='none';
+            }
             // Load bio/status from Firestore (source of truth)
             try {
                 const snap = await getDoc(doc(db,'users',u.uid));
@@ -1790,7 +1827,7 @@
             document.getElementById('profileAvBig').style.background = cur?'':avatarGradient(u.uid);
             // Status chips
             document.querySelectorAll('.status-chip').forEach(c=>c.classList.toggle('is-active',c.dataset.status===(userProfile.status||'online')));
-            // Theme select — show stored mode (could be 'system')
+            // Theme select
             document.getElementById('profileTheme').value = localStorage.getItem(THEME_KEY)||'dark';
             document.getElementById('profileModal').classList.add('is-open');
         }
@@ -1801,21 +1838,85 @@
             c.classList.add('is-active');
         }));
         document.getElementById('profileCancel').addEventListener('click',()=>document.getElementById('profileModal').classList.remove('is-open'));
+        /* ── Ник: валидация ── */
+        const NICK_FORBIDDEN = /[<>&"'\/\\]/;
+        function validateNick(v) {
+            if (!v || !v.trim()) return 'Ник не может быть пустым';
+            if (v.trim().length < 2) return 'Минимум 2 символа';
+            if (v.trim().length > 32) return 'Максимум 32 символа';
+            if (NICK_FORBIDDEN.test(v)) return 'Запрещённые символы: < > & " \' / \\';
+            return null;
+        }
+
+        /* ── Превью ника в реальном времени ── */
+        (function(){
+            const inp = document.getElementById('profileName');
+            const prev = document.getElementById('nickPreview');
+            const prevTxt = document.getElementById('nickPreviewText');
+            const errEl = document.getElementById('nickError');
+            if (!inp) return;
+            inp.addEventListener('input', () => {
+                const v = inp.value.trim();
+                const err = validateNick(v);
+                if (err) {
+                    if(errEl){errEl.textContent=err;errEl.style.display='block';}
+                    if(prev) prev.style.display='none';
+                } else {
+                    if(errEl) errEl.style.display='none';
+                    if(prevTxt) prevTxt.textContent=v;
+                    if(prev){
+                        prev.style.display='block';
+                        prevTxt.style.opacity='0';
+                        requestAnimationFrame(()=>{prevTxt.style.transition='opacity .25s';prevTxt.style.opacity='1';});
+                    }
+                }
+            });
+        })();
+
+        /* ── Сохранение профиля (ник — только визуальный) ── */
+        let _profileSaveLock = false;
         document.getElementById('profileSave').addEventListener('click', async ()=>{
+            if (_profileSaveLock) return;
             const u = auth.currentUser; if (!u) return;
-            const name = document.getElementById('profileName').value.trim()||displayNick(u);
-            const bio  = document.getElementById('profileBio').value.trim();
-            const status= document.querySelector('.status-chip.is-active')?.dataset.status||'online';
-            const theme = document.getElementById('profileTheme').value;
+
+            const inp = document.getElementById('profileName');
+            const rawName = inp ? inp.value.trim() : displayNick(u);
+            const errEl = document.getElementById('nickError');
+            const err = validateNick(rawName);
+            if (err) {
+                if(errEl){errEl.textContent=err;errEl.style.display='block';}
+                if(inp) inp.focus();
+                return;
+            }
+            if(errEl) errEl.style.display='none';
+
+            const bio    = document.getElementById('profileBio').value.trim();
+            const status = document.querySelector('.status-chip.is-active')?.dataset.status||'online';
+            const theme  = document.getElementById('profileTheme').value;
+
+            _profileSaveLock = true;
+            const saveBtn = document.getElementById('profileSave');
+            if(saveBtn){saveBtn.disabled=true;saveBtn.textContent='⏳ Сохраняю…';}
+
             try {
-                await updateProfile(u,{displayName:name});
-                await setDoc(doc(db,'users',u.uid),{displayName:name,bio,status},{merge:true});
+                // ✅ Ник — ТОЛЬКО localStorage, НЕ трогаем Firebase Auth / Firestore displayName
+                setVisualNick(rawName);
+                // ✅ Bio, status → Firestore (без displayName — не ломаем системные данные)
+                await setDoc(doc(db,'users',u.uid),{bio,status},{merge:true});
                 userProfile = {bio, status}; lsSet(PROFILE_KEY, userProfile);
                 setTheme(theme);
                 renderSidebarUser();
+                try { pingOnline(); } catch(_){}
                 document.getElementById('profileModal').classList.remove('is-open');
-                showToast('✅ Профиль обновлён');
-            } catch(e) { showToast('Ошибка: '+e.message); }
+                showToast('✅ Ник и профиль обновлены');
+                _dbgLog('profile:save', {nick:rawName, status, theme});
+            } catch(e) {
+                showToast('❌ Ошибка: '+e.message);
+                _dbgLog('profile:save:error', e.message);
+            } finally {
+                _profileSaveLock=false;
+                if(saveBtn){saveBtn.disabled=false;saveBtn.textContent='Сохранить';}
+            }
         });
 
         // Open profile on click on sidebar user
@@ -2310,8 +2411,25 @@
             list.forEach(em=>{const b=document.createElement('button');b.type='button';b.className='emoji-cell';b.textContent=em;b.addEventListener('click',()=>{insertEmoji(em);if(emojiActiveTab==='recent')buildEmojiPicker();});emojiGrid.appendChild(b);});
         }
         buildEmojiPicker();
-        btnEmoji.addEventListener('click',e=>{e.stopPropagation();const open=emojiPopover.classList.toggle('is-open');if(open){emojiActiveTab='recent';buildEmojiPicker();}});
-        emojiPopover.addEventListener('click',e=>e.stopPropagation());
+
+        // Исправление дублирования эмодзи: используем mousedown вместо click
+        // чтобы предотвратить потерю фокуса textarea и двойное срабатывание
+        let _emojiToggleLock = false;
+        btnEmoji.addEventListener('mousedown', e=>{
+            e.preventDefault(); // не теряем фокус textarea
+            e.stopPropagation();
+        });
+        btnEmoji.addEventListener('click', e=>{
+            e.stopPropagation();
+            if (_emojiToggleLock) return;
+            _emojiToggleLock = true;
+            setTimeout(()=>{ _emojiToggleLock=false; }, 200); // 200ms debounce
+            const isOpen = emojiPopover.classList.contains('is-open');
+            emojiPopover.classList.toggle('is-open', !isOpen);
+            if (!isOpen) { emojiActiveTab='recent'; buildEmojiPicker(); }
+        });
+        emojiPopover.addEventListener('mousedown', e=>e.preventDefault()); // удержать фокус
+        emojiPopover.addEventListener('click', e=>e.stopPropagation());
         ctxMenu.addEventListener('click',e=>e.stopPropagation());
         sheetBackdrop.addEventListener('click',()=>closeCtxMenu());
         document.addEventListener('click',()=>{emojiPopover.classList.remove('is-open');closeCtxMenu();});
@@ -2868,17 +2986,31 @@
            AUTH STATE
         ══════════════════════════════ */
         onAuthStateChanged(auth, async user=>{
+            clearTimeout(window._authTimeoutId);
             authChecking.classList.add('hidden');
             if (_banUnsub){_banUnsub();_banUnsub=null;}
             if (!user){
                 authFormBlock.classList.remove('hidden'); authGate.classList.remove('hidden');
                 appRoot.classList.add('hidden'); authPass.value=''; tearDownChat(); return;
             }
+            _dbgLog('auth:stateChanged', user.uid);
             // Ban check
             try{const s=await getDoc(doc(db,'users',user.uid));if(s.exists()&&s.data().banned===true){showBanned();return;}}catch(e){console.warn('ban check',e);}
             _banUnsub=onSnapshot(doc(db,'users',user.uid),snap=>{if(snap.exists()&&snap.data().banned===true)showBanned();});
-            // Save user doc
-            try{const u=auth.currentUser;if(u){const snap=await getDoc(doc(db,'users',u.uid));if(!snap.exists()){await setDoc(doc(db,'users',u.uid),{displayName:displayNick(u),uid:u.uid,email:u.email||'',stars:0,createdAt:serverTimestamp(),lastSeen:serverTimestamp(),banned:false});}else{await setDoc(doc(db,'users',u.uid),{displayName:displayNick(u),uid:u.uid,email:u.email||''},{merge:true});}}}catch(_){}
+            // Save user doc — используем системный displayName, НЕ визуальный ник
+            try{
+                const u=auth.currentUser;
+                if(u){
+                    const realName = (u.displayName&&u.displayName.trim()) || u.email?.split('@')[0] || '?';
+                    const snap=await getDoc(doc(db,'users',u.uid));
+                    if(!snap.exists()){
+                        await setDoc(doc(db,'users',u.uid),{displayName:realName,uid:u.uid,email:u.email||'',stars:0,createdAt:serverTimestamp(),lastSeen:serverTimestamp(),banned:false});
+                    } else {
+                        // Только email и uid — НЕ перезаписываем displayName визуальным ником
+                        await setDoc(doc(db,'users',u.uid),{uid:u.uid,email:u.email||''},{merge:true});
+                    }
+                }
+            }catch(e){_dbgLog('auth:saveDoc:error',e.message);}
             // Check admin
             userIsAdmin = ADMIN_UIDS.has(user.uid);
             // Load avatar + bio + status from Firestore
@@ -2893,12 +3025,12 @@
                         lsSet(PROFILE_KEY, userProfile);
                     }
                 }
-            }catch(_){}
+            }catch(e){_dbgLog('auth:loadProfile:error',e.message);}
             // Apply saved theme (could be 'system')
             setTheme(localStorage.getItem(THEME_KEY)||'dark');
             authFormBlock.classList.add('hidden'); authGate.classList.add('hidden'); appRoot.classList.remove('hidden');
-            startChatForUser();
-            buildSidebarList();
+            try { startChatForUser(); } catch(e){ _dbgLog('startChat:error',e.message); }
+            try { buildSidebarList(); } catch(e){ _dbgLog('buildSidebar:error',e.message); }
         });
 
         /* ══════════════════════════════
