@@ -388,7 +388,7 @@
         .img-preview-cancel { background:none; border:none; color:var(--muted-soft); cursor:pointer; font-size:1.1rem; padding:4px; border-radius:50%; transition:color var(--transition),background var(--transition); }
         .img-preview-cancel:hover { color:var(--danger); background:var(--danger-dim); }
         /* Image inside message bubble */
-        .msg-img { max-width:260px; width:100%; border-radius:var(--radius-sm); display:block; cursor:pointer; margin-bottom:4px; transition:opacity var(--transition); }
+        .msg-img { max-width:100%; width:auto; max-height:320px; border-radius:var(--radius-sm); display:block; cursor:pointer; margin-bottom:4px; transition:opacity var(--transition); object-fit:cover; }
         .msg-img:hover { opacity:.9; }
         /* Full-screen image lightbox */
         .img-lightbox { display:none; position:fixed; inset:0; z-index:9999; background:rgba(0,0,0,.92); backdrop-filter:blur(10px); align-items:center; justify-content:center; cursor:zoom-out; }
@@ -596,17 +596,25 @@
         .sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:8}
 
         @media(max-width:768px){
-            :root{--sidebar-w:80vw}
+            :root{--sidebar-w:85vw}
             .tg-sidebar{position:fixed;top:0;left:0;height:100%;z-index:9;transform:translateX(-100%);transition:transform var(--transition-slow)}
             .tg-sidebar.is-open{transform:translateX(0);animation:slideInLeft .3s cubic-bezier(.4,0,.2,1)}
             .burger-btn{display:flex}
             .sidebar-overlay.is-on{display:block}
-            .chat-messages{padding:16px 14px 24px}
-            .header-search-wrap{max-width:140px}
+            .chat-messages{padding:16px 10px 24px}
+            .header-search-wrap{display:none}
+            .tg-header-actions .icon-btn:not(#btnChatInfo){display:none}
+            .online-bar{overflow-x:auto;-webkit-overflow-scrolling:touch;flex-wrap:nowrap}
+            .emoji-popover{width:min(320px,92vw);left:50%;transform:translateX(-50%);bottom:calc(100% + 8px)}
+            .compose-shell{padding:6px 6px 6px 10px;gap:5px}
+            .btn-voice,.btn-attach{width:30px;height:30px}
+            .btn-send{width:36px;height:36px}
         }
         @media(max-width:480px){
-            .msg-stack{max-width:88%}
+            .msg-stack{max-width:90%}
             .auth-card{padding:28px 22px}
+            .msg-img{max-width:100%}
+            .sidebar-footer{padding:8px 10px}
         }
         @media(prefers-reduced-motion:reduce){
             .msg-row,.typing-dots span,.ctx-menu,.auth-card,.emoji-popover{animation:none !important}
@@ -1808,11 +1816,19 @@
             const status= document.querySelector('.status-chip.is-active')?.dataset.status||'online';
             const theme = document.getElementById('profileTheme').value;
             try {
+                // 1. Update Firebase Auth display name
                 await updateProfile(u,{displayName:name});
+                // 2. Update Firestore user doc
                 await setDoc(doc(db,'users',u.uid),{displayName:name,bio,status},{merge:true});
+                // 3. Update local profile state
                 userProfile = {bio, status}; lsSet(PROFILE_KEY, userProfile);
+                // 4. Apply theme
                 setTheme(theme);
+                // 5. Re-render sidebar name & avatar
                 renderSidebarUser();
+                // 6. Update presence so online bar shows new name
+                pingOnline();
+                // 7. Close modal
                 document.getElementById('profileModal').classList.remove('is-open');
                 showToast('✅ Профиль обновлён');
             } catch(e) { showToast('Ошибка: '+e.message); }
@@ -1976,6 +1992,7 @@
         function startOnlineBar() {
             pingOnline();
             const pingTimer=setInterval(pingOnline,15000);
+            const STATUS_COLOR={online:'#22c55e',away:'#f59e0b',dnd:'#ef4444',invisible:'#6b7280'};
             onlineUnsub=onSnapshot(presenceRef,snap=>{
                 if (!snap.exists()) return;
                 const users=snap.data().users||{};
@@ -1993,12 +2010,15 @@
                     const pill=document.createElement('button'); pill.className='online-pill'; pill.type='button';
                     const av=document.createElement('span'); av.className='online-pill-av';
                     applyAvatarToEl(av,v.uid,v.n,v.n,avatarCache[v.uid]||null);
-                    av.style.background=avatarGradient(v.uid);
+                    if (!avatarCache[v.uid]) av.style.background=avatarGradient(v.uid);
                     pill.appendChild(av);
-                    const dot=document.createElement('span'); dot.className='online-dot'; pill.appendChild(dot);
+                    const dot=document.createElement('span'); dot.className='online-dot';
+                    dot.style.background=STATUS_COLOR[v.status||'online']||STATUS_COLOR.online;
+                    pill.appendChild(dot);
                     const myUid=auth.currentUser?.uid||'';
                     const nameEl=document.createElement('span'); nameEl.textContent=v.uid===myUid?v.n+' (ты)':v.n; pill.appendChild(nameEl);
-                    if (v.uid!==myUid) pill.addEventListener('click',()=>openDMWith(v.uid,v.n));
+                    if (v.uid!==myUid) pill.addEventListener('click',()=>openUserProfile(v.uid,v.n));
+                    else pill.style.cursor='default';
                     onlineBar.appendChild(pill);
                 });
                 clearTimeout(_sidebarDebounceTimer);
@@ -2310,8 +2330,14 @@
             list.forEach(em=>{const b=document.createElement('button');b.type='button';b.className='emoji-cell';b.textContent=em;b.addEventListener('click',()=>{insertEmoji(em);if(emojiActiveTab==='recent')buildEmojiPicker();});emojiGrid.appendChild(b);});
         }
         buildEmojiPicker();
-        btnEmoji.addEventListener('click',e=>{e.stopPropagation();const open=emojiPopover.classList.toggle('is-open');if(open){emojiActiveTab='recent';buildEmojiPicker();}});
+        btnEmoji.addEventListener('click',e=>{
+            e.stopPropagation();
+            const open=!emojiPopover.classList.contains('is-open');
+            emojiPopover.classList.toggle('is-open', open);
+            if(open){emojiActiveTab='recent';buildEmojiPicker();}
+        });
         emojiPopover.addEventListener('click',e=>e.stopPropagation());
+        emojiPopover.addEventListener('mousedown',e=>e.preventDefault()); // prevent textarea blur
         ctxMenu.addEventListener('click',e=>e.stopPropagation());
         sheetBackdrop.addEventListener('click',()=>closeCtxMenu());
         document.addEventListener('click',()=>{emojiPopover.classList.remove('is-open');closeCtxMenu();});
@@ -2902,7 +2928,126 @@
         });
 
         /* ══════════════════════════════
-           FIRESTORE SECURITY RULES (copy to Firebase Console)
+           ФИШКА: Свайп влево → ответить (мобильный)
+        ══════════════════════════════ */
+        (function(){
+            let touchStartX=0, touchStartY=0, swipeRow=null;
+            chatMessages.addEventListener('touchstart',e=>{
+                const row=e.target.closest('.msg-row');
+                if (!row||row.classList.contains('msg-row--me')) return;
+                touchStartX=e.touches[0].clientX;
+                touchStartY=e.touches[0].clientY;
+                swipeRow=row;
+            },{passive:true});
+            chatMessages.addEventListener('touchmove',e=>{
+                if (!swipeRow) return;
+                const dx=e.touches[0].clientX-touchStartX;
+                const dy=Math.abs(e.touches[0].clientY-touchStartY);
+                if (dy>30){swipeRow=null;return;}
+                if (dx>0&&dx<80) swipeRow.style.transform=`translateX(${dx*0.4}px)`;
+            },{passive:true});
+            chatMessages.addEventListener('touchend',e=>{
+                if (!swipeRow) return;
+                const dx=e.changedTouches[0].clientX-touchStartX;
+                swipeRow.style.transform='';
+                if (dx>45){
+                    const msgId=swipeRow.dataset.msgId;
+                    const author=swipeRow.querySelector('.msg-author')?.textContent||'';
+                    const text=swipeRow.dataset.plain||'';
+                    if (msgId) startReply(msgId,author,text);
+                }
+                swipeRow=null;
+            },{passive:true});
+        })();
+
+        /* ══════════════════════════════
+           ФИШКА: Двойной тап → реакция ❤️
+        ══════════════════════════════ */
+        (function(){
+            let lastTap=0, lastTapEl=null;
+            chatMessages.addEventListener('touchend',e=>{
+                const bubble=e.target.closest('.msg-bubble');
+                if (!bubble) return;
+                const now=Date.now();
+                if (now-lastTap<350&&lastTapEl===bubble){
+                    const row=bubble.closest('.msg-row');
+                    if (row){const msgId=row.dataset.msgId;if(msgId)toggleReaction(msgId,'❤️');}
+                }
+                lastTap=now; lastTapEl=bubble;
+            },{passive:true});
+        })();
+
+        /* ══════════════════════════════
+           ФИШКА: Счётчик символов в поле ввода
+        ══════════════════════════════ */
+        (function(){
+            const counter=document.createElement('span');
+            counter.style.cssText='position:absolute;bottom:6px;right:52px;font-size:.6rem;color:var(--muted-soft);pointer-events:none;transition:opacity .2s;opacity:0';
+            document.querySelector('.input-footer').style.position='relative';
+            document.querySelector('.input-footer').appendChild(counter);
+            chatInput.addEventListener('input',()=>{
+                const len=chatInput.value.length;
+                if(len>3800){counter.style.opacity='1';counter.textContent=`${len}/4000`;counter.style.color=len>3950?'var(--danger)':'var(--muted-soft)';}
+                else counter.style.opacity='0';
+            });
+        })();
+
+        /* ══════════════════════════════
+           ФИШКА: Уведомление в title вкладки
+        ══════════════════════════════ */
+        (function(){
+            let origTitle='Чат 6А · 6aclass.online';
+            let unreadCount=0; let blinkTimer=null;
+            function setTitleBadge(n){
+                unreadCount=n;
+                clearInterval(blinkTimer);
+                if(n>0){
+                    document.title=`(${n}) ${origTitle}`;
+                    let on=true;
+                    blinkTimer=setInterval(()=>{
+                        document.title=on?`(${n}) ${origTitle}`:origTitle;
+                        on=!on;
+                    },1200);
+                } else { document.title=origTitle; }
+            }
+            // Watch for new messages when tab not focused
+            document.addEventListener('visibilitychange',()=>{ if(!document.hidden) setTitleBadge(0); });
+            // Hook into updateMessagesDOM — increment when new msg arrives and tab hidden
+            const _origUpdate=window._origUpdate||null;
+            chatMessages.addEventListener('DOMNodeInserted',e=>{
+                if(document.hidden&&e.target.classList?.contains?.('msg-row')&&!e.target.classList.contains('msg-row--me'))
+                    setTitleBadge(unreadCount+1);
+            });
+        })();
+
+        /* ══════════════════════════════
+           ФИШКА: Shake анимация при ошибке отправки
+        ══════════════════════════════ */
+        const _origSubmit=submitComposer;
+
+        /* ══════════════════════════════
+           ФИШКА: Paste картинки из буфера
+        ══════════════════════════════ */
+        document.addEventListener('paste',async e=>{
+            const items=[...e.clipboardData.items];
+            const imgItem=items.find(i=>i.type.startsWith('image/'));
+            if(!imgItem) return;
+            if(!auth.currentUser) return;
+            e.preventDefault();
+            const file=imgItem.getAsFile();
+            if(!file) return;
+            showToast('🖼 Вставляю картинку…');
+            try{
+                const b64=await compressImage(file);
+                pendingImageBase64=b64;
+                imgPreviewThumb.src=b64;
+                imgPreviewName.textContent='Из буфера обмена';
+                imgPreviewSize.textContent=`~${Math.round(b64.length*0.75/1024)} КБ`;
+                imgPreviewBar.classList.add('is-visible');
+                chatSend.disabled=false;
+                chatInput.focus();
+            }catch(_){showToast('❌ Не удалось вставить');}
+        });
            ══════════════════════════════
            rules_version = '2';
            service cloud.firestore {
