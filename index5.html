@@ -635,7 +635,7 @@
     </div>
 
     <!-- AUTH -->
-    <div class="auth-gate" id="authGate">
+    <div class="auth-gate hidden" id="authGate">
         <div class="auth-orb auth-orb--1" aria-hidden="true"></div>
         <div class="auth-orb auth-orb--2" aria-hidden="true"></div>
         <div class="auth-card">
@@ -952,6 +952,27 @@
     <div class="img-lightbox" id="imgLightbox">
         <img id="imgLightboxImg" src="" alt="">
     </div>
+
+    <!-- ══════════════════════════════════════════
+         BOOTSTRAP — показываем UI сразу, не ждём Firebase
+    ══════════════════════════════════════════ -->
+    <script>
+        // Сразу показываем auth gate чтобы не было чёрного экрана
+        document.getElementById('authGate').classList.remove('hidden');
+
+        // Если Firebase не загрузился за 8 секунд — показываем форму входа вручную
+        window._authTimeoutId = setTimeout(function() {
+            var checking = document.getElementById('authChecking');
+            var formBlock = document.getElementById('authFormBlock');
+            if (checking && !checking.classList.contains('hidden')) {
+                checking.classList.add('hidden');
+                if (formBlock) formBlock.classList.remove('hidden');
+                // Показываем предупреждение
+                var err = document.getElementById('authError');
+                if (err) err.textContent = 'Медленный интернет — попробуй войти вручную.';
+            }
+        }, 8000);
+    </script>
 
     <!-- ══════════════════════════════════════════
          FIREBASE + LOGIC
@@ -2894,6 +2915,8 @@
            AUTH STATE
         ══════════════════════════════ */
         onAuthStateChanged(auth, async user=>{
+            // Firebase отозвался — отменяем таймаут фолбэка
+            clearTimeout(window._authTimeoutId);
             authChecking.classList.add('hidden');
             if (_banUnsub){_banUnsub();_banUnsub=null;}
             if (!user){
@@ -2903,28 +2926,35 @@
             // Ban check
             try{const s=await getDoc(doc(db,'users',user.uid));if(s.exists()&&s.data().banned===true){showBanned();return;}}catch(e){console.warn('ban check',e);}
             _banUnsub=onSnapshot(doc(db,'users',user.uid),snap=>{if(snap.exists()&&snap.data().banned===true)showBanned();});
-            // Save user doc
-            try{const u=auth.currentUser;if(u){const snap=await getDoc(doc(db,'users',u.uid));if(!snap.exists()){await setDoc(doc(db,'users',u.uid),{displayName:displayNick(u),uid:u.uid,email:u.email||'',stars:0,createdAt:serverTimestamp(),lastSeen:serverTimestamp(),banned:false});}else{await setDoc(doc(db,'users',u.uid),{displayName:displayNick(u),uid:u.uid,email:u.email||''},{merge:true});}}}catch(_){}
-            // Check admin
-            userIsAdmin = ADMIN_UIDS.has(user.uid);
-            // Load avatar + bio + status from Firestore
+            // Load user doc once — save, avatar, bio, status
             try{
-                const s=await getDoc(doc(db,'users',user.uid));
-                if(s.exists()){
-                    const d=s.data();
-                    if(d.avatar) avatarCache[user.uid]=d.avatar;
-                    if(d.bio!==undefined||d.status!==undefined){
-                        userProfile.bio    = d.bio    ?? userProfile.bio    ?? '';
-                        userProfile.status = d.status ?? userProfile.status ?? 'online';
-                        lsSet(PROFILE_KEY, userProfile);
+                const u=auth.currentUser;
+                if(u){
+                    const snap=await getDoc(doc(db,'users',u.uid));
+                    if(!snap.exists()){
+                        await setDoc(doc(db,'users',u.uid),{displayName:displayNick(u),uid:u.uid,email:u.email||'',stars:0,createdAt:serverTimestamp(),lastSeen:serverTimestamp(),banned:false});
+                    } else {
+                        const d=snap.data();
+                        // Merge display name
+                        await setDoc(doc(db,'users',u.uid),{displayName:displayNick(u),uid:u.uid,email:u.email||''},{merge:true});
+                        // Load avatar
+                        if(d.avatar) avatarCache[u.uid]=d.avatar;
+                        // Load bio/status
+                        if(d.bio!==undefined||d.status!==undefined){
+                            userProfile.bio    = d.bio    ?? userProfile.bio    ?? '';
+                            userProfile.status = d.status ?? userProfile.status ?? 'online';
+                            lsSet(PROFILE_KEY, userProfile);
+                        }
                     }
                 }
-            }catch(_){}
-            // Apply saved theme (could be 'system')
+            }catch(e){console.warn('user doc',e);}
+            // Check admin
+            userIsAdmin = ADMIN_UIDS.has(user.uid);
+            // Apply saved theme
             setTheme(localStorage.getItem(THEME_KEY)||'dark');
             authFormBlock.classList.add('hidden'); authGate.classList.add('hidden'); appRoot.classList.remove('hidden');
-            startChatForUser();
-            buildSidebarList();
+            try { startChatForUser(); } catch(e){ console.error('startChatForUser',e); }
+            try { buildSidebarList(); } catch(e){ console.error('buildSidebarList',e); }
         });
 
         /* ══════════════════════════════
