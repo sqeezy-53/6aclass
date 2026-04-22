@@ -395,6 +395,39 @@
         .img-lightbox.is-open { display:flex; }
         .img-lightbox img { max-width:92vw; max-height:90vh; border-radius:var(--radius); box-shadow:0 32px 80px rgba(0,0,0,.6); }
 
+        /* Voice message bubble */
+        .msg-voice { display:flex; align-items:center; gap:10px; padding:2px 0 6px; min-width:200px; }
+        .voice-play-btn { width:36px; height:36px; border-radius:50%; border:none; background:var(--accent); color:var(--accent-text); display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; transition:filter .15s,transform .15s; }
+        .msg-bubble--me .voice-play-btn { background:rgba(255,255,255,.25); color:#fff; }
+        .voice-play-btn:hover { filter:brightness(1.12); transform:scale(1.07); }
+        .voice-play-btn svg { width:15px; height:15px; }
+        .voice-waveform { flex:1; height:28px; display:flex; align-items:center; gap:2px; cursor:pointer; }
+        .voice-waveform-bar { width:3px; border-radius:2px; background:currentColor; opacity:.35; transition:opacity .15s,height .15s; flex-shrink:0; }
+        .voice-waveform-bar.played { opacity:.9; }
+        .voice-duration { font-size:.72rem; color:inherit; opacity:.75; white-space:nowrap; min-width:32px; text-align:right; }
+        /* Voice record button */
+        .btn-voice { width:34px; height:34px; border-radius:50%; border:none; background:transparent; color:var(--muted); display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; transition:color var(--transition),background var(--transition),transform .15s; }
+        .btn-voice:hover { color:var(--accent); background:var(--accent-dim); }
+        .btn-voice.is-recording { color:#ef4444; background:rgba(239,68,68,.12); animation:voicePulse 1s ease-in-out infinite; }
+        .btn-voice svg { width:17px; height:17px; }
+        @keyframes voicePulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.15)} }
+        /* Voice recording indicator bar */
+        .voice-rec-bar { display:none; align-items:center; gap:10px; padding:8px 14px; background:rgba(239,68,68,.06); border-top:1px solid rgba(239,68,68,.15); }
+        .voice-rec-bar.is-visible { display:flex; }
+        .voice-rec-dot { width:10px; height:10px; border-radius:50%; background:#ef4444; animation:voicePulse .8s ease-in-out infinite; flex-shrink:0; }
+        .voice-rec-time { font-size:.82rem; font-weight:600; color:#ef4444; min-width:36px; }
+        .voice-rec-cancel { background:none; border:none; color:var(--muted-soft); cursor:pointer; font-size:.78rem; font-weight:600; padding:4px 8px; border-radius:var(--radius-xs); transition:color var(--transition); margin-left:auto; }
+        .voice-rec-cancel:hover { color:var(--danger); }
+
+        /* User profile view modal */
+        .user-profile-modal { max-width:360px; }
+        .user-profile-av { width:72px; height:72px; border-radius:50%; display:grid; place-items:center; font-size:2rem; font-weight:800; color:#fff; flex-shrink:0; border:3px solid var(--border); overflow:hidden; margin:0 auto 12px; }
+        .user-profile-av img { width:100%; height:100%; object-fit:cover; }
+        .user-profile-name { font-family:var(--font-display); font-size:1.2rem; font-weight:800; text-align:center; letter-spacing:-.02em; margin-bottom:4px; }
+        .user-profile-status { font-size:.82rem; color:var(--muted); text-align:center; margin-bottom:4px; }
+        .user-profile-bio { font-size:.88rem; color:var(--muted); text-align:center; line-height:1.5; margin-bottom:16px; padding:0 8px; min-height:1em; }
+        .user-profile-divider { height:1px; background:var(--border); margin:12px 0; }
+
         .btn-send { width:40px; height:40px; border-radius:50%; border:none; background:linear-gradient(135deg,var(--accent-strong),var(--accent)); color:var(--accent-text); display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; transition:filter var(--transition),transform .15s ease,opacity var(--transition); box-shadow:0 4px 16px var(--bubble-me-glow); }
         .btn-send:disabled{opacity:.35;cursor:default;box-shadow:none}
         .btn-send:not(:disabled):hover{filter:brightness(1.1);transform:scale(1.06)}
@@ -719,6 +752,12 @@
                 <div class="autodel-banner" id="autodelBanner">⏱️ <span id="autodelBannerText">Авто-удаление включено</span></div>
                 <div class="edit-banner" id="editBanner">✏️ <strong>Редактирование</strong><span>Измените текст и нажмите ✓</span><button type="button" class="banner-close" id="editBannerCancel">×</button></div>
                 <div class="reply-banner" id="replyBanner">↩️ <span>Ответ:</span><span class="reply-banner-nick" id="replyBannerNick"></span><span class="reply-banner-text" id="replyBannerText"></span><button class="banner-close" id="replyBannerClose">×</button></div>
+                <div class="voice-rec-bar" id="voiceRecBar">
+                    <span class="voice-rec-dot"></span>
+                    <span class="voice-rec-time" id="voiceRecTime">0:00</span>
+                    <span style="font-size:.78rem;color:var(--muted)">Запись…</span>
+                    <button type="button" class="voice-rec-cancel" id="voiceRecCancel">✕ Отмена</button>
+                </div>
                 <div class="img-preview-bar" id="imgPreviewBar">
                     <img class="img-preview-thumb" id="imgPreviewThumb" src="" alt="">
                     <div class="img-preview-info"><strong id="imgPreviewName"></strong><span id="imgPreviewSize"></span></div>
@@ -737,6 +776,9 @@
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
                         <input type="file" id="imgFileInput" accept="image/*">
                     </label>
+                    <button type="button" class="btn-voice" id="btnVoice" title="Голосовое сообщение">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+                    </button>
                     <button type="button" class="btn-send" id="chatSend" disabled>
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z"/></svg>
                     </button>
@@ -873,6 +915,21 @@
             <div class="avatar-modal-actions">
                 <button type="button" class="btn btn-ghost" id="avatarModalCancel">Отмена</button>
                 <button type="button" class="btn btn-primary" id="avatarModalSave">Сохранить</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- User profile view modal -->
+    <div class="modal-overlay" id="userProfileModal">
+        <div class="modal-box user-profile-modal">
+            <div class="user-profile-av" id="userProfileAv"></div>
+            <div class="user-profile-name" id="userProfileName"></div>
+            <div class="user-profile-status" id="userProfileStatus"></div>
+            <div class="user-profile-bio" id="userProfileBio"></div>
+            <div class="user-profile-divider"></div>
+            <div class="modal-actions" style="flex-direction:column;gap:8px">
+                <button type="button" class="btn btn-primary" id="userProfileDMBtn">💬 Написать</button>
+                <button type="button" class="btn btn-ghost" id="userProfileClose">Закрыть</button>
             </div>
         </div>
     </div>
@@ -1260,9 +1317,18 @@
                 ? (matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light')
                 : (mode==='light' ? 'light' : 'dark');
             document.documentElement.setAttribute('data-theme', theme);
-            localStorage.setItem(THEME_KEY, mode);
+            localStorage.setItem(THEME_KEY, mode); // store 'system'/'dark'/'light'
             updateThemeIcons();
         }
+        // Apply system theme on load properly
+        (function(){
+            const saved = localStorage.getItem(THEME_KEY)||'dark';
+            setTheme(saved);
+        })();
+        // Listen for OS theme changes when mode=system
+        matchMedia('(prefers-color-scheme:dark)').addEventListener('change', ()=>{
+            if ((localStorage.getItem(THEME_KEY)||'dark')==='system') setTheme('system');
+        });
         function updateThemeIcons() {
             const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
             const sun = document.querySelector('.icon-sun'), moon = document.querySelector('.icon-moon');
@@ -1706,16 +1772,25 @@
         /* ══════════════════════════════
            PROFILE MODAL
         ══════════════════════════════ */
-        function openProfileModal() {
+        async function openProfileModal() {
             const u = auth.currentUser; if (!u) return;
             document.getElementById('profileName').value = displayNick(u);
-            document.getElementById('profileBio').value  = userProfile.bio||'';
+            // Load bio/status from Firestore (source of truth)
+            try {
+                const snap = await getDoc(doc(db,'users',u.uid));
+                if (snap.exists()) {
+                    const d = snap.data();
+                    if (d.bio  !== undefined) { userProfile.bio    = d.bio||'';     lsSet(PROFILE_KEY, userProfile); }
+                    if (d.status!== undefined) { userProfile.status = d.status||'online'; lsSet(PROFILE_KEY, userProfile); }
+                }
+            } catch(_){}
+            document.getElementById('profileBio').value = userProfile.bio||'';
             const cur = avatarCache[u.uid]||null;
             applyAvatarToEl(document.getElementById('profileAvBig'),u.uid,u.displayName,displayNick(u),cur);
             document.getElementById('profileAvBig').style.background = cur?'':avatarGradient(u.uid);
             // Status chips
             document.querySelectorAll('.status-chip').forEach(c=>c.classList.toggle('is-active',c.dataset.status===(userProfile.status||'online')));
-            // Theme select
+            // Theme select — show stored mode (could be 'system')
             document.getElementById('profileTheme').value = localStorage.getItem(THEME_KEY)||'dark';
             document.getElementById('profileModal').classList.add('is-open');
         }
@@ -2024,6 +2099,139 @@
         replyBannerClose.addEventListener('click',cancelReply);
 
         /* ══════════════════════════════
+           USER PROFILE VIEW
+        ══════════════════════════════ */
+        let _userProfileUid = null;
+        async function openUserProfile(uid, name) {
+            _userProfileUid = uid;
+            const modal = document.getElementById('userProfileModal');
+            const avEl  = document.getElementById('userProfileAv');
+            const nameEl= document.getElementById('userProfileName');
+            const statEl= document.getElementById('userProfileStatus');
+            const bioEl = document.getElementById('userProfileBio');
+            const dmBtn = document.getElementById('userProfileDMBtn');
+
+            // Set name + avatar immediately from cache
+            nameEl.textContent = name;
+            bioEl.textContent  = '';
+            statEl.textContent = '';
+            applyAvatarToEl(avEl, uid, name, name, avatarCache[uid]||null);
+            avEl.style.background = avatarCache[uid] ? '' : avatarGradient(uid);
+
+            // Check if DM already exists
+            const me = auth.currentUser;
+            const convId = me ? [me.uid, uid].sort().join('_') : null;
+            let hasDM = false;
+            if (convId) {
+                try {
+                    const s = await getDoc(doc(db,'dmConvs',convId));
+                    hasDM = s.exists() && !(s.data().deleted?.[me.uid]);
+                } catch(_){}
+            }
+            dmBtn.textContent = hasDM ? '💬 Продолжить переписку' : '💬 Написать';
+            dmBtn.onclick = () => { modal.classList.remove('is-open'); openDMWith(uid, name); };
+
+            // Load full profile from Firestore
+            try {
+                const snap = await getDoc(doc(db,'users',uid));
+                if (snap.exists()) {
+                    const d = snap.data();
+                    if (d.avatar && !avatarCache[uid]) { avatarCache[uid]=d.avatar; applyAvatarToEl(avEl,uid,name,name,d.avatar); }
+                    if (d.bio) bioEl.textContent = d.bio;
+                    const statusMap = {online:'🟢 В сети', away:'🟡 Отошёл', dnd:'🔴 Не беспокоить', invisible:'⚫ Невидимка'};
+                    const isOnline = !!onlineUsers[uid];
+                    statEl.textContent = isOnline ? (statusMap[d.status||'online']||'🟢 В сети') : '⚫ Не в сети';
+                }
+            } catch(_){}
+
+            modal.classList.add('is-open');
+        }
+        document.getElementById('userProfileClose').addEventListener('click', ()=>document.getElementById('userProfileModal').classList.remove('is-open'));
+        document.getElementById('userProfileModal').addEventListener('click', e=>{ if(e.target===document.getElementById('userProfileModal')) document.getElementById('userProfileModal').classList.remove('is-open'); });
+
+        /* ══════════════════════════════
+           VOICE MESSAGES
+        ══════════════════════════════ */
+        const btnVoice     = document.getElementById('btnVoice');
+        const voiceRecBar  = document.getElementById('voiceRecBar');
+        const voiceRecTime = document.getElementById('voiceRecTime');
+        const voiceRecCancel=document.getElementById('voiceRecCancel');
+
+        let mediaRecorder   = null;
+        let voiceChunks     = [];
+        let voiceTimerInt   = null;
+        let voiceSeconds    = 0;
+        let isRecording     = false;
+
+        function fmtVoiceTime(s) { return Math.floor(s/60)+':'+(String(s%60).padStart(2,'0')); }
+
+        function stopVoiceRecording(send=true) {
+            if (!isRecording) return;
+            isRecording = false;
+            clearInterval(voiceTimerInt);
+            btnVoice.classList.remove('is-recording');
+            voiceRecBar.classList.remove('is-visible');
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                mediaRecorder._sendOnStop = send;
+                mediaRecorder.stop();
+            }
+        }
+
+        btnVoice.addEventListener('click', async () => {
+            if (isRecording) { stopVoiceRecording(true); return; }
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+                const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+                    ? 'audio/webm;codecs=opus' : 'audio/webm';
+                mediaRecorder = new MediaRecorder(stream, {mimeType});
+                voiceChunks = []; voiceSeconds = 0;
+                mediaRecorder.ondataavailable = e => { if(e.data.size>0) voiceChunks.push(e.data); };
+                mediaRecorder.onstop = async () => {
+                    stream.getTracks().forEach(t=>t.stop());
+                    if (!mediaRecorder._sendOnStop) return;
+                    const blob = new Blob(voiceChunks, {type: mimeType});
+                    if (blob.size > 900_000) { showToast('❌ Голосовое слишком длинное (макс ~1 мин)'); return; }
+                    // Convert to base64
+                    const reader = new FileReader();
+                    reader.onload = async () => {
+                        const b64 = reader.result;
+                        const u = auth.currentUser; if (!u) return;
+                        const dur = voiceSeconds;
+                        const msgData = {
+                            uid:u.uid, author:displayNick(u), text:'',
+                            createdAt:serverTimestamp(), edited:false,
+                            voiceBase64:b64, voiceDuration:dur, voiceMime:mimeType
+                        };
+                        try {
+                            stickToBottom=true;
+                            if (currentChatMode==='group') {
+                                await addDoc(messagesCol, msgData);
+                            } else {
+                                await addDoc(collection(db,'dmConvs',currentDMConvId,'messages'), msgData);
+                                await setDoc(doc(db,'dmConvs',currentDMConvId),{lastText:'🎤 Голосовое',lastAt:serverTimestamp(),[`unread.${currentDMPeerUid}`]:increment(1)},{merge:true});
+                            }
+                            lastOutboundAt=Date.now();
+                        } catch(e){ showToast('Ошибка: '+e.message); }
+                    };
+                    reader.readAsDataURL(blob);
+                };
+                mediaRecorder.start(200);
+                isRecording = true;
+                btnVoice.classList.add('is-recording');
+                voiceRecBar.classList.add('is-visible');
+                voiceRecTime.textContent = '0:00';
+                voiceTimerInt = setInterval(()=>{
+                    voiceSeconds++;
+                    voiceRecTime.textContent = fmtVoiceTime(voiceSeconds);
+                    if (voiceSeconds >= 90) stopVoiceRecording(true); // auto-stop at 90s
+                }, 1000);
+            } catch(e) {
+                showToast('❌ Нет доступа к микрофону');
+            }
+        });
+        voiceRecCancel.addEventListener('click', ()=>stopVoiceRecording(false));
+
+        /* ══════════════════════════════
            REACTIONS — FIX: works in both group & DM
         ══════════════════════════════ */
         function closeReactionPicker(){reactionPicker.style.display='none';rpActiveFor=null;document.removeEventListener('click',closeReactionPicker,true);}
@@ -2271,7 +2479,7 @@
                 const authorEl=document.createElement('div'); authorEl.className='msg-author';
                 authorEl.textContent=d.author||'Гость';
                 if (isAdmin){const badge=document.createElement('span');badge.className='admin-badge';badge.textContent='ADMIN';authorEl.appendChild(badge);}
-                if (d.uid&&d.uid!==myUid) authorEl.addEventListener('click',()=>openDMWith(d.uid,d.author||'?'));
+                if (d.uid&&d.uid!==myUid) authorEl.addEventListener('click',()=>openUserProfile(d.uid,d.author||'?'));
                 stack.appendChild(authorEl);
             }
 
@@ -2303,6 +2511,71 @@
                 msgImg.loading = 'lazy';
                 msgImg.addEventListener('click', e => { e.stopPropagation(); openLightbox(d.imageBase64); });
                 bubble.appendChild(msgImg);
+            }
+
+            // Voice message (if any)
+            if (d.voiceBase64) {
+                const voiceWrap = document.createElement('div');
+                voiceWrap.className = 'msg-voice';
+                const dur = d.voiceDuration||0;
+                // Random-ish waveform bars based on msgId
+                const barCount = 28;
+                const playBtn = document.createElement('button');
+                playBtn.className = 'voice-play-btn';
+                playBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
+                playBtn.title = 'Воспроизвести';
+                const waveEl = document.createElement('div');
+                waveEl.className = 'voice-waveform';
+                const bars = [];
+                for (let i=0;i<barCount;i++){
+                    const bar=document.createElement('div'); bar.className='voice-waveform-bar';
+                    // pseudo-random heights using message id chars
+                    const seed=(id.charCodeAt(i%id.length)||5);
+                    const h=8+((seed*(i+7))%22);
+                    bar.style.height=h+'px'; waveEl.appendChild(bar); bars.push(bar);
+                }
+                const durEl = document.createElement('span');
+                durEl.className = 'voice-duration';
+                durEl.textContent = fmtVoiceTime(dur);
+                voiceWrap.appendChild(playBtn);
+                voiceWrap.appendChild(waveEl);
+                voiceWrap.appendChild(durEl);
+                bubble.appendChild(voiceWrap);
+
+                // Playback logic
+                let audio = null; let playTimer = null; let isPlaying = false;
+                function updateBars(progress) {
+                    const played = Math.floor(progress * barCount);
+                    bars.forEach((b,i)=>b.classList.toggle('played', i<played));
+                }
+                function stopAudio() {
+                    if (audio) { audio.pause(); audio=null; }
+                    clearInterval(playTimer);
+                    isPlaying=false;
+                    playBtn.innerHTML='<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
+                    durEl.textContent=fmtVoiceTime(dur);
+                    updateBars(0);
+                }
+                playBtn.addEventListener('click', ()=>{
+                    if (isPlaying) { stopAudio(); return; }
+                    audio = new Audio(d.voiceBase64);
+                    audio.onended = stopAudio;
+                    audio.play().catch(()=>showToast('Не удалось воспроизвести'));
+                    isPlaying=true;
+                    playBtn.innerHTML='<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
+                    playTimer = setInterval(()=>{
+                        if (!audio) return;
+                        const progress = dur>0 ? audio.currentTime/dur : 0;
+                        durEl.textContent = fmtVoiceTime(Math.floor(audio.currentTime));
+                        updateBars(progress);
+                    }, 100);
+                });
+                waveEl.addEventListener('click', e=>{
+                    if (!audio||!dur) return;
+                    const rect=waveEl.getBoundingClientRect();
+                    const ratio=(e.clientX-rect.left)/rect.width;
+                    audio.currentTime=ratio*dur;
+                });
             }
 
             // Text body (skip if empty)
@@ -2608,8 +2881,21 @@
             try{const u=auth.currentUser;if(u){const snap=await getDoc(doc(db,'users',u.uid));if(!snap.exists()){await setDoc(doc(db,'users',u.uid),{displayName:displayNick(u),uid:u.uid,email:u.email||'',stars:0,createdAt:serverTimestamp(),lastSeen:serverTimestamp(),banned:false});}else{await setDoc(doc(db,'users',u.uid),{displayName:displayNick(u),uid:u.uid,email:u.email||''},{merge:true});}}}catch(_){}
             // Check admin
             userIsAdmin = ADMIN_UIDS.has(user.uid);
-            // Load cached avatar
-            try{const s=await getDoc(doc(db,'users',user.uid));if(s.exists()&&s.data().avatar)avatarCache[user.uid]=s.data().avatar;}catch(_){}
+            // Load avatar + bio + status from Firestore
+            try{
+                const s=await getDoc(doc(db,'users',user.uid));
+                if(s.exists()){
+                    const d=s.data();
+                    if(d.avatar) avatarCache[user.uid]=d.avatar;
+                    if(d.bio!==undefined||d.status!==undefined){
+                        userProfile.bio    = d.bio    ?? userProfile.bio    ?? '';
+                        userProfile.status = d.status ?? userProfile.status ?? 'online';
+                        lsSet(PROFILE_KEY, userProfile);
+                    }
+                }
+            }catch(_){}
+            // Apply saved theme (could be 'system')
+            setTheme(localStorage.getItem(THEME_KEY)||'dark');
             authFormBlock.classList.add('hidden'); authGate.classList.add('hidden'); appRoot.classList.remove('hidden');
             startChatForUser();
             buildSidebarList();
