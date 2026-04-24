@@ -1399,7 +1399,7 @@
 
 
         // Настройки облака
-const CLOUDINARY_URL = "https://api.cloudinary.com/v1_1/dxw7y6z0k/auto/upload";
+const CLOUDINARY_URL = "https://api.cloudinary.com/v1_1/dvl3h61wd/auto/upload";
 const CLOUDINARY_PRESET = "chat_upload";
 
 // Функция для загрузки файлов
@@ -4338,56 +4338,70 @@ async function uploadToCloudinary(file) {
             musicFileInput.value = '';
         });
 
-        musicSendBtn.addEventListener('click', async () => {
-            const u = auth.currentUser;
-            // Проверяем наличие файла через нашу новую переменную
-            if (!u || !window._pendingMusicFile) return;
+        // Находим кнопку один раз
+        const _musicSendBtn = document.getElementById('musicSendBtn');
 
-            closeAttachSheet();
-            showToast('⏳ Загрузка музыки...');
+        if (_musicSendBtn) {
+            // Используем только onclick, без лишних оберток
+            _musicSendBtn.onclick = async () => {
+                const u = auth.currentUser;
+                // Берём чистый файл
+                const fileToUpload = window._pendingMusicFile;
 
-            try {
-                // 1. Загружаем в облако
-                const url = await uploadToCloudinary(window._pendingMusicFile);
-                
-                if (!url) {
-                    showToast('Ошибка загрузки в облако');
+                if (!u || !fileToUpload) {
+                    showToast('Сначала выбери файл!');
                     return;
                 }
 
-                // 2. Формируем сообщение (уже без Base64)
-                const msg = {
-                    uid: u.uid, 
-                    author: displayNick(u), 
-                    text: '',
-                    musicUrl: url, // Сохраняем ссылку
-                    musicTitle: _pendingMusicTitle,
-                    musicDuration: Math.round(_pendingMusicDur),
-                    createdAt: serverTimestamp(), 
-                    edited: false,
-                };
+                closeAttachSheet();
+                showToast('⏳ Загрузка в облако...');
 
-                // 3. Отправляем в Firebase
-                if (currentChatMode === 'group') {
-                    await addDoc(messagesCol, msg);
-                } else {
-                    const cid = currentDMConvId;
-                    await addDoc(collection(db,'dmConvs',cid,'messages'), msg);
-                    await setDoc(doc(db,'dmConvs',cid), {
-                        lastText:'🎵 ' + _pendingMusicTitle, 
-                        lastAt: serverTimestamp(), 
-                        [`unread.${currentDMPeerUid}`]: increment(1)
-                    }, {merge:true});
+                try {
+                    // 1. Грузим файл в Cloudinary
+                    const url = await uploadToCloudinary(fileToUpload);
+                    
+                    if (!url) {
+                        showToast('Ошибка: Облако отклонило файл');
+                        return;
+                    }
+
+                    // 2. Формируем объект сообщения
+                    const msg = {
+                        uid: u.uid,
+                        author: displayNick(u),
+                        text: '',
+                        musicUrl: url, 
+                        musicTitle: _pendingMusicTitle || fileToUpload.name,
+                        musicDuration: Math.round(_pendingMusicDur || 0),
+                        createdAt: serverTimestamp(),
+                        edited: false
+                    };
+
+                    // 3. Отправка в Firebase
+                    if (currentChatMode === 'group') {
+                        await addDoc(messagesCol, msg);
+                    } else {
+                        const cid = currentDMConvId;
+                        await addDoc(collection(db, 'dmConvs', cid, 'messages'), msg);
+                        await setDoc(doc(db,'dmConvs',cid), {
+                            lastText: '🎵 ' + (msg.musicTitle), 
+                            lastAt: serverTimestamp(), 
+                            [`unread.${currentDMPeerUid}`]: increment(1)
+                        }, {merge: true});
+                    }
+
+                    showToast('🎵 Музыка отправлена!');
+                    window._pendingMusicFile = null; // Очистка
+                    
+                    // Закрываем превью (у тебя в коде это _musicPreviewRemove)
+                    if (window._musicPreviewRemove) _musicPreviewRemove.click();
+                    
+                } catch(e) { 
+                    console.error(e);
+                    showToast('Ошибка: ' + e.message); 
                 }
-
-                showToast('🎵 Музыка отправлена!');
-                window._pendingMusicFile = null; // Очищаем файл
-                musicPreviewRemove.click();
-            } catch(e) { 
-                console.error(e);
-                showToast('Ошибка: ' + e.message); 
-            }
-        });
+            };
+        }
 
         // ─── Checklist tab ───
         const checklistTitle    = document.getElementById('checklistTitle');
