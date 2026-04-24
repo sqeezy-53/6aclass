@@ -1397,6 +1397,26 @@
         const auth = getAuth(app);
         const db   = getFirestore(app);
 
+
+        // Настройки облака
+const CLOUDINARY_URL = "https://api.cloudinary.com/v1_1/dxw7y6z0k/auto/upload";
+const CLOUDINARY_PRESET = "chat_upload";
+
+// Функция для загрузки файлов
+async function uploadToCloudinary(file) {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("upload_preset", CLOUDINARY_PRESET);
+    try {
+        const res = await fetch(CLOUDINARY_URL, { method: "POST", body: formData });
+        const data = await res.json();
+        return data.secure_url; 
+    } catch (err) {
+        console.error("Cloudinary error:", err);
+        return null;
+    }
+}
+
         /* ══════════════════════════════
            CONSTANTS
         ══════════════════════════════ */
@@ -2335,6 +2355,64 @@
         const _pmBtn      = document.getElementById('profileMusicBtn');
         const _pmClearBtn = document.getElementById('profileMusicClearBtn');
 
+        /* ── Логика выбора музыки для профиля (Cloudinary) ── */
+        if (_pmInput) {
+            _pmInput.onchange = async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                if (file.size > 15 * 1024 * 1024) {
+                    alert('Файл слишком большой! Максимум 15 МБ.');
+                    return;
+                }
+
+                // Показываем, что начали загрузку
+                _showProfileMusicCard(file.name, 'Загрузка в облако...');
+
+                const url = await uploadToCloudinary(file);
+
+                if (url) {
+                    const u = auth.currentUser;
+                    try {
+                        await updateDoc(doc(db, 'users', u.uid), {
+                            musicUrl: url,
+                            musicTitle: file.name,
+                            musicBase64: deleteField() // Чистим старый мусор
+                        });
+                        
+                        _showProfileMusicCard(file.name, 'Сохранено ✓');
+                        
+                        _pmCard.onclick = () => {
+                            const audio = new Audio(url);
+                            audio.play().catch(pErr => console.error("Ошибка плеера:", pErr));
+                        };
+                    } catch (err) {
+                        console.error("Ошибка БД:", err);
+                        _showProfileMusicCard('Ошибка', 'Не удалось сохранить');
+                    }
+                } else {
+                    _showProfileMusicCard('Ошибка', 'Облако не ответило');
+                }
+            };
+        }
+
+        // Кнопка очистки музыки в профиле
+        if (_pmClearBtn) {
+            _pmClearBtn.onclick = async () => {
+                if (!confirm('Удалить музыку из профиля?')) return;
+                const u = auth.currentUser;
+                try {
+                    await updateDoc(doc(db, 'users', u.uid), {
+                        musicUrl: deleteField(),
+                        musicTitle: deleteField(),
+                        musicBase64: deleteField()
+                    });
+                    _hideProfileMusicCard();
+                    showToast('Музыка удалена');
+                } catch (e) { showToast('Ошибка удаления'); }
+            };
+        }
+
         function _showProfileMusicCard(title, sizeStr) {
             _pmTitle.textContent  = title;
             _pmSize.textContent   = sizeStr;
@@ -2347,16 +2425,28 @@
         }
 
         async function _loadExistingProfileMusic() {
-            const u = auth.currentUser; if (!u) return;
+            const u = auth.currentUser;
+            if (!u) return;
             try {
-                const snap = await getDoc(doc(db,'users',u.uid));
-                if (snap.exists() && snap.data().musicBase64) {
+                const snap = await getDoc(doc(db, 'users', u.uid));
+                if (snap.exists()) {
                     const d = snap.data();
-                    _showProfileMusicCard(d.musicTitle || 'Трек', 'Сохранено ✓');
-                } else {
-                    _hideProfileMusicCard();
+                    // Проверяем наличие нового поля musicUrl
+                    if (d.musicUrl) {
+                        _showProfileMusicCard(d.musicTitle || 'Мой трек', 'Сохранено ✓');
+                        // Настраиваем клик для проигрывания
+                        _pmCard.onclick = () => {
+                            const audio = new Audio(d.musicUrl);
+                            audio.play().catch(e => console.error("Ошибка воспроизведения:", e));
+                        };
+                    } else {
+                        // Если музыки нет в базе, скрываем карточку
+                        if (typeof _hideProfileMusicCard === 'function') _hideProfileMusicCard();
+                    }
                 }
-            } catch(_) { _hideProfileMusicCard(); }
+            } catch(e) {
+                console.error("Ошибка при загрузке музыки профиля:", e);
+            }
         }
 
         _pmBtn.addEventListener('click', () => { _pmInput.value = ''; _pmInput.click(); });
@@ -4250,25 +4340,53 @@
 
         musicSendBtn.addEventListener('click', async () => {
             const u = auth.currentUser;
-            if (!u || !_pendingMusicB64) return;
+            // Проверяем наличие файла через нашу новую переменную
+            if (!u || !window._pendingMusicFile) return;
+
             closeAttachSheet();
-            const msg = {
-                uid: u.uid, author: displayNick(u), text: '',
-                musicBase64: _pendingMusicB64,
-                musicTitle: _pendingMusicTitle,
-                musicDuration: Math.round(_pendingMusicDur),
-                createdAt: serverTimestamp(), edited: false,
-            };
+            showToast('⏳ Загрузка музыки...');
+
             try {
-                if (currentChatMode === 'group') await addDoc(messagesCol, msg);
-                else {
+                // 1. Загружаем в облако
+                const url = await uploadToCloudinary(window._pendingMusicFile);
+                
+                if (!url) {
+                    showToast('Ошибка загрузки в облако');
+                    return;
+                }
+
+                // 2. Формируем сообщение (уже без Base64)
+                const msg = {
+                    uid: u.uid, 
+                    author: displayNick(u), 
+                    text: '',
+                    musicUrl: url, // Сохраняем ссылку
+                    musicTitle: _pendingMusicTitle,
+                    musicDuration: Math.round(_pendingMusicDur),
+                    createdAt: serverTimestamp(), 
+                    edited: false,
+                };
+
+                // 3. Отправляем в Firebase
+                if (currentChatMode === 'group') {
+                    await addDoc(messagesCol, msg);
+                } else {
                     const cid = currentDMConvId;
                     await addDoc(collection(db,'dmConvs',cid,'messages'), msg);
-                    await setDoc(doc(db,'dmConvs',cid), {lastText:'🎵 '+_pendingMusicTitle, lastAt:serverTimestamp(), [`unread.${currentDMPeerUid}`]:increment(1)},{merge:true});
+                    await setDoc(doc(db,'dmConvs',cid), {
+                        lastText:'🎵 ' + _pendingMusicTitle, 
+                        lastAt: serverTimestamp(), 
+                        [`unread.${currentDMPeerUid}`]: increment(1)
+                    }, {merge:true});
                 }
+
                 showToast('🎵 Музыка отправлена!');
+                window._pendingMusicFile = null; // Очищаем файл
                 musicPreviewRemove.click();
-            } catch(e) { showToast('Ошибка: '+e.message); }
+            } catch(e) { 
+                console.error(e);
+                showToast('Ошибка: ' + e.message); 
+            }
         });
 
         // ─── Checklist tab ───
