@@ -1151,6 +1151,22 @@
                     <option value="system">💻 Системная</option>
                 </select>
             </div>
+            <div class="modal-field">
+                <label>🎵 Музыка профиля <span style="font-size:.7rem;color:var(--muted);font-weight:400">(видна всем в твоём профиле)</span></label>
+                <input type="file" id="profileMusicInput" accept="audio/*" style="display:none">
+                <div id="profileMusicCard" style="display:none;align-items:center;gap:10px;background:var(--surface-2);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:8px">
+                    <span style="font-size:1.4rem">🎵</span>
+                    <div style="flex:1;overflow:hidden">
+                        <div id="profileMusicTitle" style="font-size:.85rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">—</div>
+                        <div id="profileMusicSize" style="font-size:.72rem;color:var(--muted)">—</div>
+                    </div>
+                    <button type="button" id="profileMusicRemove" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:1.1rem;padding:4px;border-radius:50%">✕</button>
+                </div>
+                <div style="display:flex;gap:8px">
+                    <button type="button" class="btn btn-ghost" id="profileMusicBtn" style="flex:1;font-size:.82rem;padding:8px 12px">📁 Выбрать музыку</button>
+                    <button type="button" class="btn btn-ghost" id="profileMusicClearBtn" style="font-size:.82rem;padding:8px 12px;color:var(--danger);display:none">🗑 Удалить</button>
+                </div>
+            </div>
             <div class="modal-actions">
                 <button type="button" class="btn btn-ghost" id="profileCancel">Закрыть</button>
                 <button type="button" class="btn btn-primary" id="profileSave">Сохранить</button>
@@ -2291,6 +2307,10 @@
             document.querySelectorAll('.status-chip').forEach(c=>c.classList.toggle('is-active',c.dataset.status===(userProfile.status||'online')));
             // Theme select
             document.getElementById('profileTheme').value = localStorage.getItem(THEME_KEY)||'dark';
+            // Reset music state and load existing
+            _profileMusicB64 = null; _profileMusicAction = null;
+            _hideProfileMusicCard();
+            _loadExistingProfileMusic();
             document.getElementById('profileModal').classList.add('is-open');
         }
         document.getElementById('profileAvBig').addEventListener('click', openAvatarModal);
@@ -2300,6 +2320,85 @@
             c.classList.add('is-active');
         }));
         document.getElementById('profileCancel').addEventListener('click',()=>document.getElementById('profileModal').classList.remove('is-open'));
+
+        /* ── Профиль: музыка ── */
+        let _profileMusicB64      = null;
+        let _profileMusicTitleVal = '';
+        let _profileMusicDur      = 0;
+        let _profileMusicAction   = null; // 'set' | 'clear' | null
+
+        const _pmInput    = document.getElementById('profileMusicInput');
+        const _pmCard     = document.getElementById('profileMusicCard');
+        const _pmTitle    = document.getElementById('profileMusicTitle');
+        const _pmSize     = document.getElementById('profileMusicSize');
+        const _pmRemove   = document.getElementById('profileMusicRemove');
+        const _pmBtn      = document.getElementById('profileMusicBtn');
+        const _pmClearBtn = document.getElementById('profileMusicClearBtn');
+
+        function _showProfileMusicCard(title, sizeStr) {
+            _pmTitle.textContent  = title;
+            _pmSize.textContent   = sizeStr;
+            _pmCard.style.display = 'flex';
+            _pmClearBtn.style.display = 'inline-flex';
+        }
+        function _hideProfileMusicCard() {
+            _pmCard.style.display = 'none';
+            _pmClearBtn.style.display = 'none';
+        }
+
+        async function _loadExistingProfileMusic() {
+            const u = auth.currentUser; if (!u) return;
+            try {
+                const snap = await getDoc(doc(db,'users',u.uid));
+                if (snap.exists() && snap.data().musicBase64) {
+                    const d = snap.data();
+                    _showProfileMusicCard(d.musicTitle || 'Трек', 'Сохранено ✓');
+                } else {
+                    _hideProfileMusicCard();
+                }
+            } catch(_) { _hideProfileMusicCard(); }
+        }
+
+        _pmBtn.addEventListener('click', () => { _pmInput.value = ''; _pmInput.click(); });
+
+        _pmInput.addEventListener('change', async () => {
+            const file = _pmInput.files[0]; if (!file) return;
+            _showProfileMusicCard(file.name.replace(/\.[^.]+$/, ''), 'Обработка…');
+            _pmClearBtn.style.display = 'none';
+            try {
+                const tmpUrl = URL.createObjectURL(file);
+                const tmpAudio = new Audio(tmpUrl);
+                await new Promise(res => { tmpAudio.onloadedmetadata = res; tmpAudio.onerror = res; });
+                _profileMusicDur = tmpAudio.duration || 0;
+                URL.revokeObjectURL(tmpUrl);
+                const maxBytes = 1_000_000;
+                let b64;
+                if (file.size > maxBytes) {
+                    b64 = await compressMusicFile(file, maxBytes);
+                    _pmSize.textContent = 'Сжато до ~1 МБ';
+                } else {
+                    b64 = await fileToBase64(file);
+                    _pmSize.textContent = formatFileSize(file.size);
+                }
+                _profileMusicB64      = b64;
+                _profileMusicTitleVal = file.name.replace(/\.[^.]+$/, '');
+                _profileMusicAction   = 'set';
+                _pmClearBtn.style.display = 'inline-flex';
+            } catch(e) { _pmSize.textContent = 'Ошибка: ' + e.message; }
+        });
+
+        // ✕ — отменить только что выбранный файл, показать сохранённый
+        _pmRemove.addEventListener('click', () => {
+            _profileMusicB64 = null; _profileMusicAction = null;
+            _hideProfileMusicCard();
+            _loadExistingProfileMusic();
+        });
+
+        // 🗑 Удалить — при сохранении сотрёт из Firestore
+        _pmClearBtn.addEventListener('click', () => {
+            _profileMusicB64 = null; _profileMusicAction = 'clear';
+            _hideProfileMusicCard();
+        });
         /* ── Ник: валидация ── */
         const NICK_FORBIDDEN = /[<>&"'\/\\]/;
         function validateNick(v) {
@@ -2364,8 +2463,20 @@
                 // ✅ Ник — ТОЛЬКО localStorage, НЕ трогаем Firebase Auth / Firestore displayName
                 setVisualNick(rawName);
                 // ✅ Bio, status → Firestore (без displayName — не ломаем системные данные)
-                await setDoc(doc(db,'users',u.uid),{bio,status},{merge:true});
+                const firestoreUpdate = {bio, status};
+                // Music: save if new file selected; clear if user clicked delete
+                if (_profileMusicAction === 'set' && _profileMusicB64) {
+                    firestoreUpdate.musicBase64  = _profileMusicB64;
+                    firestoreUpdate.musicTitle   = _profileMusicTitleVal;
+                    firestoreUpdate.musicDuration= _profileMusicDur;
+                } else if (_profileMusicAction === 'clear') {
+                    firestoreUpdate.musicBase64  = deleteField();
+                    firestoreUpdate.musicTitle   = deleteField();
+                    firestoreUpdate.musicDuration= deleteField();
+                }
+                await setDoc(doc(db,'users',u.uid), firestoreUpdate, {merge:true});
                 userProfile = {bio, status}; lsSet(PROFILE_KEY, userProfile);
+                _profileMusicAction = null;
                 setTheme(theme);
                 renderSidebarUser();
                 try { pingOnline(); } catch(_){}
@@ -3939,7 +4050,7 @@
         let _galleryFiles  = [];  // FileList items
         let _gallerySelected = new Set(); // indices
 
-        galleryOpenBtn.addEventListener('click', () => galleryMultiInput.click());
+        galleryOpenBtn.addEventListener('click', () => { galleryMultiInput.value = ''; galleryMultiInput.click(); });
 
         galleryMultiInput.addEventListener('change', () => {
             _galleryFiles  = [...galleryMultiInput.files];
@@ -4013,7 +4124,7 @@
         let _pendingMusicTitle   = '';
         let _pendingMusicDur     = 0;
 
-        musicUploadBtn.addEventListener('click', () => musicFileInput.click());
+        musicUploadBtn.addEventListener('click', () => { musicFileInput.value = ''; musicFileInput.click(); });
 
         musicFileInput.addEventListener('change', async () => {
             const file = musicFileInput.files[0];
@@ -4053,6 +4164,7 @@
 
         musicPreviewRemove.addEventListener('click', () => {
             _pendingMusicFile = null; _pendingMusicB64 = null;
+            _pendingMusicTitle = ''; _pendingMusicDur = 0;
             musicPreviewCard.classList.remove('is-visible');
             musicSendBtn.disabled = true;
             musicFileInput.value = '';
