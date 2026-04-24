@@ -1603,6 +1603,7 @@ async function uploadToCloudinary(file) {
         let userIsAdmin           = false;
         let pinnedMsgId           = null;           // currently pinned msg in group
         let autodelTimers         = {};             // msgId → timeoutId
+        let _userProfileUid       = null;           // uid открытого профиля
 
         /* Persisted settings */
         let pinnedChats  = lsGet(PINNED_KEY, []);
@@ -2900,11 +2901,9 @@ async function uploadToCloudinary(file) {
         /* ══════════════════════════════
            USER PROFILE VIEW
         ══════════════════════════════ */
-        
-        // 1. В самом верху скрипта (вне функций) добавь эту переменную, если её еще нет
-window.currentGlobalAudio = window.currentGlobalAudio || null;
+        window.currentGlobalAudio = window.currentGlobalAudio || null;
 
-async function openUserProfile(uid, name) {
+        async function openUserProfile(uid, name) {
     // 1. Сначала находим все элементы
     const modal = document.getElementById('userProfileModal');
     const avEl  = document.getElementById('userProfileAv');
@@ -2996,7 +2995,8 @@ async function openUserProfile(uid, name) {
     } catch(err) {
         console.error("Ошибка профиля:", err);
     }
-}
+        }
+
         /* ══════════════════════════════
            VOICE MESSAGES
         ══════════════════════════════ */
