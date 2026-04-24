@@ -2371,14 +2371,18 @@
                 await new Promise(res => { tmpAudio.onloadedmetadata = res; tmpAudio.onerror = res; });
                 _profileMusicDur = tmpAudio.duration || 0;
                 URL.revokeObjectURL(tmpUrl);
-                const maxBytes = 1_000_000;
+                const maxBytes = 700_000;
                 let b64;
                 if (file.size > maxBytes) {
                     b64 = await compressMusicFile(file, maxBytes);
-                    _pmSize.textContent = 'Сжато до ~1 МБ';
+                    _pmSize.textContent = 'Сжато до ~700 КБ';
                 } else {
                     b64 = await fileToBase64(file);
                     _pmSize.textContent = formatFileSize(file.size);
+                }
+                if (b64.length > 950_000) {
+                    b64 = await compressMusicFile(file, 500_000);
+                    _pmSize.textContent = 'Сжато до ~500 КБ';
                 }
                 _profileMusicB64      = b64;
                 _profileMusicTitleVal = file.name.replace(/\.[^.]+$/, '');
@@ -3278,7 +3282,7 @@
             const row=document.createElement('div');
             row.className='msg-row '+(isMe?'msg-row--me':'msg-row--other');
             if (!sameAuthor&&prevDocSnap) row.classList.add('msg-row--gap');
-            row.dataset.msgId=id; row.dataset.plain=d.text||'';
+            row.dataset.msgId=id; row.dataset.id=id; row.dataset.plain=d.text||'';
 
             const av=document.createElement('div');
             av.className='msg-avatar'+(sameAuthor?' msg-avatar--hidden':'');
@@ -3525,16 +3529,82 @@
                 tryNotifyNewMessage({...lastDoc.data(),id:lastDoc.id}, chatName);
             }
             lastKnownLastMessageId=newLastId;
-            chatMessages.querySelectorAll('.msg-row,.msg-date-sep').forEach(n=>n.remove());
-            if (snapshot.empty){ chatEmpty.style.display=''; }
-            else {
+
+            if (snapshot.empty) {
+                chatMessages.querySelectorAll('.msg-row,.msg-date-sep').forEach(n=>n.remove());
+                chatEmpty.style.display='';
+            } else {
                 chatEmpty.style.display='none';
                 const docs=snapshot.docs;
+
+                // Build map of currently rendered msg-rows by data-id
+                const existingRows={};
+                chatMessages.querySelectorAll('.msg-row[data-id]').forEach(el=>{
+                    existingRows[el.dataset.id]=el;
+                });
+
+                // Track which ids should exist after this update
+                const newIds=new Set(docs.map(d=>d.id));
+
+                // Remove rows that no longer exist
+                Object.entries(existingRows).forEach(([id,el])=>{
+                    if (!newIds.has(id)) {
+                        // also remove preceding date separator if it belongs to this row
+                        const prev=el.previousSibling;
+                        if (prev&&prev.classList&&prev.classList.contains('msg-date-sep')) prev.remove();
+                        el.remove();
+                    }
+                });
+
+                // Full re-render into a fragment, then reconcile
+                const frag=document.createDocumentFragment();
                 docs.forEach((docSnap,i)=>{
                     const rows=renderMessageRow(docSnap,docs[i-1]||null);
-                    rows.forEach(r=>chatMessages.appendChild(r));
+                    rows.forEach(r=>frag.appendChild(r));
                 });
+
+                // If existing rendered set matches exactly (same ids in order), do targeted updates only
+                const fragRows=[...frag.querySelectorAll('.msg-row[data-id]')];
+                const existingOrdered=[...chatMessages.querySelectorAll('.msg-row[data-id]')];
+                const sameOrder=fragRows.length===existingOrdered.length&&
+                    fragRows.every((r,i)=>r.dataset.id===existingOrdered[i].dataset.id);
+
+                if (sameOrder && fragRows.length > 0) {
+                    // Only replace rows whose text/edited content changed (skip image rows to avoid flicker)
+                    fragRows.forEach((newRow,i)=>{
+                        const oldRow=existingOrdered[i];
+                        const newBubble=newRow.querySelector('.msg-bubble');
+                        const oldBubble=oldRow.querySelector('.msg-bubble');
+                        if (newBubble&&oldBubble) {
+                            // Only update if no image (avoid reload flicker) and content differs
+                            const hasImg=oldBubble.querySelector('.msg-img');
+                            if (!hasImg && newBubble.innerHTML!==oldBubble.innerHTML) {
+                                oldBubble.innerHTML=newBubble.innerHTML;
+                            } else if (!hasImg) {
+                                // update class (e.g. edited badge) if needed
+                                oldRow.className=newRow.className;
+                            }
+                        }
+                    });
+                } else {
+                    // Order changed or new messages added — do full replacement but preserve img src
+                    const imgCache={};
+                    chatMessages.querySelectorAll('.msg-row[data-id]').forEach(el=>{
+                        const img=el.querySelector('.msg-img');
+                        if (img&&img.src) imgCache[el.dataset.id]=img.src;
+                    });
+                    chatMessages.querySelectorAll('.msg-row,.msg-date-sep').forEach(n=>n.remove());
+                    // Restore cached img srcs in fragment before inserting
+                    frag.querySelectorAll('.msg-row[data-id]').forEach(el=>{
+                        if (imgCache[el.dataset.id]) {
+                            const img=el.querySelector('.msg-img');
+                            if (img) img.src=imgCache[el.dataset.id];
+                        }
+                    });
+                    chatMessages.appendChild(frag);
+                }
             }
+
             const shouldStick=atBottom||stickToBottom;
             requestAnimationFrame(()=>{
                 if (shouldStick) chatMessages.scrollTo({top:chatMessages.scrollHeight,behavior:'smooth'});
@@ -4129,7 +4199,9 @@
         musicFileInput.addEventListener('change', async () => {
             const file = musicFileInput.files[0];
             if (!file) return;
-            const maxBytes = 1_000_000; // 1MB target
+            // Firestore field limit is ~1 048 487 bytes. base64 inflates by ~1.37x,
+            // so raw audio must stay under ~700 KB to be safe.
+            const maxBytes = 700_000;
             musicPreviewTitle.textContent = file.name.replace(/\.[^.]+$/, '');
             musicPreviewSize.textContent  = 'Обработка…';
             musicPreviewCard.classList.add('is-visible');
@@ -4143,14 +4215,20 @@
                 _pendingMusicDur = tmpAudio.duration || 0;
                 URL.revokeObjectURL(tmpUrl);
 
-                // Compress if > 1MB using AudioContext resampling
+                // Compress if > 700KB using AudioContext resampling
                 let b64;
                 if (file.size > maxBytes) {
                     b64 = await compressMusicFile(file, maxBytes);
-                    musicPreviewSize.textContent = 'Сжато до ~1 МБ';
+                    musicPreviewSize.textContent = 'Сжато до ~700 КБ';
                 } else {
                     b64 = await fileToBase64(file);
                     musicPreviewSize.textContent = formatFileSize(file.size);
+                }
+
+                // Final safety check: b64 string must be under 950 000 chars
+                if (b64.length > 950_000) {
+                    b64 = await compressMusicFile(file, 500_000);
+                    musicPreviewSize.textContent = 'Сжато до ~500 КБ';
                 }
 
                 _pendingMusicFile  = file;
