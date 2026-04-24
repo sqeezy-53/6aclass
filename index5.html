@@ -3674,7 +3674,7 @@
             addPollOptionRow('');
         });
 
-        document.getElementById('btnPoll').addEventListener('click', openPollModal);
+        document.getElementById('btnPoll')?.addEventListener('click', openPollModal);
         document.getElementById('pollCancel').addEventListener('click', () => document.getElementById('pollModal').classList.remove('is-open'));
 
         document.getElementById('pollSubmit').addEventListener('click', async () => {
