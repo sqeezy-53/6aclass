@@ -1421,6 +1421,7 @@ function playGlobalAudio(url) {
             appId: '1:656933440681:web:e7a8c2ae22181ec98f2db8'
         };
         const app  = initializeApp(firebaseConfig);
+        window.currentGlobalAudio = null;
         const auth = getAuth(app);
         const db   = getFirestore(app);
 
@@ -1437,7 +1438,8 @@ async function uploadToCloudinary(file) {
     try {
         const res = await fetch(CLOUDINARY_URL, { method: "POST", body: formData });
         const data = await res.json();
-        return data.secure_url; 
+        return data.secure_url;
+    }
     } catch (err) {
         console.error("Cloudinary error:", err);
         return null;
@@ -3767,83 +3769,75 @@ volSlider.oninput = (e) => {
            MUSIC BUBBLE RENDERER
         ══════════════════════════════════════════ */
         function buildMusicBubble(msgId, d) {
-    const wrap = document.createElement('div');
-    wrap.className = 'msg-music';
+            const wrap = document.createElement('div');
+            wrap.className = 'msg-music';
 
-    const playBtn = document.createElement('button');
-    playBtn.className = 'music-play-btn';
-    playBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
+            const playBtn = document.createElement('button');
+            playBtn.className = 'music-play-btn';
+            playBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
 
-    const info = document.createElement('div');
-    info.className = 'music-info';
-    const title = document.createElement('div');
-    title.className = 'music-title';
-    title.textContent = d.musicTitle || 'Трек';
+            const info = document.createElement('div');
+            info.className = 'music-info';
+            const title = document.createElement('div');
+            title.className = 'music-title';
+            title.textContent = d.musicTitle || 'Трек';
 
-    const dur = document.createElement('div');
-    dur.className = 'music-duration';
-    const totalSec = d.musicDuration || 0;
-    dur.textContent = fmtVoiceTime(totalSec);
+            const dur = document.createElement('div');
+            dur.className = 'music-duration';
+            dur.textContent = fmtVoiceTime(d.musicDuration || 0);
 
-    const progress = document.createElement('div');
-    progress.className = 'music-progress';
-    const bar = document.createElement('div');
-    bar.className = 'music-progress-bar';
-    progress.appendChild(bar);
-    info.appendChild(title); info.appendChild(dur); info.appendChild(progress);
-    wrap.appendChild(playBtn); wrap.appendChild(info);
+            const progress = document.createElement('div');
+            progress.className = 'music-progress';
+            const bar = document.createElement('div');
+            bar.className = 'music-progress-bar';
+            progress.appendChild(bar);
+            info.appendChild(title); info.appendChild(dur); info.appendChild(progress);
+            wrap.appendChild(playBtn); wrap.appendChild(info);
 
-    let playTimer = null;
+            playBtn.onclick = () => {
+                const src = d.musicUrl;
+                if (!src) return;
 
-    playBtn.onclick = () => {
-        const src = d.musicUrl; // Берем только ссылку из облака
-        if (!src) return showToast('Файл недоступен');
+                if (globalAudioPlayer && globalAudioPlayer.src === src) {
+                    if (!globalAudioPlayer.paused) {
+                        globalAudioPlayer.pause();
+                        playBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
+                        return;
+                    } else {
+                        globalAudioPlayer.play();
+                        playBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
+                        return;
+                    }
+                }
 
-        // Если этот трек уже играет — ставим на паузу
-        if (globalAudioPlayer && globalAudioPlayer.src === src) {
-            if (!globalAudioPlayer.paused) {
-                globalAudioPlayer.pause();
-                playBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
-                return;
-            } else {
+                if (globalAudioPlayer) {
+                    globalAudioPlayer.pause();
+                    document.querySelectorAll('.music-play-btn').forEach(b => {
+                        b.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
+                    });
+                }
+
+                globalAudioPlayer = new Audio(src);
                 globalAudioPlayer.play();
                 playBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
-                return;
-            }
+
+                const playTimer = setInterval(() => {
+                    if (!globalAudioPlayer || globalAudioPlayer.src !== src) {
+                        clearInterval(playTimer);
+                        return;
+                    }
+                    const pct = (globalAudioPlayer.currentTime / globalAudioPlayer.duration) * 100;
+                    bar.style.width = pct + '%';
+                    dur.textContent = fmtVoiceTime(Math.floor(globalAudioPlayer.currentTime));
+                    if (globalAudioPlayer.ended) {
+                        clearInterval(playTimer);
+                        playBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
+                        bar.style.width = '0%';
+                    }
+                }, 300);
+            };
+            return wrap;
         }
-
-        // Если включили новый трек — сбрасываем старый
-        if (globalAudioPlayer) {
-            globalAudioPlayer.pause();
-            document.querySelectorAll('.music-play-btn').forEach(b => {
-                b.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
-            });
-        }
-
-        globalAudioPlayer = new Audio(src);
-        globalAudioPlayer.play();
-        playBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
-
-        playTimer = setInterval(() => {
-            if (!globalAudioPlayer || globalAudioPlayer.src !== src) {
-                clearInterval(playTimer);
-                return;
-            }
-            const pct = (globalAudioPlayer.currentTime / globalAudioPlayer.duration) * 100;
-            bar.style.width = pct + '%';
-            dur.textContent = fmtVoiceTime(Math.floor(globalAudioPlayer.currentTime));
-            
-            if (globalAudioPlayer.ended) {
-                clearInterval(playTimer);
-                playBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
-                bar.style.width = '0%';
-                dur.textContent = fmtVoiceTime(totalSec);
-            }
-        }, 300);
-    };
-
-    return wrap;
-}
 
             function stopMusic() {
                 if (window.currentGlobalAudio) {
@@ -4427,42 +4421,7 @@ volSlider.oninput = (e) => {
         });
 
         // Находим кнопку один раз
-        const _musicSendBtn = document.getElementById('musicSendBtn');
-
-        if (_musicSendBtn) {
-            // Используем только onclick, без лишних оберток
-            musicSendBtn.onclick = async () => {
-            const u = auth.currentUser;
-            if (!u || !_pendingMusicFile) return;
-
-            showToast('⏳ Загрузка музыки...');
-            musicSendBtn.disabled = true;
-
-            try {
-                const url = await uploadToCloudinary(_pendingMusicFile);
-                if (!url) throw new Error('Ошибка загрузки');
-
-                const msg = {
-                    uid: u.uid,
-                    author: displayNick(u),
-                    text: '',
-                    musicUrl: url,
-                    musicTitle: _pendingMusicTitle,
-                    musicDuration: Math.round(_pendingMusicDur || 0),
-                    createdAt: serverTimestamp()
-                };
-
-                await addDoc(collection(db, currentChatMode==='group'?'messages':`dmConvs/${currentDMConvId}/messages`), msg);
-                
-                musicPreviewCard.classList.remove('is-visible');
-                _pendingMusicFile = null;
-                showToast('🎵 Отправлено!');
-            } catch(e) {
-                showToast('Ошибка: ' + e.message);
-            } finally {
-                musicSendBtn.disabled = false;
-            }
-        }};
+       
 
         // ─── Checklist tab ───
         const checklistTitle    = document.getElementById('checklistTitle');
