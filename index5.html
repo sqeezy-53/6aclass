@@ -4340,14 +4340,14 @@ async function uploadToCloudinary(file) {
             const file = musicFileInput.files[0];
             if (!file) return;
             
-            _pendingMusicFile = file; // Сохраняем файл для облака
+            _pendingMusicFile = file;
             _pendingMusicTitle = file.name.replace(/\.[^.]+$/, '');
             
             musicPreviewTitle.textContent = _pendingMusicTitle;
             musicPreviewSize.textContent = (file.size / 1024 / 1024).toFixed(2) + ' MB';
             musicPreviewCard.classList.add('is-visible');
+            musicSendBtn.disabled = false; // ← разблокируем кнопку
             
-            // Получаем длительность без заморозки браузера
             const tA = new Audio(URL.createObjectURL(file));
             tA.onloadedmetadata = () => { _pendingMusicDur = tA.duration; };
         };
@@ -4358,7 +4358,6 @@ async function uploadToCloudinary(file) {
 
         musicUploadBtn.addEventListener('click', () => { musicFileInput.value = ''; musicFileInput.click(); });
 
-
         musicPreviewRemove.addEventListener('click', () => {
             _pendingMusicFile = null; _pendingMusicB64 = null;
             _pendingMusicTitle = ''; _pendingMusicDur = 0;
@@ -4367,8 +4366,44 @@ async function uploadToCloudinary(file) {
             musicFileInput.value = '';
         });
 
-        // Находим кнопку один раз
-       
+        musicSendBtn.addEventListener('click', async () => {
+            const u = auth.currentUser; if (!u) return;
+            if (!_pendingMusicFile) { showToast('Выбери файл'); return; }
+            musicSendBtn.disabled = true;
+            musicSendBtn.textContent = '⏳ Загружаю...';
+            try {
+                const url = await uploadToCloudinary(_pendingMusicFile);
+                if (!url) { showToast('Ошибка загрузки файла'); return; }
+                const msg = {
+                    uid: u.uid, author: displayNick(u),
+                    text: `🎵 ${_pendingMusicTitle}`,
+                    music: { url, title: _pendingMusicTitle, duration: Math.round(_pendingMusicDur || 0) },
+                    createdAt: serverTimestamp(), edited: false,
+                };
+                if (currentChatMode === 'group') {
+                    await addDoc(messagesCol, msg);
+                } else {
+                    const cid = currentDMConvId;
+                    await addDoc(collection(db,'dmConvs',cid,'messages'), msg);
+                    await setDoc(doc(db,'dmConvs',cid), {
+                        lastText: `🎵 ${_pendingMusicTitle}`,
+                        lastAt: serverTimestamp(),
+                        [`unread.${currentDMPeerUid}`]: increment(1)
+                    }, {merge:true});
+                }
+                // Сброс
+                _pendingMusicFile = null; _pendingMusicTitle = ''; _pendingMusicDur = 0;
+                musicPreviewCard.classList.remove('is-visible');
+                musicFileInput.value = '';
+                closeAttachSheet();
+                showToast('🎵 Музыка отправлена!');
+            } catch(e) {
+                showToast('Ошибка: ' + e.message);
+            } finally {
+                musicSendBtn.disabled = false;
+                musicSendBtn.textContent = 'Отправить музыку';
+            }
+        });
 
         // ─── Checklist tab ───
         const checklistTitle    = document.getElementById('checklistTitle');
