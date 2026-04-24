@@ -3883,49 +3883,41 @@ volSlider.oninput = (e) => {
             });
 
             progress.addEventListener('click', e => {
-                if (!window.currentGlobalAudio || !totalSec || !isPlaying) return;
-                const rect = progress.getBoundingClientRect();
-                window.currentGlobalAudio.currentTime = ((e.clientX - rect.left) / rect.width) * totalSec;
-            });
+    if (!window.currentGlobalAudio || !totalSec || !isPlaying) return;
+    const rect = progress.getBoundingClientRect();
+    window.currentGlobalAudio.currentTime = ((e.clientX - rect.left) / rect.width) * totalSec;
+});
 
-            return wrap;
+function stopMusic() {
+    if (audio) { audio.pause(); audio = null; }
+    clearInterval(playTimer); isPlaying = false;
+    playBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
+    bar.style.width = '0%';
+    dur.textContent = fmtVoiceTime(totalSec);
+}
 
-            progress.addEventListener('click', e => {
-                if (!window.currentGlobalAudio || !totalSec || !isPlaying) return;
-                const rect = progress.getBoundingClientRect();
-                window.currentGlobalAudio.currentTime = ((e.clientX - rect.left) / rect.width) * totalSec;
-            });
+playBtn.addEventListener('click', () => {
+    if (isPlaying) { stopMusic(); return; }
+    audio = new Audio(d.musicBase64);
+    audio.onended = stopMusic;
+    audio.play().catch(() => showToast('Не удалось воспроизвести'));
+    isPlaying = true;
+    playBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
+    playTimer = setInterval(() => {
+        if (!audio) return;
+        const pct = totalSec > 0 ? (audio.currentTime / totalSec) * 100 : 0;
+        bar.style.width = pct + '%';
+        dur.textContent = fmtVoiceTime(Math.floor(audio.currentTime));
+    }, 250);
+});
 
-            function stopMusic() {
-                if (audio) { audio.pause(); audio = null; }
-                clearInterval(playTimer); isPlaying = false;
-                playBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
-                bar.style.width = '0%';
-                dur.textContent = fmtVoiceTime(totalSec);
-            }
+progress.addEventListener('click', e => {
+    if (!audio || !totalSec) return;
+    const rect = progress.getBoundingClientRect();
+    audio.currentTime = ((e.clientX - rect.left) / rect.width) * totalSec;
+});
 
-            playBtn.addEventListener('click', () => {
-                if (isPlaying) { stopMusic(); return; }
-                audio = new Audio(d.musicBase64);
-                audio.onended = stopMusic;
-                audio.play().catch(() => showToast('Не удалось воспроизвести'));
-                isPlaying = true;
-                playBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
-                playTimer = setInterval(() => {
-                    if (!audio) return;
-                    const pct = totalSec > 0 ? (audio.currentTime / totalSec) * 100 : 0;
-                    bar.style.width = pct + '%';
-                    dur.textContent = fmtVoiceTime(Math.floor(audio.currentTime));
-                }, 250);
-            });
-
-            progress.addEventListener('click', e => {
-                if (!audio || !totalSec) return;
-                const rect = progress.getBoundingClientRect();
-                audio.currentTime = ((e.clientX - rect.left) / rect.width) * totalSec;
-            });
-
-            return wrap;
+return wrap; // ← только здесь, в самом конце
 
         /* ══════════════════════════════════════════
            CHECKLIST BUBBLE RENDERER
