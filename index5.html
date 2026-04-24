@@ -3546,7 +3546,7 @@ async function uploadToCloudinary(file) {
             }
 
             // Music message
-            if (d.musicBase64) {
+            if (d.musicBase64 || d.musicUrl) {
                 bubble.appendChild(buildMusicBubble(id, d));
             }
 
@@ -3556,10 +3556,10 @@ async function uploadToCloudinary(file) {
             }
 
             // Text body (skip if empty / poll / music / checklist)
-            if (d.text && !d.pollId && !d.musicBase64 && !d.checklist) bubble.appendChild(renderMessageBody(d.text));
+            if (d.text && !d.pollId && !d.musicBase64 && !d.musicUrl && !d.checklist) bubble.appendChild(renderMessageBody(d.text));
 
             // URL preview
-            if (d.text&&!d.pollId&&!d.musicBase64&&!d.checklist&&!d.text.match(GIF_URL)) buildUrlPreview(d.text, bubble);
+            if (d.text&&!d.pollId&&!d.musicBase64&&!d.musicUrl&&!d.checklist&&!d.text.match(GIF_URL)) buildUrlPreview(d.text, bubble);
 
             // Footer
             const foot=document.createElement('div'); foot.className='msg-footer';
@@ -4376,8 +4376,10 @@ async function uploadToCloudinary(file) {
                 if (!url) { showToast('Ошибка загрузки файла'); return; }
                 const msg = {
                     uid: u.uid, author: displayNick(u),
-                    text: `🎵 ${_pendingMusicTitle}`,
-                    music: { url, title: _pendingMusicTitle, duration: Math.round(_pendingMusicDur || 0) },
+                    text: '',
+                    musicUrl: url,
+                    musicTitle: _pendingMusicTitle,
+                    musicDuration: Math.round(_pendingMusicDur || 0),
                     createdAt: serverTimestamp(), edited: false,
                 };
                 if (currentChatMode === 'group') {
