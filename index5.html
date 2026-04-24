@@ -2900,74 +2900,103 @@ async function uploadToCloudinary(file) {
         /* ══════════════════════════════
            USER PROFILE VIEW
         ══════════════════════════════ */
-        let _userProfileUid = null;
-        async function openUserProfile(uid, name) {
-            // Внутри функции openUserProfile, там где musicUrl:
-musicBox.innerHTML = `
-    <div class="modern-profile-player">
-        <button id="p-play">▶</button>
-        <div class="p-info">
-            <div class="p-name">${d.musicTitle}</div>
-            <input type="range" class="p-volume" min="0" max="1" step="0.1" value="0.8">
-        </div>
-    </div>
-`;
+        
+        // 1. В самом верху скрипта (вне функций) добавь эту переменную, если её еще нет
+window.currentGlobalAudio = window.currentGlobalAudio || null;
 
-const volSlider = musicBox.querySelector('.p-volume');
-volSlider.oninput = (e) => {
-    if (window.currentGlobalAudio) window.currentGlobalAudio.volume = e.target.value;
-};
-            _userProfileUid = uid;
-            const modal = document.getElementById('userProfileModal');
-            const avEl  = document.getElementById('userProfileAv');
-            const nameEl= document.getElementById('userProfileName');
-            const statEl= document.getElementById('userProfileStatus');
-            const bioEl = document.getElementById('userProfileBio');
-            const dmBtn = document.getElementById('userProfileDMBtn');
+async function openUserProfile(uid, name) {
+    // 1. Сначала находим все элементы
+    const modal = document.getElementById('userProfileModal');
+    const avEl  = document.getElementById('userProfileAv');
+    const nameEl= document.getElementById('userProfileName');
+    const statEl= document.getElementById('userProfileStatus');
+    const bioEl = document.getElementById('userProfileBio');
+    const dmBtn = document.getElementById('userProfileDMBtn');
+    const musicBox = document.getElementById('musicBox'); // ТЕПЕРЬ ОН ОПРЕДЕЛЕН
 
-            // Set name + avatar immediately from cache
-            nameEl.textContent = name;
-            bioEl.textContent  = '';
-            statEl.textContent = '';
-            applyAvatarToEl(avEl, uid, name, name, avatarCache[uid]||null);
-            avEl.style.background = avatarCache[uid] ? '' : avatarGradient(uid);
+    _userProfileUid = uid;
 
-            // Check if DM already exists
-            const me = auth.currentUser;
-            const convId = me ? [me.uid, uid].sort().join('_') : null;
-            let hasDM = false;
-            if (convId) {
-                try {
-                    const s = await getDoc(doc(db,'dmConvs',convId));
-                    hasDM = s.exists() && !(s.data().deleted?.[me.uid]);
-                } catch(_){}
+    // 2. Очищаем старые данные
+    if (musicBox) musicBox.innerHTML = '';
+    nameEl.textContent = name;
+    bioEl.textContent  = '';
+    statEl.textContent = 'Загрузка...';
+
+    // Аватарка из кэша
+    applyAvatarToEl(avEl, uid, name, name, avatarCache[uid]||null);
+    avEl.style.background = avatarCache[uid] ? '' : avatarGradient(uid);
+
+    // Логика кнопки ЛС
+    const me = auth.currentUser;
+    const convId = me ? [me.uid, uid].sort().join('_') : null;
+    let hasDM = false;
+    if (convId) {
+        try {
+            const s = await getDoc(doc(db,'dmConvs',convId));
+            hasDM = s.exists() && !(s.data().deleted?.[me.uid]);
+        } catch(_){}
+    }
+    dmBtn.textContent = hasDM ? '💬 Продолжить переписку' : '💬 Написать';
+    dmBtn.onclick = () => { modal.classList.remove('is-open'); openDMWith(uid, name); };
+
+    // Показываем модалку сразу
+    modal.classList.add('is-open');
+
+    // 3. Загружаем данные профиля
+    try {
+        const snap = await getDoc(doc(db,'users',uid));
+        if (snap.exists()) {
+            const d = snap.data(); // ВОТ ТЕПЕРЬ 'd' СУЩЕСТВУЕТ
+            
+            if (d.avatar && !avatarCache[uid]) { 
+                avatarCache[uid]=d.avatar; 
+                applyAvatarToEl(avEl,uid,name,name,d.avatar); 
             }
-            dmBtn.textContent = hasDM ? '💬 Продолжить переписку' : '💬 Написать';
-            dmBtn.onclick = () => { modal.classList.remove('is-open'); openDMWith(uid, name); };
+            if (d.bio) bioEl.textContent = d.bio;
+            
+            const statusMap = {online:'🟢 В сети', away:'🟡 Отошёл', dnd:'🔴 Не беспокоить', invisible:'⚫ Невидимка'};
+            statEl.textContent = onlineUsers[uid] ? (statusMap[d.status||'online'] || '🟢 В сети') : '⚫ Не в сети';
 
-            // Load full profile from Firestore
-            try {
-                const snap = await getDoc(doc(db,'users',uid));
-                if (snap.exists()) {
-                    const d = snap.data();
-                    if (d.avatar && !avatarCache[uid]) { avatarCache[uid]=d.avatar; applyAvatarToEl(avEl,uid,name,name,d.avatar); }
-                    if (d.bio) bioEl.textContent = d.bio;
-                    const statusMap = {online:'🟢 В сети', away:'🟡 Отошёл', dnd:'🔴 Не беспокоить', invisible:'⚫ Невидимка'};
-                    const isOnline = !!onlineUsers[uid];
-                    if (isOnline) {
-                        // User is online — show custom status if set
-                        statEl.textContent = statusMap[d.status||'online'] || '🟢 В сети';
-                    } else {
-                        statEl.textContent = '⚫ Не в сети';
+            // 4. Отрисовываем музыку ТОЛЬКО если она есть в данных 'd'
+            if (d.musicUrl && musicBox) {
+                musicBox.innerHTML = `
+                    <div class="modern-profile-player">
+                        <button id="p-play">▶</button>
+                        <div class="p-info">
+                            <div class="p-name">${d.musicTitle || 'Без названия'}</div>
+                            <input type="range" class="p-volume" min="0" max="1" step="0.1" value="0.8">
+                        </div>
+                    </div>
+                `;
+
+                const playBtn = musicBox.querySelector('#p-play');
+                const volSlider = musicBox.querySelector('.p-volume');
+
+                playBtn.onclick = () => {
+                    if (window.currentGlobalAudio) {
+                        window.currentGlobalAudio.pause();
+                        if (window.currentGlobalAudio.src === d.musicUrl) {
+                            window.currentGlobalAudio = null;
+                            playBtn.textContent = '▶';
+                            return;
+                        }
                     }
-                }
-            } catch(_){}
+                    window.currentGlobalAudio = new Audio(d.musicUrl);
+                    window.currentGlobalAudio.volume = volSlider.value;
+                    window.currentGlobalAudio.play();
+                    playBtn.textContent = '⏸';
+                    window.currentGlobalAudio.onended = () => { playBtn.textContent = '▶'; };
+                };
 
-            modal.classList.add('is-open');
+                volSlider.oninput = (e) => {
+                    if (window.currentGlobalAudio) window.currentGlobalAudio.volume = e.target.value;
+                };
+            }
         }
-        document.getElementById('userProfileClose').addEventListener('click', ()=>document.getElementById('userProfileModal').classList.remove('is-open'));
-        document.getElementById('userProfileModal').addEventListener('click', e=>{ if(e.target===document.getElementById('userProfileModal')) document.getElementById('userProfileModal').classList.remove('is-open'); });
-
+    } catch(err) {
+        console.error("Ошибка профиля:", err);
+    }
+}
         /* ══════════════════════════════
            VOICE MESSAGES
         ══════════════════════════════ */
