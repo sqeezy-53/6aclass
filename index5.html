@@ -116,6 +116,22 @@
         }
 
 
+.modern-profile-player {
+    display: flex;
+    align-items: center;
+    background: rgba(255,255,255,0.05);
+    padding: 10px;
+    border-radius: 12px;
+    gap: 10px;
+}
+.p-volume {
+    width: 60px;
+    height: 4px;
+    accent-color: var(--accent);
+}
+
+
+
         /* ═══════════════════════════════════════
            ATTACHMENT SHEET (Telegram-style bottom sheet)
         ═══════════════════════════════════════ */
@@ -1287,7 +1303,7 @@
                     <button type="button" class="music-preview-remove" id="musicPreviewRemove">✕</button>
                 </div>
                 <div style="font-size:.75rem;color:var(--muted);margin-bottom:12px;line-height:1.5">
-                    Файл будет сжат до ~1 МБ если слишком большой.<br>Поддерживаются mp3, ogg, m4a, wav.
+                    Максимальный размер 15 Мб<br>Поддерживаются mp3, ogg, m4a, wav.
                 </div>
                 <button type="button" class="btn btn-primary" id="musicSendBtn" disabled style="width:100%">Отправить музыку</button>
             </div>
@@ -1373,6 +1389,17 @@
          FIREBASE + LOGIC
     ══════════════════════════════════════════ -->
     <script type="module">
+        window.currentGlobalAudio = null;
+    let currentGlobalAudio = null; // Переменная для контроля проигрывания
+
+function playGlobalAudio(url) {
+    if (currentGlobalAudio) {
+        currentGlobalAudio.pause();
+        currentGlobalAudio = null;
+    }
+    currentGlobalAudio = new Audio(url);
+    currentGlobalAudio.play().catch(e => console.error("Ошибка воспроизведения:", e));
+}
         import { initializeApp }          from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
         import { getAuth, onAuthStateChanged, signInWithEmailAndPassword,
                  createUserWithEmailAndPassword, signOut, updateProfile }
@@ -2435,9 +2462,16 @@ async function uploadToCloudinary(file) {
                     if (d.musicUrl) {
                         _showProfileMusicCard(d.musicTitle || 'Мой трек', 'Сохранено ✓');
                         // Настраиваем клик для проигрывания
+                        // Настраиваем клик для проигрывания с защитой
                         _pmCard.onclick = () => {
-                            const audio = new Audio(d.musicUrl);
-                            audio.play().catch(e => console.error("Ошибка воспроизведения:", e));
+                            if (window.currentGlobalAudio && window.currentGlobalAudio.src === d.musicUrl && !window.currentGlobalAudio.paused) {
+                                window.currentGlobalAudio.pause();
+                                return;
+                            }
+                            if (window.currentGlobalAudio) window.currentGlobalAudio.pause();
+                            
+                            window.currentGlobalAudio = new Audio(d.musicUrl);
+                            window.currentGlobalAudio.play().catch(e => console.error("Ошибка:", e));
                         };
                     } else {
                         // Если музыки нет в базе, скрываем карточку
@@ -2450,36 +2484,6 @@ async function uploadToCloudinary(file) {
         }
 
         _pmBtn.addEventListener('click', () => { _pmInput.value = ''; _pmInput.click(); });
-
-        _pmInput.addEventListener('change', async () => {
-            const file = _pmInput.files[0]; if (!file) return;
-            _showProfileMusicCard(file.name.replace(/\.[^.]+$/, ''), 'Обработка…');
-            _pmClearBtn.style.display = 'none';
-            try {
-                const tmpUrl = URL.createObjectURL(file);
-                const tmpAudio = new Audio(tmpUrl);
-                await new Promise(res => { tmpAudio.onloadedmetadata = res; tmpAudio.onerror = res; });
-                _profileMusicDur = tmpAudio.duration || 0;
-                URL.revokeObjectURL(tmpUrl);
-                const maxBytes = 700_000;
-                let b64;
-                if (file.size > maxBytes) {
-                    b64 = await compressMusicFile(file, maxBytes);
-                    _pmSize.textContent = 'Сжато до ~700 КБ';
-                } else {
-                    b64 = await fileToBase64(file);
-                    _pmSize.textContent = formatFileSize(file.size);
-                }
-                if (b64.length > 950_000) {
-                    b64 = await compressMusicFile(file, 500_000);
-                    _pmSize.textContent = 'Сжато до ~500 КБ';
-                }
-                _profileMusicB64      = b64;
-                _profileMusicTitleVal = file.name.replace(/\.[^.]+$/, '');
-                _profileMusicAction   = 'set';
-                _pmClearBtn.style.display = 'inline-flex';
-            } catch(e) { _pmSize.textContent = 'Ошибка: ' + e.message; }
-        });
 
         // ✕ — отменить только что выбранный файл, показать сохранённый
         _pmRemove.addEventListener('click', () => {
@@ -2895,6 +2899,21 @@ async function uploadToCloudinary(file) {
         ══════════════════════════════ */
         let _userProfileUid = null;
         async function openUserProfile(uid, name) {
+            // Внутри функции openUserProfile, там где musicUrl:
+musicBox.innerHTML = `
+    <div class="modern-profile-player">
+        <button id="p-play">▶</button>
+        <div class="p-info">
+            <div class="p-name">${d.musicTitle}</div>
+            <input type="range" class="p-volume" min="0" max="1" step="0.1" value="0.8">
+        </div>
+    </div>
+`;
+
+const volSlider = musicBox.querySelector('.p-volume');
+volSlider.oninput = (e) => {
+    if (window.currentGlobalAudio) window.currentGlobalAudio.volume = e.target.value;
+};
             _userProfileUid = uid;
             const modal = document.getElementById('userProfileModal');
             const avEl  = document.getElementById('userProfileAv');
@@ -3748,40 +3767,139 @@ async function uploadToCloudinary(file) {
            MUSIC BUBBLE RENDERER
         ══════════════════════════════════════════ */
         function buildMusicBubble(msgId, d) {
-            const wrap = document.createElement('div');
-            wrap.className = 'msg-music';
+    const wrap = document.createElement('div');
+    wrap.className = 'msg-music';
 
-            const playBtn = document.createElement('button');
-            playBtn.className = 'music-play-btn';
-            playBtn.title = 'Воспроизвести';
-            playBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
+    const playBtn = document.createElement('button');
+    playBtn.className = 'music-play-btn';
+    playBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
 
-            const info = document.createElement('div');
-            info.className = 'music-info';
+    const info = document.createElement('div');
+    info.className = 'music-info';
+    const title = document.createElement('div');
+    title.className = 'music-title';
+    title.textContent = d.musicTitle || 'Трек';
 
-            const title = document.createElement('div');
-            title.className = 'music-title';
-            title.textContent = d.musicTitle || 'Аудио';
+    const dur = document.createElement('div');
+    dur.className = 'music-duration';
+    const totalSec = d.musicDuration || 0;
+    dur.textContent = fmtVoiceTime(totalSec);
 
-            const dur = document.createElement('div');
-            dur.className = 'music-duration';
-            const totalSec = d.musicDuration || 0;
-            dur.textContent = fmtVoiceTime(totalSec);
+    const progress = document.createElement('div');
+    progress.className = 'music-progress';
+    const bar = document.createElement('div');
+    bar.className = 'music-progress-bar';
+    progress.appendChild(bar);
+    info.appendChild(title); info.appendChild(dur); info.appendChild(progress);
+    wrap.appendChild(playBtn); wrap.appendChild(info);
 
-            const progress = document.createElement('div');
-            progress.className = 'music-progress';
-            const bar = document.createElement('div');
-            bar.className = 'music-progress-bar';
-            progress.appendChild(bar);
+    let playTimer = null;
 
-            info.appendChild(title);
-            info.appendChild(dur);
-            info.appendChild(progress);
-            wrap.appendChild(playBtn);
-            wrap.appendChild(info);
+    playBtn.onclick = () => {
+        const src = d.musicUrl; // Берем только ссылку из облака
+        if (!src) return showToast('Файл недоступен');
 
-            // Playback
-            let audio = null; let playTimer = null; let isPlaying = false;
+        // Если этот трек уже играет — ставим на паузу
+        if (globalAudioPlayer && globalAudioPlayer.src === src) {
+            if (!globalAudioPlayer.paused) {
+                globalAudioPlayer.pause();
+                playBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
+                return;
+            } else {
+                globalAudioPlayer.play();
+                playBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
+                return;
+            }
+        }
+
+        // Если включили новый трек — сбрасываем старый
+        if (globalAudioPlayer) {
+            globalAudioPlayer.pause();
+            document.querySelectorAll('.music-play-btn').forEach(b => {
+                b.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
+            });
+        }
+
+        globalAudioPlayer = new Audio(src);
+        globalAudioPlayer.play();
+        playBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
+
+        playTimer = setInterval(() => {
+            if (!globalAudioPlayer || globalAudioPlayer.src !== src) {
+                clearInterval(playTimer);
+                return;
+            }
+            const pct = (globalAudioPlayer.currentTime / globalAudioPlayer.duration) * 100;
+            bar.style.width = pct + '%';
+            dur.textContent = fmtVoiceTime(Math.floor(globalAudioPlayer.currentTime));
+            
+            if (globalAudioPlayer.ended) {
+                clearInterval(playTimer);
+                playBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
+                bar.style.width = '0%';
+                dur.textContent = fmtVoiceTime(totalSec);
+            }
+        }, 300);
+    };
+
+    return wrap;
+}
+
+            function stopMusic() {
+                if (window.currentGlobalAudio) {
+                    window.currentGlobalAudio.pause();
+                    window.currentGlobalAudio = null;
+                }
+                clearInterval(playTimer);
+                isPlaying = false;
+                playBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
+                bar.style.width = '0%';
+                dur.textContent = fmtVoiceTime(totalSec);
+            }
+
+            playBtn.addEventListener('click', () => {
+                if (isPlaying) { stopMusic(); return; }
+
+                // Останавливаем всё, что играло до этого
+                if (window.currentGlobalAudio) {
+                    window.currentGlobalAudio.pause();
+                    document.querySelectorAll('.music-play-btn').forEach(btn => {
+                        btn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
+                    });
+                }
+
+                // Используем ссылку из облака или старый код
+                const audioSource = d.musicUrl || d.musicBase64;
+                if (!audioSource) { showToast('Файл не найден'); return; }
+
+                window.currentGlobalAudio = new Audio(audioSource);
+                window.currentGlobalAudio.onended = stopMusic;
+                window.currentGlobalAudio.play().catch(() => showToast('Не удалось воспроизвести'));
+
+                isPlaying = true;
+                playBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
+
+                playTimer = setInterval(() => {
+                    if (!window.currentGlobalAudio) return;
+                    const pct = totalSec > 0 ? (window.currentGlobalAudio.currentTime / totalSec) * 100 : 0;
+                    bar.style.width = pct + '%';
+                    dur.textContent = fmtVoiceTime(Math.floor(window.currentGlobalAudio.currentTime));
+                }, 250);
+            });
+
+            progress.addEventListener('click', e => {
+                if (!window.currentGlobalAudio || !totalSec || !isPlaying) return;
+                const rect = progress.getBoundingClientRect();
+                window.currentGlobalAudio.currentTime = ((e.clientX - rect.left) / rect.width) * totalSec;
+            });
+
+            return wrap;
+
+            progress.addEventListener('click', e => {
+                if (!window.currentGlobalAudio || !totalSec || !isPlaying) return;
+                const rect = progress.getBoundingClientRect();
+                window.currentGlobalAudio.currentTime = ((e.clientX - rect.left) / rect.width) * totalSec;
+            });
 
             function stopMusic() {
                 if (audio) { audio.pause(); audio = null; }
@@ -3813,7 +3931,6 @@ async function uploadToCloudinary(file) {
             });
 
             return wrap;
-        }
 
         /* ══════════════════════════════════════════
            CHECKLIST BUBBLE RENDERER
@@ -4278,7 +4395,21 @@ async function uploadToCloudinary(file) {
         const musicPreviewSize   = document.getElementById('musicPreviewSize');
         const musicPreviewRemove = document.getElementById('musicPreviewRemove');
         const musicSendBtn       = document.getElementById('musicSendBtn');
-
+        musicFileInput.onchange = async () => {
+            const file = musicFileInput.files[0];
+            if (!file) return;
+            
+            _pendingMusicFile = file; // Сохраняем файл для облака
+            _pendingMusicTitle = file.name.replace(/\.[^.]+$/, '');
+            
+            musicPreviewTitle.textContent = _pendingMusicTitle;
+            musicPreviewSize.textContent = (file.size / 1024 / 1024).toFixed(2) + ' MB';
+            musicPreviewCard.classList.add('is-visible');
+            
+            // Получаем длительность без заморозки браузера
+            const tA = new Audio(URL.createObjectURL(file));
+            tA.onloadedmetadata = () => { _pendingMusicDur = tA.duration; };
+        };
         let _pendingMusicFile    = null;
         let _pendingMusicB64     = null;
         let _pendingMusicTitle   = '';
@@ -4286,49 +4417,6 @@ async function uploadToCloudinary(file) {
 
         musicUploadBtn.addEventListener('click', () => { musicFileInput.value = ''; musicFileInput.click(); });
 
-        musicFileInput.addEventListener('change', async () => {
-            const file = musicFileInput.files[0];
-            if (!file) return;
-            // Firestore field limit is ~1 048 487 bytes. base64 inflates by ~1.37x,
-            // so raw audio must stay under ~700 KB to be safe.
-            const maxBytes = 700_000;
-            musicPreviewTitle.textContent = file.name.replace(/\.[^.]+$/, '');
-            musicPreviewSize.textContent  = 'Обработка…';
-            musicPreviewCard.classList.add('is-visible');
-            musicSendBtn.disabled = true;
-
-            try {
-                // Get duration
-                const tmpUrl = URL.createObjectURL(file);
-                const tmpAudio = new Audio(tmpUrl);
-                await new Promise(res => { tmpAudio.onloadedmetadata = res; tmpAudio.onerror = res; });
-                _pendingMusicDur = tmpAudio.duration || 0;
-                URL.revokeObjectURL(tmpUrl);
-
-                // Compress if > 700KB using AudioContext resampling
-                let b64;
-                if (file.size > maxBytes) {
-                    b64 = await compressMusicFile(file, maxBytes);
-                    musicPreviewSize.textContent = 'Сжато до ~700 КБ';
-                } else {
-                    b64 = await fileToBase64(file);
-                    musicPreviewSize.textContent = formatFileSize(file.size);
-                }
-
-                // Final safety check: b64 string must be under 950 000 chars
-                if (b64.length > 950_000) {
-                    b64 = await compressMusicFile(file, 500_000);
-                    musicPreviewSize.textContent = 'Сжато до ~500 КБ';
-                }
-
-                _pendingMusicFile  = file;
-                _pendingMusicB64   = b64;
-                _pendingMusicTitle = file.name.replace(/\.[^.]+$/, '');
-                musicSendBtn.disabled = false;
-            } catch(e) {
-                musicPreviewSize.textContent = 'Ошибка: '+e.message;
-            }
-        });
 
         musicPreviewRemove.addEventListener('click', () => {
             _pendingMusicFile = null; _pendingMusicB64 = null;
@@ -4343,65 +4431,38 @@ async function uploadToCloudinary(file) {
 
         if (_musicSendBtn) {
             // Используем только onclick, без лишних оберток
-            _musicSendBtn.onclick = async () => {
-                const u = auth.currentUser;
-                // Берём чистый файл
-                const fileToUpload = window._pendingMusicFile;
+            musicSendBtn.onclick = async () => {
+            const u = auth.currentUser;
+            if (!u || !_pendingMusicFile) return;
 
-                if (!u || !fileToUpload) {
-                    showToast('Сначала выбери файл!');
-                    return;
-                }
+            showToast('⏳ Загрузка музыки...');
+            musicSendBtn.disabled = true;
 
-                closeAttachSheet();
-                showToast('⏳ Загрузка в облако...');
+            try {
+                const url = await uploadToCloudinary(_pendingMusicFile);
+                if (!url) throw new Error('Ошибка загрузки');
 
-                try {
-                    // 1. Грузим файл в Cloudinary
-                    const url = await uploadToCloudinary(fileToUpload);
-                    
-                    if (!url) {
-                        showToast('Ошибка: Облако отклонило файл');
-                        return;
-                    }
+                const msg = {
+                    uid: u.uid,
+                    author: displayNick(u),
+                    text: '',
+                    musicUrl: url,
+                    musicTitle: _pendingMusicTitle,
+                    musicDuration: Math.round(_pendingMusicDur || 0),
+                    createdAt: serverTimestamp()
+                };
 
-                    // 2. Формируем объект сообщения
-                    const msg = {
-                        uid: u.uid,
-                        author: displayNick(u),
-                        text: '',
-                        musicUrl: url, 
-                        musicTitle: _pendingMusicTitle || fileToUpload.name,
-                        musicDuration: Math.round(_pendingMusicDur || 0),
-                        createdAt: serverTimestamp(),
-                        edited: false
-                    };
-
-                    // 3. Отправка в Firebase
-                    if (currentChatMode === 'group') {
-                        await addDoc(messagesCol, msg);
-                    } else {
-                        const cid = currentDMConvId;
-                        await addDoc(collection(db, 'dmConvs', cid, 'messages'), msg);
-                        await setDoc(doc(db,'dmConvs',cid), {
-                            lastText: '🎵 ' + (msg.musicTitle), 
-                            lastAt: serverTimestamp(), 
-                            [`unread.${currentDMPeerUid}`]: increment(1)
-                        }, {merge: true});
-                    }
-
-                    showToast('🎵 Музыка отправлена!');
-                    window._pendingMusicFile = null; // Очистка
-                    
-                    // Закрываем превью (у тебя в коде это _musicPreviewRemove)
-                    if (window._musicPreviewRemove) _musicPreviewRemove.click();
-                    
-                } catch(e) { 
-                    console.error(e);
-                    showToast('Ошибка: ' + e.message); 
-                }
-            };
-        }
+                await addDoc(collection(db, currentChatMode==='group'?'messages':`dmConvs/${currentDMConvId}/messages`), msg);
+                
+                musicPreviewCard.classList.remove('is-visible');
+                _pendingMusicFile = null;
+                showToast('🎵 Отправлено!');
+            } catch(e) {
+                showToast('Ошибка: ' + e.message);
+            } finally {
+                musicSendBtn.disabled = false;
+            }
+        }};
 
         // ─── Checklist tab ───
         const checklistTitle    = document.getElementById('checklistTitle');
