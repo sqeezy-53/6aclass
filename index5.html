@@ -143,6 +143,36 @@
             display: block;
         }
 
+
+        /* ═══════════════════════════════════════
+           POLLS
+        ═══════════════════════════════════════ */
+        .poll-bubble { background: var(--surface-2); border-radius: var(--radius-lg); padding: 14px 16px; max-width: 320px; border: 1px solid var(--border); }
+        .poll-question { font-weight: 700; font-size: .95rem; margin-bottom: 12px; line-height: 1.4; }
+        .poll-options { display: flex; flex-direction: column; gap: 8px; }
+        .poll-option { position: relative; border-radius: var(--radius-sm); overflow: hidden; cursor: pointer; border: 1.5px solid var(--border); transition: border-color .18s; background: var(--surface); }
+        .poll-option:hover { border-color: var(--accent); }
+        .poll-option.voted { border-color: var(--accent); }
+        .poll-option-bar { position: absolute; inset: 0; background: rgba(94,200,255,.13); transition: width .4s ease; border-radius: var(--radius-sm); }
+        .poll-option-body { position: relative; display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; font-size: .85rem; font-weight: 500; gap: 8px; }
+        .poll-option-pct { font-size: .78rem; color: var(--muted); font-weight: 600; min-width: 34px; text-align: right; }
+        .poll-option-check { color: var(--accent); font-size: .8rem; }
+        .poll-footer { margin-top: 10px; font-size: .75rem; color: var(--muted); display: flex; gap: 10px; align-items: center; }
+        .poll-anonymous-badge { background: rgba(94,200,255,.12); color: var(--accent); border-radius: 20px; padding: 2px 8px; font-size: .7rem; font-weight: 600; }
+
+        /* Poll create modal */
+        #pollModal .modal-box { max-width: 420px; width: 100%; }
+        .poll-add-opt { display: flex; gap: 8px; margin-top: 4px; }
+        .poll-options-list { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+        .poll-opt-row { display: flex; gap: 6px; align-items: center; }
+        .poll-opt-row input { flex: 1; padding: 7px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: .85rem; outline: none; }
+        .poll-opt-row input:focus { border-color: var(--accent); }
+        .poll-opt-remove { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 1rem; padding: 2px 6px; border-radius: 4px; transition: color .15s; }
+        .poll-opt-remove:hover { color: var(--danger); }
+        .poll-modal-question { width: 100%; padding: 9px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: .9rem; outline: none; margin-bottom: 4px; }
+        .poll-modal-question:focus { border-color: var(--accent); }
+        .poll-anon-row { display: flex; align-items: center; gap: 8px; font-size: .84rem; color: var(--muted); margin-top: 10px; cursor: pointer; user-select: none; }
+
         /* ═══════════════════════════════════════
            RESET
         ═══════════════════════════════════════ */
@@ -804,6 +834,7 @@
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
                         <input type="file" id="imgFileInput" accept="image/*">
                     </label>
+                    <button type="button" class="icon-btn" id="btnPoll" title="Создать опрос" style="font-size:1.1rem">📊</button>
                     <button type="button" class="btn-voice" id="btnVoice" title="Голосовое сообщение">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
                     </button>
@@ -907,6 +938,28 @@
             <div id="forwardChatList" style="display:flex;flex-direction:column;gap:6px;max-height:260px;overflow-y:auto;margin-bottom:16px"></div>
             <div class="modal-actions">
                 <button type="button" class="btn btn-ghost" id="forwardCancel">Отмена</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Poll create modal -->
+    <div class="modal-overlay" id="pollModal">
+        <div class="modal-box">
+            <h3>📊 Создать опрос</h3>
+            <label style="font-size:.8rem;color:var(--muted);display:block;margin-bottom:4px">Вопрос</label>
+            <input type="text" class="poll-modal-question" id="pollQuestion" placeholder="Напишите вопрос…" maxlength="200">
+            <label style="font-size:.8rem;color:var(--muted);display:block;margin-top:10px;margin-bottom:4px">Варианты ответа</label>
+            <div class="poll-options-list" id="pollOptionsList"></div>
+            <div class="poll-add-opt">
+                <button type="button" class="btn btn-ghost" id="pollAddOption" style="font-size:.82rem;padding:5px 12px">+ Добавить вариант</button>
+            </div>
+            <label class="poll-anon-row">
+                <input type="checkbox" id="pollAnonymous" checked style="accent-color:var(--accent)">
+                Анонимное голосование
+            </label>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-ghost" id="pollCancel">Отмена</button>
+                <button type="button" class="btn btn-primary" id="pollSubmit">Опубликовать</button>
             </div>
         </div>
     </div>
@@ -1612,10 +1665,6 @@
             el.appendChild(avWrap); el.appendChild(body);
 
             el.addEventListener('click', ()=>{ if(item.type==='group') openGroupChat(); else openDMWith(item.peerUid,item.name); closeMobileSidebar(); });
-            if (item.type==='dm'&&item.peerUid) {
-                avInner.addEventListener('click',e=>{e.stopPropagation();openUserProfile(item.peerUid,item.name);});
-                nameEl.addEventListener('click',e=>{e.stopPropagation();openUserProfile(item.peerUid,item.name);});
-            }
 
             // Right-click context menu
             el.addEventListener('contextmenu', e=>{
@@ -1646,6 +1695,9 @@
         function openGroupChat() {
             if (currentChatMode==='group') return;
             currentChatMode='group'; currentDMPeerUid=null; currentDMPeerName=null; currentDMConvId=null;
+            _unbindDMHeaderProfile();
+            startTypingListeners(); // back to group typing doc
+            startPollsListener();
             tgHeaderAv.style.background='linear-gradient(135deg,#5ec8ff,#a78bfa)';
             tgHeaderAv.textContent='💬';
             tgHeaderName.textContent='Основной чат';
@@ -1665,6 +1717,7 @@
             );
             startTypingListeners();
             loadPinnedMsg();
+            startPollsListener();
         }
 
         let _pinnedUnsub = null;
@@ -1672,17 +1725,27 @@
             if (_pinnedUnsub) { _pinnedUnsub(); _pinnedUnsub=null; }
             const pRef = doc(db, 'chatMeta', 'group_pinned');
             _pinnedUnsub = onSnapshot(pRef, snap=>{
-                if (snap.exists()) { const d=snap.data(); showPinnedBanner(d.msgId, d.text, d.author); }
-                else { pinnedMsgId=null; pinnedBanner.classList.remove('is-on'); }
+                if (snap.exists()) {
+                    const d=snap.data();
+                    // If a new message gets pinned, reset dismiss flag
+                    if (_pinnedBannerDismissed !== d.msgId) _pinnedBannerDismissed = null;
+                    showPinnedBanner(d.msgId, d.text, d.author);
+                } else { pinnedMsgId=null; pinnedBanner.classList.remove('is-on'); }
             }, ()=>{});
         }
 
+        let _pinnedBannerDismissed = null; // stores dismissed msgId
+
         function showPinnedBanner(msgId, text, author) {
+            if (_pinnedBannerDismissed === msgId) return; // user dismissed this pin already
             pinnedMsgId = msgId;
             pinnedBannerText.textContent = (author?author+': ':'') + (text||'');
             pinnedBanner.classList.add('is-on');
         }
-        pinnedBannerClose.addEventListener('click', ()=>{ pinnedBanner.classList.remove('is-on'); });
+        pinnedBannerClose.addEventListener('click', ()=>{
+            _pinnedBannerDismissed = pinnedMsgId; // remember which pin was dismissed
+            pinnedBanner.classList.remove('is-on');
+        });
         pinnedBanner.addEventListener('click', e=>{
             if (e.target===pinnedBannerClose) return;
             if (pinnedMsgId) {
@@ -1741,6 +1804,27 @@
             });
         }
 
+        // DM header click → profile of peer
+        function _bindDMHeaderProfile(peerUid, peerName) {
+            const handler = () => { if (peerUid) openUserProfile(peerUid, peerName); };
+            tgHeaderAv._dmProfileHandler && tgHeaderAv.removeEventListener('click', tgHeaderAv._dmProfileHandler);
+            tgHeaderName._dmProfileHandler && tgHeaderName.removeEventListener('click', tgHeaderName._dmProfileHandler);
+            tgHeaderAv._dmProfileHandler = handler;
+            tgHeaderName._dmProfileHandler = handler;
+            tgHeaderAv.addEventListener('click', handler);
+            tgHeaderName.addEventListener('click', handler);
+            tgHeaderAv.style.cursor = 'pointer';
+            tgHeaderName.style.cursor = 'pointer';
+        }
+        function _unbindDMHeaderProfile() {
+            tgHeaderAv._dmProfileHandler && tgHeaderAv.removeEventListener('click', tgHeaderAv._dmProfileHandler);
+            tgHeaderName._dmProfileHandler && tgHeaderName.removeEventListener('click', tgHeaderName._dmProfileHandler);
+            tgHeaderAv._dmProfileHandler = null;
+            tgHeaderName._dmProfileHandler = null;
+            tgHeaderAv.style.cursor = '';
+            tgHeaderName.style.cursor = '';
+        }
+
         async function openDMWith(peerUid, peerName) {
             const u = auth.currentUser; if (!u) return;
             if (currentChatMode==='dm'&&currentDMPeerUid===peerUid) return;
@@ -1757,6 +1841,10 @@
             tgHeaderStatus.textContent=online?'в сети':'не в сети';
             tgHeaderStatus.classList.toggle('online',!!online);
             pinnedBanner.classList.remove('is-on');
+            // Bind profile click on DM header
+            _bindDMHeaderProfile(peerUid, peerName);
+            // Restart typing listener for this DM channel
+            startTypingListeners();
 
             buildSidebarList(sidebarSearch.value);
             tearDownChat();
@@ -2847,11 +2935,21 @@
                 });
             }
 
-            // Text body (skip if empty)
-            if (d.text) bubble.appendChild(renderMessageBody(d.text));
+            // Poll message
+            if (d.pollId) {
+                bubble.style.padding = '0';
+                bubble.style.background = 'none';
+                bubble.style.border = 'none';
+                bubble.style.boxShadow = 'none';
+                const pollEl = buildPollMessageEl(d.pollId);
+                bubble.appendChild(pollEl);
+            }
+
+            // Text body (skip if empty and not poll)
+            if (d.text && !d.pollId) bubble.appendChild(renderMessageBody(d.text));
 
             // URL preview (non-GIF links) — only if there's text
-            if (d.text&&!d.text.match(GIF_URL)) buildUrlPreview(d.text, bubble);
+            if (d.text&&!d.pollId&&!d.text.match(GIF_URL)) buildUrlPreview(d.text, bubble);
 
             // Footer
             const foot=document.createElement('div'); foot.className='msg-footer';
@@ -2914,21 +3012,25 @@
         }
 
         /* Pin/unpin message in group */
-        async function togglePinMessage(msgId,data){
+        async function togglePinMessage(msgId, data) {
+            const pRef = doc(db, 'chatMeta', 'group_pinned');
             try {
-                const newPinned=!data.pinned;
-                await updateDoc(doc(db,'messages',msgId),{pinned:newPinned});
-                if (newPinned){
-                    // Save pinned meta
-                    await setDoc(doc(db,'chatMeta','group_pinned'),{msgId,text:data.text||'',author:data.author||''},{merge:false});
-                    showPinnedBanner(msgId,data.text||'',data.author||'');
-                    showToast('📌 Сообщение закреплено');
-                } else {
-                    await deleteDoc(doc(db,'chatMeta','group_pinned')).catch(()=>{});
-                    pinnedBanner.classList.remove('is-on');
+                // Check if this message is already pinned (toggle logic)
+                const currentSnap = await getDoc(pRef);
+                const alreadyPinned = currentSnap.exists() && currentSnap.data().msgId === msgId;
+                if (alreadyPinned) {
+                    // Unpin: delete chatMeta doc (no need to touch messages collection)
+                    await deleteDoc(pRef);
+                    // pinnedBanner will auto-hide via onSnapshot listener
                     showToast('📌 Сообщение откреплено');
+                } else {
+                    // Pin: write to chatMeta only — no permission issues
+                    const text = data.imageBase64 ? '🖼 Картинка' : (data.voiceBase64 ? '🎤 Голосовое' : (data.text||''));
+                    await setDoc(pRef, {msgId, text, author: data.author||'', pinnedBy: auth.currentUser?.uid||''});
+                    // Banner will show via onSnapshot
+                    showToast('📌 Сообщение закреплено');
                 }
-            } catch(e){showToast('Ошибка: '+e.message);}
+            } catch(e){ showToast('Ошибка: '+e.message); }
         }
 
         /* Delete one message */
@@ -2979,6 +3081,10 @@
         /* ══════════════════════════════
            TYPING
         ══════════════════════════════ */
+        function getTypingDocRef(){
+            if (currentChatMode==='dm'&&currentDMConvId) return doc(db,'presence','typing_dm_'+currentDMConvId);
+            return typingRef;
+        }
         function scheduleTypingPing(){
             const u=auth.currentUser; if (!u||!chatInput.value.trim()) return;
             const now=Date.now();
@@ -2988,11 +3094,11 @@
         async function writeTypingPing(){
             const u=auth.currentUser; if (!u||!chatInput.value.trim()) return;
             lastTypingWrite=Date.now();
-            try{await setDoc(typingRef,{users:{[u.uid]:{t:serverTimestamp(),n:displayNick(u)}}},{merge:true});}catch(_){}
+            try{await setDoc(getTypingDocRef(),{users:{[u.uid]:{t:serverTimestamp(),n:displayNick(u)}}},{merge:true});}catch(_){}
         }
         chatInput.addEventListener('blur',async()=>{
             const u=auth.currentUser; if (!u) return;
-            try{await setDoc(typingRef,{users:{[u.uid]:deleteField()}},{merge:true});}catch(_){}
+            try{await setDoc(getTypingDocRef(),{users:{[u.uid]:deleteField()}},{merge:true});}catch(_){}
         });
         function renderTypingFromData(data){
             const u=auth.currentUser; if (!u){typingBar.innerHTML='';return;}
@@ -3008,7 +3114,272 @@
         }
         function startTypingListeners(){
             if (typingUnsub) typingUnsub();
-            typingUnsub=onSnapshot(typingRef,snap=>renderTypingFromData(snap.data()),()=>{});
+            typingUnsub=onSnapshot(getTypingDocRef(),snap=>renderTypingFromData(snap.data()),()=>{});
+        }
+
+
+        /* ══════════════════════════════════════════
+           POLLS SYSTEM
+        ══════════════════════════════════════════ */
+
+        const pollsCol = collection(db, 'polls');
+
+        // ─── Create modal logic ───
+        function openPollModal() {
+            // Only in group chat
+            if (currentChatMode !== 'group') { showToast('Опросы только в основном чате'); return; }
+            document.getElementById('pollQuestion').value = '';
+            document.getElementById('pollAnonymous').checked = true;
+            // Reset options
+            const list = document.getElementById('pollOptionsList');
+            list.innerHTML = '';
+            addPollOptionRow('');
+            addPollOptionRow('');
+            document.getElementById('pollModal').classList.add('is-open');
+            document.getElementById('pollQuestion').focus();
+        }
+
+        function addPollOptionRow(value) {
+            const list = document.getElementById('pollOptionsList');
+            const row = document.createElement('div');
+            row.className = 'poll-opt-row';
+            const inp = document.createElement('input');
+            inp.type = 'text';
+            inp.maxLength = 100;
+            inp.placeholder = 'Вариант ' + (list.children.length + 1);
+            inp.value = value;
+            const rm = document.createElement('button');
+            rm.type = 'button';
+            rm.className = 'poll-opt-remove';
+            rm.textContent = '✕';
+            rm.addEventListener('click', () => {
+                if (list.children.length > 2) row.remove();
+                else showToast('Минимум 2 варианта');
+            });
+            row.appendChild(inp);
+            row.appendChild(rm);
+            list.appendChild(row);
+            return row;
+        }
+
+        document.getElementById('pollAddOption').addEventListener('click', () => {
+            const list = document.getElementById('pollOptionsList');
+            if (list.children.length >= 10) { showToast('Максимум 10 вариантов'); return; }
+            addPollOptionRow('');
+        });
+
+        document.getElementById('btnPoll').addEventListener('click', openPollModal);
+        document.getElementById('pollCancel').addEventListener('click', () => document.getElementById('pollModal').classList.remove('is-open'));
+
+        document.getElementById('pollSubmit').addEventListener('click', async () => {
+            const u = auth.currentUser; if (!u) return;
+            const question = document.getElementById('pollQuestion').value.trim();
+            if (!question) { showToast('Введите вопрос'); return; }
+            const rows = document.getElementById('pollOptionsList').querySelectorAll('input');
+            const options = [...rows].map(r => r.value.trim()).filter(Boolean);
+            if (options.length < 2) { showToast('Нужно минимум 2 варианта'); return; }
+            const anonymous = document.getElementById('pollAnonymous').checked;
+            try {
+                const pollRef = await addDoc(pollsCol, {
+                    question,
+                    options,
+                    anonymous,
+                    createdAt: serverTimestamp(),
+                    createdBy: u.uid,
+                    createdByName: displayNick(u),
+                    votes: {}, // votes[optionIndex] = [uid, uid, ...]
+                    closed: false,
+                });
+                // Send a message referencing this poll
+                await addDoc(messagesCol, {
+                    uid: u.uid,
+                    author: displayNick(u),
+                    text: '📊 ' + question,
+                    pollId: pollRef.id,
+                    createdAt: serverTimestamp(),
+                    edited: false,
+                });
+                document.getElementById('pollModal').classList.remove('is-open');
+                showToast('📊 Опрос создан!');
+            } catch(e) { showToast('Ошибка: ' + e.message); }
+        });
+
+        // ─── Render poll bubble ───
+        function renderPollBubble(pollId, pollData, containerEl) {
+            const u = auth.currentUser;
+            const votes = pollData.votes || {};
+            const anonymous = pollData.anonymous;
+            const closed = pollData.closed;
+
+            // Total vote count
+            let totalVotes = 0;
+            const optionVoteCounts = pollData.options.map((_, i) => {
+                const v = votes[String(i)] || [];
+                totalVotes += v.length;
+                return v.length;
+            });
+
+            // Find user's current vote
+            let userVoteIdx = -1;
+            if (u) {
+                for (let i = 0; i < pollData.options.length; i++) {
+                    if ((votes[String(i)] || []).includes(u.uid)) { userVoteIdx = i; break; }
+                }
+            }
+
+            const bubble = document.createElement('div');
+            bubble.className = 'poll-bubble';
+
+            const q = document.createElement('div');
+            q.className = 'poll-question';
+            q.textContent = '📊 ' + pollData.question;
+            bubble.appendChild(q);
+
+            const optWrap = document.createElement('div');
+            optWrap.className = 'poll-options';
+
+            pollData.options.forEach((optText, i) => {
+                const count = optionVoteCounts[i];
+                const pct = totalVotes ? Math.round(count / totalVotes * 100) : 0;
+                const isVoted = userVoteIdx === i;
+
+                const opt = document.createElement('div');
+                opt.className = 'poll-option' + (isVoted ? ' voted' : '');
+
+                // Background bar
+                const bar = document.createElement('div');
+                bar.className = 'poll-option-bar';
+                bar.style.width = (userVoteIdx >= 0 || closed) ? pct + '%' : '0%';
+                opt.appendChild(bar);
+
+                const body = document.createElement('div');
+                body.className = 'poll-option-body';
+
+                const label = document.createElement('span');
+                label.textContent = optText;
+
+                const right = document.createElement('span');
+                right.style.display = 'flex';
+                right.style.alignItems = 'center';
+                right.style.gap = '6px';
+
+                if (isVoted) {
+                    const check = document.createElement('span');
+                    check.className = 'poll-option-check';
+                    check.textContent = '✓';
+                    right.appendChild(check);
+                }
+
+                if (userVoteIdx >= 0 || closed) {
+                    const pctEl = document.createElement('span');
+                    pctEl.className = 'poll-option-pct';
+                    pctEl.textContent = pct + '%';
+                    right.appendChild(pctEl);
+                }
+
+                body.appendChild(label);
+                body.appendChild(right);
+                opt.appendChild(body);
+
+                // Click to vote
+                if (!closed && u) {
+                    opt.addEventListener('click', () => castPollVote(pollId, pollData, i));
+                } else {
+                    opt.style.cursor = 'default';
+                }
+
+                optWrap.appendChild(opt);
+            });
+
+            bubble.appendChild(optWrap);
+
+            // Footer
+            const footer = document.createElement('div');
+            footer.className = 'poll-footer';
+            footer.textContent = totalVotes + ' ' + pluralVotes(totalVotes);
+            if (anonymous) {
+                const badge = document.createElement('span');
+                badge.className = 'poll-anonymous-badge';
+                badge.textContent = '🔒 Анонимно';
+                footer.appendChild(badge);
+            }
+            if (!closed && u && pollData.createdBy === u.uid) {
+                const closeBtn = document.createElement('button');
+                closeBtn.type = 'button';
+                closeBtn.style.cssText = 'margin-left:auto;background:none;border:none;color:var(--muted);font-size:.72rem;cursor:pointer;padding:0;';
+                closeBtn.textContent = 'Завершить';
+                closeBtn.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    await updateDoc(doc(db,'polls',pollId), {closed: true}).catch(()=>{});
+                });
+                footer.appendChild(closeBtn);
+            }
+            bubble.appendChild(footer);
+
+            containerEl.innerHTML = '';
+            containerEl.appendChild(bubble);
+        }
+
+        function pluralVotes(n) {
+            if (n % 10 === 1 && n % 100 !== 11) return 'голос';
+            if ([2,3,4].includes(n % 10) && ![12,13,14].includes(n % 100)) return 'голоса';
+            return 'голосов';
+        }
+
+        async function castPollVote(pollId, pollData, optionIdx) {
+            const u = auth.currentUser; if (!u) return;
+            const votes = pollData.votes || {};
+
+            // Build new votes object: remove user from all options, add to chosen
+            const newVotes = {};
+            for (let i = 0; i < pollData.options.length; i++) {
+                const key = String(i);
+                const prev = (votes[key] || []).filter(uid => uid !== u.uid);
+                if (i === optionIdx) prev.push(u.uid);
+                newVotes[key] = prev;
+            }
+            try {
+                await updateDoc(doc(db, 'polls', pollId), { votes: newVotes });
+            } catch(e) { showToast('Ошибка голосования: ' + e.message); }
+        }
+
+        // ─── Subscribe to polls in group chat ───
+        let pollsUnsub = null;
+        const _pollCache = {}; // pollId → data
+
+        function startPollsListener() {
+            if (pollsUnsub) { pollsUnsub(); pollsUnsub = null; }
+            if (currentChatMode !== 'group') return;
+            pollsUnsub = onSnapshot(pollsCol, snap => {
+                snap.docChanges().forEach(change => {
+                    const id = change.doc.id;
+                    if (change.type === 'removed') { delete _pollCache[id]; return; }
+                    _pollCache[id] = change.doc.data();
+                    // Re-render any visible poll bubble with this id
+                    document.querySelectorAll('[data-poll-id="'+id+'"]').forEach(el => {
+                        renderPollBubble(id, _pollCache[id], el);
+                    });
+                });
+            }, () => {});
+        }
+
+        // ─── Poll message renderer — called from renderMessage ───
+        function buildPollMessageEl(pollId) {
+            const wrap = document.createElement('div');
+            wrap.setAttribute('data-poll-id', pollId);
+            if (_pollCache[pollId]) {
+                renderPollBubble(pollId, _pollCache[pollId], wrap);
+            } else {
+                wrap.textContent = '📊 Загрузка опроса…';
+                // Fetch once
+                getDoc(doc(db,'polls',pollId)).then(snap => {
+                    if (snap.exists()) {
+                        _pollCache[snap.id] = snap.data();
+                        renderPollBubble(snap.id, snap.data(), wrap);
+                    }
+                }).catch(()=>{});
+            }
+            return wrap;
         }
 
         /* ══════════════════════════════
@@ -3069,7 +3440,7 @@
             chatInput.style.height='auto';
             chatInput.style.height=Math.min(chatInput.scrollHeight,140)+'px';
             chatSend.disabled=!chatInput.value.trim()&&!pendingImageBase64;
-            if (currentChatMode==='group') scheduleTypingPing();
+            scheduleTypingPing();
         });
 
         /* ══════════════════════════════
@@ -3100,6 +3471,7 @@
             if (typingInterval){clearInterval(typingInterval);typingInterval=null;}
             if (peerReadUnsub){peerReadUnsub();peerReadUnsub=null;}
             if (_pinnedUnsub){_pinnedUnsub();_pinnedUnsub=null;}
+            if (pollsUnsub){pollsUnsub();pollsUnsub=null;}
             peerHasRead=false;
             clearImagePreview();
             // Clear auto-delete timers
