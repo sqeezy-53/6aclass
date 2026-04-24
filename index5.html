@@ -1811,7 +1811,17 @@
                 if (!nick) { showAuthError('Введите ник'); return; }
                 const cred = await createUserWithEmailAndPassword(auth, nickToEmail(authNick.value), authPass.value);
                 await updateProfile(cred.user, {displayName:nick});
-                try { await setDoc(doc(db,'users',cred.user.uid), {displayName:nick,uid:cred.user.uid,email:cred.user.email||'',stars:0},{merge:true}); } catch(_){}
+                try {
+                    await setDoc(doc(db,'users',cred.user.uid), {
+                        displayName: nick,
+                        uid: cred.user.uid,
+                        email: cred.user.email || '',
+                        stars: 0,
+                        createdAt: serverTimestamp(),
+                        lastSeen: serverTimestamp(),
+                        banned: false,
+                    });
+                } catch(_){}
             } catch(e) { showAuthError(e.message||String(e)); } finally { setAuthLoading(false); }
         });
         [authNick,authPass].forEach(inp=>inp.addEventListener('keydown',e=>{
@@ -4383,23 +4393,32 @@
                 appRoot.classList.add('hidden'); authPass.value=''; tearDownChat(); return;
             }
             _dbgLog('auth:stateChanged', user.uid);
-            // Ban check
-            try{const s=await getDoc(doc(db,'users',user.uid));if(s.exists()&&s.data().banned===true){showBanned();return;}}catch(e){console.warn('ban check',e);}
-            _banUnsub=onSnapshot(doc(db,'users',user.uid),snap=>{if(snap.exists()&&snap.data().banned===true)showBanned();});
-            // Save user doc — используем системный displayName, НЕ визуальный ник
+            // Save/ensure user doc FIRST — before any ban check that reads Firestore
             try{
                 const u=auth.currentUser;
                 if(u){
                     const realName = (u.displayName&&u.displayName.trim()) || u.email?.split('@')[0] || '?';
                     const snap=await getDoc(doc(db,'users',u.uid));
                     if(!snap.exists()){
-                        await setDoc(doc(db,'users',u.uid),{displayName:realName,uid:u.uid,email:u.email||'',stars:0,createdAt:serverTimestamp(),lastSeen:serverTimestamp(),banned:false});
+                        // Create full doc — all required fields for Firestore rules
+                        await setDoc(doc(db,'users',u.uid),{
+                            displayName: realName,
+                            uid: u.uid,
+                            email: u.email||'',
+                            stars: 0,
+                            createdAt: serverTimestamp(),
+                            lastSeen: serverTimestamp(),
+                            banned: false,
+                        });
                     } else {
-                        // Только email и uid — НЕ перезаписываем displayName визуальным ником
+                        // Update only safe fields — never overwrite banned/admin
                         await setDoc(doc(db,'users',u.uid),{uid:u.uid,email:u.email||''},{merge:true});
                     }
                 }
             }catch(e){_dbgLog('auth:saveDoc:error',e.message);}
+            // Ban check AFTER doc is guaranteed to exist
+            try{const s=await getDoc(doc(db,'users',user.uid));if(s.exists()&&s.data().banned===true){showBanned();return;}}catch(e){console.warn('ban check',e);}
+            _banUnsub=onSnapshot(doc(db,'users',user.uid),snap=>{if(snap.exists()&&snap.data().banned===true)showBanned();});
             // Check admin
             userIsAdmin = ADMIN_UIDS.has(user.uid);
             // Load avatar + bio + status from Firestore
