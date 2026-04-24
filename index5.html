@@ -133,7 +133,7 @@
 
 
         /* ═══════════════════════════════════════
-           ATTACHMENT SHEET (Telegram-style bottom sheet)
+           ATTACHMENT SHEET (Glassmorphism popup)
         ═══════════════════════════════════════ */
         .attach-sheet-backdrop {
             display: none;
@@ -181,7 +181,32 @@
         .attach-tab.is-active { color: var(--accent); border-bottom-color: var(--accent); }
         .attach-sheet-body { flex: 1; overflow-y: auto; padding: 16px; }
         .attach-tab-pane { display: none; }
-        .attach-tab-pane.is-active { display: block; }
+        .attach-tab-pane.is-active {
+            display: block;
+            animation: attachPaneIn .22s cubic-bezier(0.34, 1.1, 0.64, 1) both;
+        }
+        @keyframes attachPaneIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ── Attach tab headers with gradient icons ── */
+        .attach-tab-header {
+            display: flex; align-items: center; gap: 12px;
+            padding: 0 0 14px; margin-bottom: 14px;
+            border-bottom: 1px solid var(--border);
+        }
+        .attach-tab-icon {
+            width: 40px; height: 40px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            flex-shrink: 0; color: #fff;
+        }
+        .attach-tab-icon svg { width: 20px; height: 20px; fill: currentColor; }
+        .ati-gallery   { background: linear-gradient(135deg, #FF3B30, #FF2D55); }
+        .ati-checklist { background: linear-gradient(135deg, #34C759, #30D158); }
+        .ati-music     { background: linear-gradient(135deg, #AF52DE, #5E5CE6); }
+        .ati-poll      { background: linear-gradient(135deg, #FF9500, #FFCC00); }
+        .attach-tab-label { font-family: var(--font-display); font-weight: 700; font-size: 1rem; }
 
         /* Gallery grid */
         .gallery-grid {
@@ -1267,6 +1292,12 @@
         <div class="attach-sheet-body">
             <!-- Gallery tab -->
             <div class="attach-tab-pane is-active" data-pane="gallery">
+                <div class="attach-tab-header">
+                    <div class="attach-tab-icon ati-gallery">
+                        <svg viewBox="0 0 24 24"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>
+                    </div>
+                    <span class="attach-tab-label">Галерея</span>
+                </div>
                 <button class="gallery-open-btn" id="galleryOpenBtn">
                     <span style="font-size:1.2rem">📁</span>
                     Выбрать фото с устройства
@@ -1280,6 +1311,12 @@
 
             <!-- Checklist tab -->
             <div class="attach-tab-pane" data-pane="checklist">
+                <div class="attach-tab-header">
+                    <div class="attach-tab-icon ati-checklist">
+                        <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-9 14l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+                    </div>
+                    <span class="attach-tab-label">Чек-лист</span>
+                </div>
                 <div class="checklist-create-wrap">
                     <input type="text" class="checklist-title-inp" id="checklistTitle" placeholder="Название чек-листа (необязательно)" maxlength="100">
                     <div class="checklist-items-list" id="checklistItemsList"></div>
@@ -1290,6 +1327,12 @@
 
             <!-- Music tab -->
             <div class="attach-tab-pane" data-pane="music">
+                <div class="attach-tab-header">
+                    <div class="attach-tab-icon ati-music">
+                        <svg viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
+                    </div>
+                    <span class="attach-tab-label">Музыка</span>
+                </div>
                 <button class="music-upload-btn" id="musicUploadBtn">
                     <span style="font-size:1.3rem">🎵</span>
                     Выбрать аудиофайл с устройства
@@ -1308,11 +1351,16 @@
                 <button type="button" class="btn btn-primary" id="musicSendBtn" disabled style="width:100%">Отправить музыку</button>
             </div>
 
-            <!-- Poll tab (reuses existing openPollModal) -->
+            <!-- Poll tab -->
             <div class="attach-tab-pane" data-pane="poll">
-                <div style="text-align:center;padding:24px 0 8px;color:var(--muted);font-size:.9rem">
-                    <div style="font-size:2.5rem;margin-bottom:10px">📊</div>
-                    Создать анонимный или обычный опрос.<br>Все участники чата смогут проголосовать.
+                <div class="attach-tab-header">
+                    <div class="attach-tab-icon ati-poll">
+                        <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/></svg>
+                    </div>
+                    <span class="attach-tab-label">Опрос</span>
+                </div>
+                <div style="text-align:center;padding:12px 0 8px;color:var(--muted);font-size:.9rem;line-height:1.6">
+                    Создайте анонимный или обычный опрос.<br>Все участники чата смогут проголосовать.
                 </div>
                 <button type="button" class="btn btn-primary" id="attachPollOpenBtn" style="width:100%;margin-top:16px">Создать опрос</button>
             </div>
@@ -1604,6 +1652,8 @@ async function uploadToCloudinary(file) {
         let pinnedMsgId           = null;           // currently pinned msg in group
         let autodelTimers         = {};             // msgId → timeoutId
         let _userProfileUid       = null;           // uid открытого профиля
+        let globalAudioPlayer     = null;           // единый глобальный аудио-плеер
+        let currentPlayBtn        = null;           // кнопка Play текущего трека
 
         /* Persisted settings */
         let pinnedChats  = lsGet(PINNED_KEY, []);
@@ -2958,37 +3008,59 @@ async function uploadToCloudinary(file) {
 
             // 4. Отрисовываем музыку ТОЛЬКО если она есть в данных 'd'
             if (d.musicUrl && musicBox) {
+                const iconPlay  = '<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
+                const iconPause = '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
                 musicBox.innerHTML = `
                     <div class="modern-profile-player">
-                        <button id="p-play">▶</button>
-                        <div class="p-info">
-                            <div class="p-name">${d.musicTitle || 'Без названия'}</div>
-                            <input type="range" class="p-volume" min="0" max="1" step="0.1" value="0.8">
+                        <button class="music-play-btn" id="p-play" style="flex-shrink:0">${iconPlay}</button>
+                        <div class="p-info" style="flex:1;min-width:0;overflow:hidden">
+                            <div class="music-title" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(d.musicTitle || 'Без названия')}</div>
+                            <div class="music-progress" style="margin-top:6px"><div class="music-progress-bar" id="p-bar"></div></div>
                         </div>
+                        <input type="range" class="p-volume" min="0" max="1" step="0.1" value="0.8" style="width:56px;accent-color:var(--accent)">
                     </div>
                 `;
 
-                const playBtn = musicBox.querySelector('#p-play');
+                const playBtn   = musicBox.querySelector('#p-play');
+                const pBar      = musicBox.querySelector('#p-bar');
                 const volSlider = musicBox.querySelector('.p-volume');
 
                 playBtn.onclick = () => {
-                    if (window.currentGlobalAudio) {
-                        window.currentGlobalAudio.pause();
-                        if (window.currentGlobalAudio.src === d.musicUrl) {
-                            window.currentGlobalAudio = null;
-                            playBtn.textContent = '▶';
-                            return;
+                    if (globalAudioPlayer && globalAudioPlayer._trackSrc === d.musicUrl) {
+                        if (globalAudioPlayer.paused) {
+                            globalAudioPlayer.play();
+                            playBtn.innerHTML = iconPause;
+                        } else {
+                            globalAudioPlayer.pause();
+                            playBtn.innerHTML = iconPlay;
                         }
+                        return;
                     }
-                    window.currentGlobalAudio = new Audio(d.musicUrl);
-                    window.currentGlobalAudio.volume = volSlider.value;
-                    window.currentGlobalAudio.play();
-                    playBtn.textContent = '⏸';
-                    window.currentGlobalAudio.onended = () => { playBtn.textContent = '▶'; };
+                    if (globalAudioPlayer) {
+                        globalAudioPlayer.pause();
+                        if (currentPlayBtn) currentPlayBtn.innerHTML = iconPlay;
+                    }
+                    globalAudioPlayer = new Audio(d.musicUrl);
+                    globalAudioPlayer._trackSrc = d.musicUrl;
+                    globalAudioPlayer.volume = parseFloat(volSlider.value);
+                    globalAudioPlayer.play().catch(() => showToast('Не удалось воспроизвести'));
+                    playBtn.innerHTML = iconPause;
+                    currentPlayBtn = playBtn;
+
+                    globalAudioPlayer.ontimeupdate = () => {
+                        if (globalAudioPlayer._trackSrc !== d.musicUrl) return;
+                        const pct = (globalAudioPlayer.currentTime / globalAudioPlayer.duration) * 100;
+                        if (!isNaN(pct) && pBar) pBar.style.width = pct + '%';
+                    };
+                    globalAudioPlayer.onended = () => {
+                        playBtn.innerHTML = iconPlay;
+                        if (pBar) pBar.style.width = '0%';
+                    };
                 };
 
                 volSlider.oninput = (e) => {
-                    if (window.currentGlobalAudio) window.currentGlobalAudio.volume = e.target.value;
+                    if (globalAudioPlayer && globalAudioPlayer._trackSrc === d.musicUrl)
+                        globalAudioPlayer.volume = parseFloat(e.target.value);
                 };
             }
         }
@@ -3826,45 +3898,49 @@ async function uploadToCloudinary(file) {
 
             playBtn.onclick = () => {
                 const src = d.musicUrl;
-                if (!src) return;
+                if (!src) return showToast('Ошибка: нет ссылки на аудио');
 
-                if (globalAudioPlayer && globalAudioPlayer.src === src) {
-                    if (!globalAudioPlayer.paused) {
-                        globalAudioPlayer.pause();
-                        playBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
-                        return;
-                    } else {
+                const iconPlay  = '<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
+                const iconPause = '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
+
+                // Кликнули по уже играющему треку — пауза/возобновление
+                if (globalAudioPlayer && globalAudioPlayer.src.endsWith(src.split('?')[0].split('/').pop()) || (globalAudioPlayer && globalAudioPlayer._trackSrc === src)) {
+                    if (globalAudioPlayer.paused) {
                         globalAudioPlayer.play();
-                        playBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
-                        return;
+                        playBtn.innerHTML = iconPause;
+                    } else {
+                        globalAudioPlayer.pause();
+                        playBtn.innerHTML = iconPlay;
                     }
+                    return;
                 }
 
+                // Останавливаем прежний трек
                 if (globalAudioPlayer) {
                     globalAudioPlayer.pause();
-                    document.querySelectorAll('.music-play-btn').forEach(b => {
-                        b.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
-                    });
+                    if (currentPlayBtn) currentPlayBtn.innerHTML = iconPlay;
                 }
 
+                // Запускаем новый трек
                 globalAudioPlayer = new Audio(src);
-                globalAudioPlayer.play();
-                playBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
+                globalAudioPlayer._trackSrc = src;
+                globalAudioPlayer.play().catch(() => showToast('Не удалось воспроизвести трек'));
+                playBtn.innerHTML = iconPause;
+                currentPlayBtn = playBtn;
 
-                const playTimer = setInterval(() => {
-                    if (!globalAudioPlayer || globalAudioPlayer.src !== src) {
-                        clearInterval(playTimer);
-                        return;
-                    }
+                // Прогресс через ontimeupdate (без накапливающихся setInterval)
+                globalAudioPlayer.ontimeupdate = () => {
+                    if (globalAudioPlayer._trackSrc !== src) return;
                     const pct = (globalAudioPlayer.currentTime / globalAudioPlayer.duration) * 100;
-                    bar.style.width = pct + '%';
+                    if (!isNaN(pct)) bar.style.width = pct + '%';
                     dur.textContent = fmtVoiceTime(Math.floor(globalAudioPlayer.currentTime));
-                    if (globalAudioPlayer.ended) {
-                        clearInterval(playTimer);
-                        playBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
-                        bar.style.width = '0%';
-                    }
-                }, 300);
+                };
+
+                globalAudioPlayer.onended = () => {
+                    playBtn.innerHTML = iconPlay;
+                    bar.style.width = '0%';
+                    dur.textContent = fmtVoiceTime(d.musicDuration || 0);
+                };
             };
             return wrap;
         }
