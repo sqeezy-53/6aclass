@@ -1435,16 +1435,17 @@ async function uploadToCloudinary(file) {
     const formData = new FormData();
     formData.append("file", file);
     formData.append("upload_preset", CLOUDINARY_PRESET);
+
+    // try...catch должен быть внутри функции!
     try {
         const res = await fetch(CLOUDINARY_URL, { method: "POST", body: formData });
         const data = await res.json();
         return data.secure_url;
-    }
     } catch (err) {
         console.error("Cloudinary error:", err);
         return null;
     }
-}
+} // <-- Вот здесь должна закрываться функция
 
         /* ══════════════════════════════
            CONSTANTS
