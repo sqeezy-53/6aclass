@@ -1025,19 +1025,18 @@
         .voice-rec-cancel:hover { color:var(--danger); }
 
         /* User profile view modal - PREMIUM */
-        .user-profile-modal { max-width:380px; padding:0 !important; overflow:hidden; }
+        .user-profile-modal { max-width:380px; padding:0 !important; overflow:visible !important; }
+        .user-profile-modal .upm-hero { border-radius:var(--radius-lg) var(--radius-lg) 0 0; overflow:hidden; }
         .upm-hero {
-            position:relative; height:100px;
-            overflow:visible; flex-shrink:0;
-            margin-bottom:48px;
+            position:relative; height:120px;
+            overflow:hidden; flex-shrink:0;
+            border-radius:var(--radius-lg) var(--radius-lg) 0 0;
+            margin-bottom:50px;
         }
         .upm-banner-gradient {
             position:absolute;inset:0;
             background:linear-gradient(135deg,var(--accent) 0%,var(--accent-2) 100%);
-            opacity:0.7;
-            border-radius:var(--radius-lg) var(--radius-lg) 0 0;
-            overflow:hidden;
-            height:100px;
+            opacity:0.75;
         }
         .user-profile-av {
             width:84px;height:84px;border-radius:50%;
@@ -1047,12 +1046,12 @@
             border:4px solid var(--surface);
             box-shadow:0 4px 20px rgba(0,0,0,0.4);
             position:absolute;bottom:-42px;left:24px;
-            z-index:2;
+            z-index:10;
         }
         .user-profile-av img { width:100%;height:100%;object-fit:cover;border-radius:50%; }
         .upm-badges {
-            position:absolute;bottom:-36px;right:16px;
-            display:flex;gap:6px;z-index:2;
+            position:absolute;bottom:-32px;right:16px;
+            display:flex;gap:6px;z-index:10;
         }
         .upm-badge {
             padding:4px 10px;border-radius:999px;
@@ -1816,14 +1815,6 @@
                     <div>
                         <div class="upm-stat-label">В чате</div>
                         <div class="upm-stat-val" id="upmJoinedVal">—</div>
-                    </div>
-                </div>
-                <div class="upm-stat-divider"></div>
-                <div class="upm-stat" id="upmStatStatus2">
-                    <span class="upm-stat-icon">💬</span>
-                    <div>
-                        <div class="upm-stat-label">Статус</div>
-                        <div class="upm-stat-val" id="upmStatusVal">—</div>
                     </div>
                 </div>
             </div>
@@ -2867,7 +2858,11 @@ async function uploadToCloudinary(file) {
                 const customTitleField = document.getElementById('musicCustomTitleField');
                 const customTitleInp = document.getElementById('profileMusicCustomTitle');
                 if (customTitleField) customTitleField.style.display = 'block';
-                if (customTitleInp) customTitleInp.value = file.name.replace(/\.[^.]+$/, '');
+                // Clean filename
+                let _rawName = file.name.replace(/\.[^.]+$/, '');
+                _rawName = _rawName.replace(/^soundcloud[-_]https?[-_][^\s]*/i, '');
+                _rawName = _rawName.replace(/[-_]+/g, ' ').trim() || 'Трек';
+                if (customTitleInp) customTitleInp.value = _rawName;
 
                 // Показываем, что начали загрузку
                 _showProfileMusicCard(file.name, 'Загрузка в облако...');
@@ -3573,12 +3568,11 @@ async function uploadToCloudinary(file) {
                 upmBadges.appendChild(ob);
             }
 
-            // Stats
+            // Stats — only show join date, no status column
             if (upmStats) {
                 const joined = formatJoinDate(d.createdAt);
                 if (joined) {
                     if (upmJoinedVal) upmJoinedVal.textContent = joined;
-                    if (upmStatusVal) upmStatusVal.textContent = statusMap[d.status||'online'] || '🟢 В сети';
                     upmStats.style.display = 'flex';
                 }
             }
@@ -4433,7 +4427,7 @@ async function uploadToCloudinary(file) {
                 // Same track → toggle pause/resume
                 if (this._url === url && this._audio) {
                     if (this._audio.paused) { this._audio.play().catch(()=>{}); playBtn.innerHTML = this._PAUSE; }
-                    else                    { this._audio.pause(); playBtn.innerHTML = this._PLAY;  }
+                    else                    { this._audio.pause(); playBtn.innerHTML = this._PLAY; }
                     return;
                 }
                 // Stop previous
@@ -4441,31 +4435,14 @@ async function uploadToCloudinary(file) {
                 // Start new
                 this._url = url; this._playBtn = playBtn;
                 this._bar = bar; this._durEl = durEl; this._totalDur = totalDur || 0;
-                this._audio = new Audio();
-                this._audio.crossOrigin = 'anonymous';
-                this._audio.preload = 'auto';
-                this._audio.src = url;
+                this._audio = new Audio(url);
                 playBtn.innerHTML = this._PAUSE;
 
-                const doPlay = () => {
-                    this._audio.play().catch(err => {
-                        console.warn('Audio play error:', err);
-                        playBtn.innerHTML = this._PLAY;
-                        showToast('⚠️ Не удалось воспроизвести. Попробуй ещё раз.');
-                    });
-                };
-
-                if (this._audio.readyState >= 3) {
-                    doPlay();
-                } else {
-                    this._audio.oncanplay = () => { doPlay(); this._audio.oncanplay = null; };
-                    this._audio.onerror = () => {
-                        playBtn.innerHTML = this._PLAY;
-                        showToast('⚠️ Ошибка загрузки аудио');
-                        this._reset();
-                    };
-                    this._audio.load();
-                }
+                this._audio.play().catch(err => {
+                    console.warn('Audio play error:', err);
+                    playBtn.innerHTML = this._PLAY;
+                    showToast('⚠️ Не удалось воспроизвести. Попробуй ещё раз.');
+                });
 
                 this._audio.ontimeupdate = () => {
                     if (!this._audio) return;
@@ -5007,12 +4984,17 @@ async function uploadToCloudinary(file) {
             if (!file) return;
             
             _pendingMusicFile = file;
-            _pendingMusicTitle = file.name.replace(/\.[^.]+$/, '');
+            // Clean up Cloudinary/SoundCloud garbage names like "soundcloud-http_mp3_1_0"
+            let rawTitle = file.name.replace(/\.[^.]+$/, ''); // remove extension
+            rawTitle = rawTitle.replace(/^soundcloud[-_]https?[-_][^\s]*/i, ''); // remove soundcloud prefix
+            rawTitle = rawTitle.replace(/[-_]+/g, ' ').trim(); // underscores/hyphens → spaces
+            rawTitle = rawTitle.replace(/\s+/g, ' ').trim();
+            _pendingMusicTitle = rawTitle || 'Трек';
             
             musicPreviewTitle.textContent = _pendingMusicTitle;
             musicPreviewSize.textContent = (file.size / 1024 / 1024).toFixed(2) + ' MB';
             musicPreviewCard.classList.add('is-visible');
-            musicSendBtn.disabled = false; // ← разблокируем кнопку
+            musicSendBtn.disabled = false;
             
             const tA = new Audio(URL.createObjectURL(file));
             tA.onloadedmetadata = () => { _pendingMusicDur = tA.duration; };
