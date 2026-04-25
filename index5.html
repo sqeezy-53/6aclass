@@ -1028,12 +1028,16 @@
         .user-profile-modal { max-width:380px; padding:0 !important; overflow:hidden; }
         .upm-hero {
             position:relative; height:100px;
-            overflow:hidden; flex-shrink:0;
+            overflow:visible; flex-shrink:0;
+            margin-bottom:48px;
         }
         .upm-banner-gradient {
             position:absolute;inset:0;
             background:linear-gradient(135deg,var(--accent) 0%,var(--accent-2) 100%);
             opacity:0.7;
+            border-radius:var(--radius-lg) var(--radius-lg) 0 0;
+            overflow:hidden;
+            height:100px;
         }
         .user-profile-av {
             width:84px;height:84px;border-radius:50%;
@@ -1042,12 +1046,12 @@
             flex-shrink:0;overflow:hidden;
             border:4px solid var(--surface);
             box-shadow:0 4px 20px rgba(0,0,0,0.4);
-            position:absolute;bottom:-32px;left:24px;
+            position:absolute;bottom:-42px;left:24px;
             z-index:2;
         }
         .user-profile-av img { width:100%;height:100%;object-fit:cover;border-radius:50%; }
         .upm-badges {
-            position:absolute;bottom:-26px;right:16px;
+            position:absolute;bottom:-36px;right:16px;
             display:flex;gap:6px;z-index:2;
         }
         .upm-badge {
@@ -1067,7 +1071,7 @@
             border:1px solid rgba(34,197,94,0.3);
         }
         .upm-info {
-            padding:42px 24px 16px;
+            padding:16px 24px 16px;
         }
         .user-profile-name {
             font-family:var(--font-display);font-size:1.3rem;font-weight:900;
@@ -1824,7 +1828,7 @@
                 </div>
             </div>
             <!-- Music player injected here by openUserProfile() -->
-            <div id="musicBox" style="margin:14px 0 4px"></div>
+            <div id="musicBox" style="margin:14px 24px 4px"></div>
             <div class="user-profile-divider"></div>
             <div class="modal-actions" style="flex-direction:column;gap:8px">
                 <button type="button" class="btn btn-primary" id="userProfileDMBtn">💬 Написать</button>
@@ -2830,6 +2834,8 @@ async function uploadToCloudinary(file) {
         document.getElementById('userProfileClose').addEventListener('click',()=>{
             document.getElementById('userProfileModal').classList.remove('is-open');
             if (_userProfileUnsub) { _userProfileUnsub(); _userProfileUnsub = null; }
+            // Stop profile music if playing
+            ChatPlayer.stop();
         });
 
         /* ── Профиль: музыка ── */
@@ -3487,26 +3493,30 @@ async function uploadToCloudinary(file) {
         if (d.musicUrl) {
             const displayTitle = d.musicTitle || 'Без названия';
             musicBox.innerHTML = `
-                <div class="modern-profile-player">
-                    <button class="music-play-btn" id="p-play" style="flex-shrink:0;width:38px;height:38px;border-radius:50%;border:none;background:var(--accent);color:var(--accent-text);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:filter .15s,transform .15s;box-shadow:0 4px 14px rgba(99,179,255,.35)">
-                        <svg viewBox="0 0 24 24" fill="currentColor" width="15" height="15"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                <div class="modern-profile-player" style="display:flex;align-items:center;background:rgba(255,255,255,0.05);padding:10px 14px;border-radius:14px;gap:10px;border:1px solid var(--border);overflow:hidden;box-sizing:border-box;width:100%">
+                    <button id="p-play" style="flex-shrink:0;width:36px;height:36px;border-radius:50%;border:none;background:var(--accent);color:var(--accent-text);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:filter .15s,transform .15s;box-shadow:0 4px 14px rgba(99,179,255,.35)">
+                        <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><polygon points="5 3 19 12 5 21 5 3"/></svg>
                     </button>
-                    <div class="p-info" style="flex:1;min-width:0;overflow:hidden">
-                        <div class="music-title" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:.84rem;font-weight:700;margin-bottom:2px">${escapeHtml(displayTitle)}</div>
-                        <div class="music-progress" style="margin-top:6px;cursor:pointer;height:4px;background:rgba(255,255,255,.12);border-radius:999px;overflow:hidden"><div class="music-progress-bar" id="p-bar" style="height:100%;width:0%;background:var(--accent);border-radius:999px;transition:width .12s linear"></div></div>
+                    <div style="flex:1;min-width:0;overflow:hidden">
+                        <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:.82rem;font-weight:700;margin-bottom:5px;color:var(--text)">${escapeHtml(displayTitle)}</div>
+                        <div class="music-progress" style="cursor:pointer;height:4px;background:rgba(255,255,255,.15);border-radius:999px;overflow:hidden"><div id="p-bar" style="height:100%;width:0%;background:var(--accent);border-radius:999px;transition:width .12s linear"></div></div>
                     </div>
-                    <input type="range" class="p-volume" min="0" max="1" step="0.05" value="0.8"
-                           style="width:52px;accent-color:var(--accent)" title="Громкость">
+                    <div style="display:flex;flex-direction:column;align-items:center;gap:3px;flex-shrink:0">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" style="color:var(--muted)"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+                        <input type="range" id="p-volume" min="0" max="1" step="0.05" value="0.8"
+                               style="width:44px;height:3px;accent-color:var(--accent);cursor:pointer" title="Громкость">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" style="color:var(--muted);opacity:.4"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/></svg>
+                    </div>
                 </div>
             `;
             const pBtn    = musicBox.querySelector('#p-play');
             const pBar    = musicBox.querySelector('#p-bar');
             const pTrack  = musicBox.querySelector('.music-progress');
-            const pVolume = musicBox.querySelector('.p-volume');
+            const pVolume = musicBox.querySelector('#p-volume');
 
             pBtn.onclick = () => {
-                if (ChatPlayer._audio) ChatPlayer._audio.volume = parseFloat(pVolume.value);
                 ChatPlayer.play(d.musicUrl, pBtn, pBar, null, 0);
+                if (ChatPlayer._audio) ChatPlayer._audio.volume = parseFloat(pVolume.value);
             };
             pTrack.addEventListener('click', e => {
                 if (ChatPlayer._url !== d.musicUrl) return;
@@ -4231,6 +4241,14 @@ async function uploadToCloudinary(file) {
         async function deleteMessage(msgId){
             openConfirmModal('🗑 Удалить сообщение','Удалить это сообщение? Это действие нельзя отменить.',async()=>{
                 try {
+                    // Stop audio if this message's track is playing
+                    const row = chatMessages.querySelector(`[data-msg-id="${msgId}"]`);
+                    if (row) {
+                        const musicBubble = row.querySelector('.msg-music');
+                        if (musicBubble && ChatPlayer._audio) {
+                            ChatPlayer.stop();
+                        }
+                    }
                     if (currentChatMode==='group') await deleteDoc(doc(db,'messages',msgId));
                     else await deleteDoc(doc(db,'dmConvs',currentDMConvId,'messages',msgId));
                 } catch(e){globalStatus.textContent=e.message;globalStatus.classList.add('is-error');}
@@ -4414,7 +4432,7 @@ async function uploadToCloudinary(file) {
             play(url, playBtn, bar, durEl, totalDur) {
                 // Same track → toggle pause/resume
                 if (this._url === url && this._audio) {
-                    if (this._audio.paused) { this._audio.play(); playBtn.innerHTML = this._PAUSE; }
+                    if (this._audio.paused) { this._audio.play().catch(()=>{}); playBtn.innerHTML = this._PAUSE; }
                     else                    { this._audio.pause(); playBtn.innerHTML = this._PLAY;  }
                     return;
                 }
@@ -4423,9 +4441,31 @@ async function uploadToCloudinary(file) {
                 // Start new
                 this._url = url; this._playBtn = playBtn;
                 this._bar = bar; this._durEl = durEl; this._totalDur = totalDur || 0;
-                this._audio = new Audio(url);
-                this._audio.play().catch(() => showToast('Не удалось воспроизвести трек'));
+                this._audio = new Audio();
+                this._audio.crossOrigin = 'anonymous';
+                this._audio.preload = 'auto';
+                this._audio.src = url;
                 playBtn.innerHTML = this._PAUSE;
+
+                const doPlay = () => {
+                    this._audio.play().catch(err => {
+                        console.warn('Audio play error:', err);
+                        playBtn.innerHTML = this._PLAY;
+                        showToast('⚠️ Не удалось воспроизвести. Попробуй ещё раз.');
+                    });
+                };
+
+                if (this._audio.readyState >= 3) {
+                    doPlay();
+                } else {
+                    this._audio.oncanplay = () => { doPlay(); this._audio.oncanplay = null; };
+                    this._audio.onerror = () => {
+                        playBtn.innerHTML = this._PLAY;
+                        showToast('⚠️ Ошибка загрузки аудио');
+                        this._reset();
+                    };
+                    this._audio.load();
+                }
 
                 this._audio.ontimeupdate = () => {
                     if (!this._audio) return;
