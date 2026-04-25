@@ -1849,7 +1849,8 @@
                                           from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
         import { getFirestore, collection, addDoc, onSnapshot, query,
                  orderBy, serverTimestamp, doc, updateDoc, deleteDoc,
-                 setDoc, getDoc, deleteField, limit, where, getDocs, increment, writeBatch }
+                 setDoc, getDoc, deleteField, limit, where, getDocs, increment, writeBatch,
+                 arrayUnion, arrayRemove }
                                           from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
 
         /* ══════════════════════════════
@@ -1955,13 +1956,17 @@ async function uploadToCloudinary(file) {
             try { localStorage.setItem(VISUAL_NICK_KEY, nick); } catch(_){}
         }
 
+        // Кеш ников из Firestore (uid → displayName). Единственный источник правды.
+        const _userNickCache = {};
+
         function displayNick(u) {
             if (!u) return '?';
-            // Визуальный ник имеет приоритет
-            const visual = getVisualNick();
-            if (visual) return visual;
+            // 1. Firestore-кеш (заполняется при логине и сохранении профиля)
+            if (_userNickCache[u.uid]) return _userNickCache[u.uid];
+            // 2. Firebase Auth displayName как запасной вариант
             const dn = u.displayName && String(u.displayName).trim();
             if (dn) return dn;
+            // 3. Вычленяем из email (фейковый домен или обычный)
             const em = u.email || '';
             if (em.toLowerCase().endsWith(FAKE_EMAIL_DOMAIN.toLowerCase()))
                 return em.slice(0, em.length - FAKE_EMAIL_DOMAIN.length) || '?';
@@ -2128,7 +2133,10 @@ async function uploadToCloudinary(file) {
         function updateSendMicState() {
             const wrap = document.getElementById('btnSendWrap');
             if (!wrap) return;
-            const hasContent = chatInput.value.trim().length > 0 || !!pendingImageBase64;
+            const hasText     = chatInput.value.trim().length > 0;
+            const hasImage    = !!pendingImageBase64;
+            const hasMusic    = !!_pendingMusicFile;
+            const hasContent  = hasText || hasImage || hasMusic;
             wrap.classList.toggle('is-typing', hasContent);
             chatSend.disabled = !hasContent;
         }
@@ -2575,19 +2583,32 @@ async function uploadToCloudinary(file) {
 
         let _pinnedUnsub = null;
         function loadPinnedMsg() {
-            if (_pinnedUnsub) { _pinnedUnsub(); _pinnedUnsub=null; }
+            // Защита от утечки: всегда отписываемся перед новой подпиской
+            if (_pinnedUnsub) { _pinnedUnsub(); _pinnedUnsub = null; }
+            // Скрываем баннер пока не пришёл снапшот
+            pinnedBanner.classList.remove('is-on');
             const pRef = doc(db, 'chatMeta', 'group_pinned');
-            _pinnedUnsub = onSnapshot(pRef, snap=>{
+            _pinnedUnsub = onSnapshot(pRef, snap => {
                 if (snap.exists()) {
-                    const d=snap.data();
-                    // New msgId always resets the dismiss so fresh pin is shown
+                    const d = snap.data();
+                    if (!d.msgId) {
+                        // Документ есть, но msgId пуст — закреп снят
+                        pinnedMsgId = null; _pinnedBannerLastText = '';
+                        pinnedBanner.classList.remove('is-on');
+                        return;
+                    }
+                    // Новый msgId — сбрасываем dismiss, показываем свежий закреп
                     if (pinnedMsgId !== d.msgId) _pinnedBannerDismissed = null;
                     showPinnedBanner(d.msgId, d.text, d.author);
                 } else {
-                    pinnedMsgId=null; _pinnedBannerLastText='';
+                    // Документ не существует — закрепов нет
+                    pinnedMsgId = null; _pinnedBannerLastText = '';
                     pinnedBanner.classList.remove('is-on');
                 }
-            }, ()=>{});
+            }, () => {
+                // Ошибка слушателя — просто скрываем баннер
+                pinnedBanner.classList.remove('is-on');
+            });
         }
 
         let _pinnedBannerDismissed = null;
@@ -2782,10 +2803,10 @@ async function uploadToCloudinary(file) {
         ══════════════════════════════ */
         async function openProfileModal() {
             const u = auth.currentUser; if (!u) return;
-            // Показываем визуальный ник (из localStorage), не системный
+            // Берём ник из Firestore-кеша (источник правды), без localStorage
             const inp = document.getElementById('profileName');
             if (inp) {
-                inp.value = getVisualNick() || displayNick(u);
+                inp.value = displayNick(u);
                 // Сброс превью и ошибок
                 const errEl = document.getElementById('nickError');
                 const prev  = document.getElementById('nickPreview');
@@ -2821,7 +2842,10 @@ async function uploadToCloudinary(file) {
             document.querySelectorAll('.status-chip').forEach(x=>x.classList.remove('is-active'));
             c.classList.add('is-active');
         }));
-        document.getElementById('profileCancel').addEventListener('click',()=>document.getElementById('profileModal').classList.remove('is-open'));
+        document.getElementById('profileCancel').addEventListener('click', () => {
+            document.getElementById('profileModal').classList.remove('is-open');
+            ChatPlayer.stop();
+        });
         document.getElementById('userProfileClose').addEventListener('click',()=>{
             document.getElementById('userProfileModal').classList.remove('is-open');
             if (_userProfileUnsub) { _userProfileUnsub(); _userProfileUnsub = null; }
@@ -2881,10 +2905,7 @@ async function uploadToCloudinary(file) {
                         
                         _showProfileMusicCard(displayTitle, 'Сохранено ✓');
                         
-                        _pmCard.onclick = () => {
-                            const audio = new Audio(url);
-                            audio.play().catch(pErr => console.error("Ошибка плеера:", pErr));
-                        };
+                        _pmCard.onclick = () => { ChatPlayer.playSimple(url); };
                     } catch (err) {
                         console.error("Ошибка БД:", err);
                         _showProfileMusicCard('Ошибка', 'Не удалось сохранить');
@@ -2938,18 +2959,8 @@ async function uploadToCloudinary(file) {
                         const customTitleInp = document.getElementById('profileMusicCustomTitle');
                         if (customTitleField) customTitleField.style.display = 'block';
                         if (customTitleInp) customTitleInp.value = displayTitle;
-                        // Preview click uses ChatPlayer — shares state with chat bubbles
-                        _pmCard.onclick = () => {
-                            const btn = _pmCard.querySelector('.pm-play-ico') || (() => {
-                                const b = document.createElement('button');
-                                b.className = 'pm-play-ico';
-                                b.style.cssText = 'background:none;border:none;color:var(--accent);cursor:pointer;font-size:1rem;padding:0 4px;flex-shrink:0';
-                                b.innerHTML = ChatPlayer._PLAY;
-                                _pmCard.appendChild(b);
-                                return b;
-                            })();
-                            ChatPlayer.play(d.musicUrl, btn, null, null, 0);
-                        };
+                        // Превью трека профиля — через единый AudioManager
+                        _pmCard.onclick = () => { ChatPlayer.playSimple(d.musicUrl); };
                     } else {
                         if (typeof _hideProfileMusicCard === 'function') _hideProfileMusicCard();
                         const customTitleField = document.getElementById('musicCustomTitleField');
@@ -3044,7 +3055,7 @@ async function uploadToCloudinary(file) {
             });
         })();
 
-        /* ── Сохранение профиля (ник — только визуальный) ── */
+        /* ── Сохранение профиля (ник → Firestore + Auth, убран localStorage-костыль) ── */
         let _profileSaveLock = false;
         document.getElementById('profileSave').addEventListener('click', async ()=>{
             if (_profileSaveLock) return;
@@ -3070,30 +3081,40 @@ async function uploadToCloudinary(file) {
             if(saveBtn){saveBtn.disabled=true;saveBtn.textContent='⏳ Сохраняю…';}
 
             try {
-                // ✅ Ник — ТОЛЬКО localStorage, НЕ трогаем Firebase Auth / Firestore displayName
-                setVisualNick(rawName);
-                // ✅ Bio, status → Firestore (без displayName — не ломаем системные данные)
-                const firestoreUpdate = {bio, status};
+                // 1. Firebase Auth displayName
+                await updateProfile(u, { displayName: rawName });
+
+                // 2. Firestore — единственный источник правды для ника
+                const firestoreUpdate = { displayName: rawName, bio, status };
+
                 // Music: save if new file selected; clear if user clicked delete
                 if (_profileMusicAction === 'set' && _profileMusicB64) {
-                    firestoreUpdate.musicBase64  = _profileMusicB64;
-                    firestoreUpdate.musicTitle   = _profileMusicTitleVal;
-                    firestoreUpdate.musicDuration= _profileMusicDur;
+                    firestoreUpdate.musicBase64   = _profileMusicB64;
+                    firestoreUpdate.musicTitle    = _profileMusicTitleVal;
+                    firestoreUpdate.musicDuration = _profileMusicDur;
                 } else if (_profileMusicAction === 'clear') {
-                    firestoreUpdate.musicBase64  = deleteField();
-                    firestoreUpdate.musicTitle   = deleteField();
-                    firestoreUpdate.musicDuration= deleteField();
+                    firestoreUpdate.musicBase64   = deleteField();
+                    firestoreUpdate.musicTitle    = deleteField();
+                    firestoreUpdate.musicDuration = deleteField();
                 } else {
-                    // Save custom title if changed via the input field
                     const customTitleInp = document.getElementById('profileMusicCustomTitle');
                     if (customTitleInp && customTitleInp.value.trim()) {
-                        const snap = await getDoc(doc(db,'users',auth.currentUser.uid));
+                        const snap = await getDoc(doc(db,'users',u.uid));
                         if (snap.exists() && snap.data().musicUrl) {
                             firestoreUpdate.musicTitle = customTitleInp.value.trim();
                         }
                     }
                 }
+
                 await setDoc(doc(db,'users',u.uid), firestoreUpdate, {merge:true});
+
+                // 3. Обновляем локальный кеш немедленно — UI меняется без перезагрузки
+                _userNickCache[u.uid] = rawName;
+
+                // 4. Чистим устаревший localStorage-костыль
+                try { localStorage.removeItem('index6a_visual_nick'); } catch(_) {}
+                try { localStorage.removeItem('6a_visual_nick'); } catch(_) {}
+
                 userProfile = {bio, status}; lsSet(PROFILE_KEY, userProfile);
                 _profileMusicAction = null;
                 setTheme(theme);
@@ -3544,6 +3565,12 @@ async function uploadToCloudinary(file) {
         _userProfileUnsub = onSnapshot(doc(db,'users',uid), snap => {
             if (!snap.exists()) return;
             const d = snap.data();
+
+            // Обновляем ник-кеш из Firestore при просмотре чужого профиля
+            if (d.displayName && d.displayName.trim()) {
+                _userNickCache[uid] = d.displayName.trim();
+                nameEl.textContent = d.displayName.trim();
+            }
 
             if (d.avatar && !avatarCache[uid]) {
                 avatarCache[uid]=d.avatar;
@@ -4424,38 +4451,64 @@ async function uploadToCloudinary(file) {
             },
 
             play(url, playBtn, bar, durEl, totalDur) {
+                if (!url) { showToast('⚠️ Нет ссылки на аудио'); return; }
                 // Same track → toggle pause/resume
                 if (this._url === url && this._audio) {
-                    if (this._audio.paused) { this._audio.play().catch(()=>{}); playBtn.innerHTML = this._PAUSE; }
-                    else                    { this._audio.pause(); playBtn.innerHTML = this._PLAY; }
+                    if (this._audio.paused) {
+                        this._audio.play().catch(()=>{});
+                        if (playBtn) playBtn.innerHTML = this._PAUSE;
+                    } else {
+                        this._audio.pause();
+                        if (playBtn) playBtn.innerHTML = this._PLAY;
+                    }
                     return;
                 }
                 // Stop previous
                 this._reset();
                 // Start new
-                this._url = url; this._playBtn = playBtn;
-                this._bar = bar; this._durEl = durEl; this._totalDur = totalDur || 0;
+                this._url = url; this._playBtn = playBtn || null;
+                this._bar = bar || null; this._durEl = durEl || null;
+                this._totalDur = totalDur || 0;
                 this._audio = new Audio(url);
-                playBtn.innerHTML = this._PAUSE;
+                if (playBtn) playBtn.innerHTML = this._PAUSE;
 
                 this._audio.play().catch(err => {
-                    console.warn('Audio play error:', err);
-                    playBtn.innerHTML = this._PLAY;
+                    console.warn('AudioManager play error:', err);
+                    if (playBtn) playBtn.innerHTML = this._PLAY;
                     showToast('⚠️ Не удалось воспроизвести. Попробуй ещё раз.');
                 });
 
                 this._audio.ontimeupdate = () => {
                     if (!this._audio) return;
                     const pct = (this._audio.currentTime / this._audio.duration) * 100;
-                    if (!isNaN(pct) && bar)   bar.style.width = pct + '%';
-                    if (durEl) durEl.textContent = fmtVoiceTime(Math.floor(this._audio.currentTime));
+                    if (!isNaN(pct) && this._bar) this._bar.style.width = pct + '%';
+                    if (this._durEl) this._durEl.textContent = fmtVoiceTime(Math.floor(this._audio.currentTime));
                 };
                 this._audio.onended = () => {
-                    playBtn.innerHTML = this._PLAY;
-                    if (bar)   bar.style.width = '0%';
-                    if (durEl) durEl.textContent = fmtVoiceTime(this._totalDur);
+                    if (this._playBtn) this._playBtn.innerHTML = this._PLAY;
+                    if (this._bar)     this._bar.style.width = '0%';
+                    if (this._durEl)   this._durEl.textContent = fmtVoiceTime(this._totalDur);
                     this._url = null;
                 };
+            },
+
+            /* Воспроизведение без UI-элементов (превью музыки в профиле).
+               Останавливает любой текущий трек перед запуском. */
+            playSimple(url) {
+                if (!url) return;
+                if (this._url === url && this._audio) {
+                    if (this._audio.paused) this._audio.play().catch(()=>{});
+                    else                    this._audio.pause();
+                    return;
+                }
+                this._reset();
+                this._url = url;
+                this._audio = new Audio(url);
+                this._audio.play().catch(err => {
+                    console.warn('AudioManager playSimple error:', err);
+                    showToast('⚠️ Не удалось воспроизвести аудио.');
+                });
+                this._audio.onended = () => { this._url = null; };
             },
 
             seek(ratio) {
@@ -4463,7 +4516,11 @@ async function uploadToCloudinary(file) {
                     this._audio.currentTime = Math.max(0, Math.min(1, ratio)) * this._audio.duration;
             },
 
-            stop() { this._reset(); }
+            stop() { this._reset(); },
+
+            get isPlaying() {
+                return !!(this._audio && !this._audio.paused);
+            }
         };
 
         /* ══════════════════════════════════════════
@@ -4808,16 +4865,30 @@ async function uploadToCloudinary(file) {
             const u = auth.currentUser; if (!u) return;
             const votes = pollData.votes || {};
 
-            // Build new votes object: remove user from all options, add to chosen
-            const newVotes = {};
+            // Определяем текущий голос пользователя
+            let currentVoteIdx = -1;
             for (let i = 0; i < pollData.options.length; i++) {
-                const key = String(i);
-                const prev = (votes[key] || []).filter(uid => uid !== u.uid);
-                if (i === optionIdx) prev.push(u.uid);
-                newVotes[key] = prev;
+                if ((votes[String(i)] || []).includes(u.uid)) { currentVoteIdx = i; break; }
             }
+
+            // Повторный клик по тому же варианту — снять голос
+            if (currentVoteIdx === optionIdx) {
+                try {
+                    await updateDoc(doc(db, 'polls', pollId), {
+                        ['votes.' + optionIdx]: arrayRemove(u.uid)
+                    });
+                } catch(e) { showToast('Ошибка: ' + e.message); }
+                return;
+            }
+
+            // Атомарно: убрать из старого + добавить в новый (без race condition)
             try {
-                await updateDoc(doc(db, 'polls', pollId), { votes: newVotes });
+                const batch = {};
+                if (currentVoteIdx !== -1) {
+                    batch['votes.' + currentVoteIdx] = arrayRemove(u.uid);
+                }
+                batch['votes.' + optionIdx] = arrayUnion(u.uid);
+                await updateDoc(doc(db, 'polls', pollId), batch);
             } catch(e) { showToast('Ошибка голосования: ' + e.message); }
         }
 
@@ -5300,7 +5371,12 @@ async function uploadToCloudinary(file) {
 
         // Close modals on overlay click
         document.querySelectorAll('.modal-overlay').forEach(overlay=>{
-            overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.classList.remove('is-open');});
+            overlay.addEventListener('click',e=>{
+                if(e.target===overlay){
+                    overlay.classList.remove('is-open');
+                    ChatPlayer.stop();
+                }
+            });
         });
 
         /* ══════════════════════════════
@@ -5314,6 +5390,9 @@ async function uploadToCloudinary(file) {
             if (_pinnedUnsub){_pinnedUnsub();_pinnedUnsub=null;}
             if (pollsUnsub){pollsUnsub();pollsUnsub=null;}
             peerHasRead=false;
+            // Сбрасываем баннер закрепа — он принадлежит только группе
+            pinnedMsgId=null; _pinnedBannerLastText=''; _pinnedBannerDismissed=null;
+            pinnedBanner.classList.remove('is-on');
             clearImagePreview();
             // Clear auto-delete timers
             Object.values(autodelTimers).forEach(t=>clearTimeout(t));
@@ -5400,6 +5479,8 @@ async function uploadToCloudinary(file) {
                 const s=await getDoc(doc(db,'users',user.uid));
                 if(s.exists()){
                     const d=s.data();
+                    // Заполняем кеш ника из Firestore — источник правды
+                    if(d.displayName && d.displayName.trim()) _userNickCache[user.uid]=d.displayName.trim();
                     if(d.avatar) avatarCache[user.uid]=d.avatar;
                     if(d.bio!==undefined||d.status!==undefined){
                         userProfile.bio    = d.bio    ?? userProfile.bio    ?? '';
