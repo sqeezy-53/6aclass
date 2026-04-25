@@ -283,32 +283,45 @@
         /* Music message bubble */
         .msg-music {
             display: flex; align-items: center; gap: 12px;
-            padding: 10px 4px 6px; min-width: 220px;
+            padding: 10px 4px 8px; min-width: 230px;
         }
         .music-play-btn {
-            width: 40px; height: 40px; border-radius: 50%;
+            width: 42px; height: 42px; border-radius: 50%;
             border: none; background: var(--accent); color: var(--accent-text);
             display: flex; align-items: center; justify-content: center;
-            cursor: pointer; flex-shrink: 0; transition: filter .15s, transform .15s;
+            cursor: pointer; flex-shrink: 0;
+            transition: filter .15s, transform .15s, box-shadow .15s;
+            box-shadow: 0 4px 14px rgba(94,200,255,.35);
         }
-        .msg-bubble--me .music-play-btn { background: rgba(255,255,255,.25); color: #fff; }
-        .music-play-btn:hover { filter: brightness(1.12); transform: scale(1.07); }
+        .msg-bubble--me .music-play-btn {
+            background: rgba(255,255,255,.22); color: #fff;
+            box-shadow: 0 3px 12px rgba(0,0,0,.18);
+            backdrop-filter: blur(6px);
+        }
+        .music-play-btn:hover { filter: brightness(1.15); transform: scale(1.08); }
+        .music-play-btn:active { transform: scale(.95); }
         .music-play-btn svg { width: 16px; height: 16px; }
-        .music-info { flex: 1; overflow: hidden; }
-        .music-title { font-size: .82rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .music-duration { font-size: .7rem; opacity: .65; }
+        .music-info { flex: 1; overflow: hidden; min-width: 0; }
+        .music-title { font-size: .83rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 2px; }
+        .music-duration { font-size: .7rem; opacity: .6; font-variant-numeric: tabular-nums; }
         .music-progress {
-            width: 100%; height: 3px;
-            background: rgba(255,255,255,.2); border-radius: 2px;
-            margin-top: 5px; cursor: pointer; position: relative;
+            width: 100%; height: 4px;
+            background: rgba(255,255,255,.15); border-radius: 999px;
+            margin-top: 6px; cursor: pointer; position: relative; overflow: visible;
         }
-        .msg-bubble--other .music-progress { background: rgba(0,0,0,.12); }
+        .msg-bubble--other .music-progress { background: rgba(0,0,0,.1); }
         .music-progress-bar {
-            height: 100%; border-radius: 2px;
+            height: 100%; border-radius: 999px;
             background: var(--accent); width: 0%;
-            transition: width .1s linear;
+            transition: width .12s linear; position: relative;
         }
-        .msg-bubble--me .music-progress-bar { background: rgba(255,255,255,.7); }
+        .music-progress-bar::after {
+            content: ''; position: absolute; right: -4px; top: 50%;
+            width: 10px; height: 10px; border-radius: 50%; background: inherit;
+            transform: translateY(-50%) scale(0); transition: transform .12s;
+        }
+        .music-progress:hover .music-progress-bar::after { transform: translateY(-50%) scale(1); }
+        .msg-bubble--me .music-progress-bar { background: rgba(255,255,255,.8); }
 
         /* Checklist */
         .checklist-create-wrap { display: flex; flex-direction: column; gap: 10px; }
@@ -648,13 +661,14 @@
         .pinned-banner {
             display:none; align-items:center; gap:10px; padding:8px 16px;
             background:var(--surface); border-bottom:1px solid var(--border);
+            border-left:3px solid var(--pin-color);
             cursor:pointer; transition:background var(--transition); flex-shrink:0;
         }
         .pinned-banner.is-on { display:flex; }
-        .pinned-banner:hover { background:var(--surface-hover); }
-        .pinned-banner-icon { color:var(--accent); font-size:1rem; flex-shrink:0; }
+        .pinned-banner:hover { background:var(--surface-hover); border-left-color:var(--accent); }
+        .pinned-banner-icon { color:var(--pin-color); font-size:1rem; flex-shrink:0; }
         .pinned-banner-body { flex:1; min-width:0; }
-        .pinned-banner-label { font-size:.68rem; font-weight:700; color:var(--accent); text-transform:uppercase; letter-spacing:.04em; }
+        .pinned-banner-label { font-size:.68rem; font-weight:700; color:var(--pin-color); text-transform:uppercase; letter-spacing:.04em; }
         .pinned-banner-text { font-size:.8rem; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
         .pinned-banner-close { border:none; background:transparent; color:var(--muted); font-size:1rem; cursor:pointer; padding:4px; border-radius:6px; transition:color var(--transition),background var(--transition); }
         .pinned-banner-close:hover { color:var(--text); background:var(--surface-2); }
@@ -1195,12 +1209,13 @@
             <div class="modal-field">
                 <label>🎵 Музыка профиля <span style="font-size:.7rem;color:var(--muted);font-weight:400">(видна всем в твоём профиле)</span></label>
                 <input type="file" id="profileMusicInput" accept="audio/*" style="display:none">
-                <div id="profileMusicCard" style="display:none;align-items:center;gap:10px;background:var(--surface-2);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:8px">
-                    <span style="font-size:1.4rem">🎵</span>
-                    <div style="flex:1;overflow:hidden">
+                <div id="profileMusicCard" style="display:none;align-items:center;gap:10px;background:var(--surface-2);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:8px;border:1px solid var(--border)">
+                    <span style="font-size:1.4rem;flex-shrink:0">🎵</span>
+                    <div style="flex:1;overflow:hidden;min-width:0">
                         <div id="profileMusicTitle" style="font-size:.85rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">—</div>
                         <div id="profileMusicSize" style="font-size:.72rem;color:var(--muted)">—</div>
                     </div>
+                    <button type="button" id="profileMusicEditTitle" title="Изменить название" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:.9rem;padding:4px 6px;border-radius:6px;transition:color .15s">✏️</button>
                     <button type="button" id="profileMusicRemove" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:1.1rem;padding:4px;border-radius:50%">✕</button>
                 </div>
                 <div style="display:flex;gap:8px">
@@ -1414,6 +1429,8 @@
             <div class="user-profile-name" id="userProfileName"></div>
             <div class="user-profile-status" id="userProfileStatus"></div>
             <div class="user-profile-bio" id="userProfileBio"></div>
+            <!-- Music player injected here by openUserProfile() -->
+            <div id="musicBox" style="margin:12px 0 4px"></div>
             <div class="user-profile-divider"></div>
             <div class="modal-actions" style="flex-direction:column;gap:8px">
                 <button type="button" class="btn btn-primary" id="userProfileDMBtn">💬 Написать</button>
@@ -1437,17 +1454,6 @@
          FIREBASE + LOGIC
     ══════════════════════════════════════════ -->
     <script type="module">
-        window.currentGlobalAudio = null;
-    let currentGlobalAudio = null; // Переменная для контроля проигрывания
-
-function playGlobalAudio(url) {
-    if (currentGlobalAudio) {
-        currentGlobalAudio.pause();
-        currentGlobalAudio = null;
-    }
-    currentGlobalAudio = new Audio(url);
-    currentGlobalAudio.play().catch(e => console.error("Ошибка воспроизведения:", e));
-}
         import { initializeApp }          from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
         import { getAuth, onAuthStateChanged, signInWithEmailAndPassword,
                  createUserWithEmailAndPassword, signOut, updateProfile }
@@ -1469,7 +1475,6 @@ function playGlobalAudio(url) {
             appId: '1:656933440681:web:e7a8c2ae22181ec98f2db8'
         };
         const app  = initializeApp(firebaseConfig);
-        window.currentGlobalAudio = null;
         const auth = getAuth(app);
         const db   = getFirestore(app);
 
@@ -1652,8 +1657,8 @@ async function uploadToCloudinary(file) {
         let pinnedMsgId           = null;           // currently pinned msg in group
         let autodelTimers         = {};             // msgId → timeoutId
         let _userProfileUid       = null;           // uid открытого профиля
-        let globalAudioPlayer     = null;           // единый глобальный аудио-плеер
-        let currentPlayBtn        = null;           // кнопка Play текущего трека
+        let globalAudioPlayer     = null;           // DEPRECATED — use ChatPlayer singleton below
+        let currentPlayBtn        = null;           // DEPRECATED — use ChatPlayer singleton below
 
         /* Persisted settings */
         let pinnedChats  = lsGet(PINNED_KEY, []);
@@ -2186,23 +2191,30 @@ async function uploadToCloudinary(file) {
             _pinnedUnsub = onSnapshot(pRef, snap=>{
                 if (snap.exists()) {
                     const d=snap.data();
-                    // If a new message gets pinned, reset dismiss flag
-                    if (_pinnedBannerDismissed !== d.msgId) _pinnedBannerDismissed = null;
+                    // New msgId always resets the dismiss so fresh pin is shown
+                    if (pinnedMsgId !== d.msgId) _pinnedBannerDismissed = null;
                     showPinnedBanner(d.msgId, d.text, d.author);
-                } else { pinnedMsgId=null; pinnedBanner.classList.remove('is-on'); }
+                } else {
+                    pinnedMsgId=null; _pinnedBannerLastText='';
+                    pinnedBanner.classList.remove('is-on');
+                }
             }, ()=>{});
         }
 
-        let _pinnedBannerDismissed = null; // stores dismissed msgId
+        let _pinnedBannerDismissed = null;
+        let _pinnedBannerLastText  = '';
 
         function showPinnedBanner(msgId, text, author) {
-            if (_pinnedBannerDismissed === msgId) return; // user dismissed this pin already
+            const fullText = (author ? author + ': ' : '') + (text || '');
+            // Stay hidden only if same msgId AND same text was already dismissed
+            if (_pinnedBannerDismissed === msgId && _pinnedBannerLastText === fullText) return;
             pinnedMsgId = msgId;
-            pinnedBannerText.textContent = (author?author+': ':'') + (text||'');
+            _pinnedBannerLastText = fullText;
+            pinnedBannerText.textContent = fullText;
             pinnedBanner.classList.add('is-on');
         }
         pinnedBannerClose.addEventListener('click', ()=>{
-            _pinnedBannerDismissed = pinnedMsgId; // remember which pin was dismissed
+            _pinnedBannerDismissed = pinnedMsgId;
             pinnedBanner.classList.remove('is-on');
         });
         pinnedBanner.addEventListener('click', e=>{
@@ -2512,23 +2524,21 @@ async function uploadToCloudinary(file) {
                 const snap = await getDoc(doc(db, 'users', u.uid));
                 if (snap.exists()) {
                     const d = snap.data();
-                    // Проверяем наличие нового поля musicUrl
                     if (d.musicUrl) {
                         _showProfileMusicCard(d.musicTitle || 'Мой трек', 'Сохранено ✓');
-                        // Настраиваем клик для проигрывания
-                        // Настраиваем клик для проигрывания с защитой
+                        // Preview click uses ChatPlayer — shares state with chat bubbles
                         _pmCard.onclick = () => {
-                            if (window.currentGlobalAudio && window.currentGlobalAudio.src === d.musicUrl && !window.currentGlobalAudio.paused) {
-                                window.currentGlobalAudio.pause();
-                                return;
-                            }
-                            if (window.currentGlobalAudio) window.currentGlobalAudio.pause();
-                            
-                            window.currentGlobalAudio = new Audio(d.musicUrl);
-                            window.currentGlobalAudio.play().catch(e => console.error("Ошибка:", e));
+                            const btn = _pmCard.querySelector('.pm-play-ico') || (() => {
+                                const b = document.createElement('button');
+                                b.className = 'pm-play-ico';
+                                b.style.cssText = 'background:none;border:none;color:var(--accent);cursor:pointer;font-size:1rem;padding:0 4px;flex-shrink:0';
+                                b.innerHTML = ChatPlayer._PLAY;
+                                _pmCard.appendChild(b);
+                                return b;
+                            })();
+                            ChatPlayer.play(d.musicUrl, btn, null, null, 0);
                         };
                     } else {
-                        // Если музыки нет в базе, скрываем карточку
                         if (typeof _hideProfileMusicCard === 'function') _hideProfileMusicCard();
                     }
                 }
@@ -2551,6 +2561,28 @@ async function uploadToCloudinary(file) {
             _profileMusicB64 = null; _profileMusicAction = 'clear';
             _hideProfileMusicCard();
         });
+
+        // ✏️ Редактировать название трека прямо в карточке профиля
+        const _pmEditTitle = document.getElementById('profileMusicEditTitle');
+        if (_pmEditTitle) {
+            _pmEditTitle.addEventListener('click', async () => {
+                const current = (_pmTitle.textContent || '').replace('—','').trim();
+                const newTitle = prompt('Новое название трека:', current);
+                if (newTitle === null) return;
+                const trimmed = newTitle.trim();
+                if (!trimmed) return showToast('Название не может быть пустым');
+                _pmTitle.textContent = trimmed;
+                _profileMusicTitleVal = trimmed;
+                const u = auth.currentUser; if (!u) return;
+                try {
+                    const snap = await getDoc(doc(db, 'users', u.uid));
+                    if (snap.exists() && snap.data().musicUrl) {
+                        await updateDoc(doc(db, 'users', u.uid), { musicTitle: trimmed });
+                        showToast('✅ Название обновлено');
+                    }
+                } catch(e) { showToast('Ошибка сохранения названия'); }
+            });
+        }
         /* ── Ник: валидация ── */
         const NICK_FORBIDDEN = /[<>&"'\/\\]/;
         function validateNick(v) {
@@ -2951,8 +2983,6 @@ async function uploadToCloudinary(file) {
         /* ══════════════════════════════
            USER PROFILE VIEW
         ══════════════════════════════ */
-        window.currentGlobalAudio = window.currentGlobalAudio || null;
-
         async function openUserProfile(uid, name) {
     // 1. Сначала находим все элементы
     const modal = document.getElementById('userProfileModal');
@@ -3006,62 +3036,39 @@ async function uploadToCloudinary(file) {
             const statusMap = {online:'🟢 В сети', away:'🟡 Отошёл', dnd:'🔴 Не беспокоить', invisible:'⚫ Невидимка'};
             statEl.textContent = onlineUsers[uid] ? (statusMap[d.status||'online'] || '🟢 В сети') : '⚫ Не в сети';
 
-            // 4. Отрисовываем музыку ТОЛЬКО если она есть в данных 'd'
+            // 4. Отрисовываем музыку через ChatPlayer если есть
             if (d.musicUrl && musicBox) {
-                const iconPlay  = '<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
-                const iconPause = '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
                 musicBox.innerHTML = `
                     <div class="modern-profile-player">
-                        <button class="music-play-btn" id="p-play" style="flex-shrink:0">${iconPlay}</button>
+                        <button class="music-play-btn" id="p-play" style="flex-shrink:0">
+                            <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                        </button>
                         <div class="p-info" style="flex:1;min-width:0;overflow:hidden">
                             <div class="music-title" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(d.musicTitle || 'Без названия')}</div>
-                            <div class="music-progress" style="margin-top:6px"><div class="music-progress-bar" id="p-bar"></div></div>
+                            <div class="music-progress" style="margin-top:6px;cursor:pointer"><div class="music-progress-bar" id="p-bar"></div></div>
                         </div>
-                        <input type="range" class="p-volume" min="0" max="1" step="0.1" value="0.8" style="width:56px;accent-color:var(--accent)">
+                        <input type="range" class="p-volume" min="0" max="1" step="0.05" value="0.8"
+                               style="width:52px;accent-color:var(--accent)" title="Громкость">
                     </div>
                 `;
+                const pBtn    = musicBox.querySelector('#p-play');
+                const pBar    = musicBox.querySelector('#p-bar');
+                const pTrack  = musicBox.querySelector('.music-progress');
+                const pVolume = musicBox.querySelector('.p-volume');
 
-                const playBtn   = musicBox.querySelector('#p-play');
-                const pBar      = musicBox.querySelector('#p-bar');
-                const volSlider = musicBox.querySelector('.p-volume');
-
-                playBtn.onclick = () => {
-                    if (globalAudioPlayer && globalAudioPlayer._trackSrc === d.musicUrl) {
-                        if (globalAudioPlayer.paused) {
-                            globalAudioPlayer.play();
-                            playBtn.innerHTML = iconPause;
-                        } else {
-                            globalAudioPlayer.pause();
-                            playBtn.innerHTML = iconPlay;
-                        }
-                        return;
-                    }
-                    if (globalAudioPlayer) {
-                        globalAudioPlayer.pause();
-                        if (currentPlayBtn) currentPlayBtn.innerHTML = iconPlay;
-                    }
-                    globalAudioPlayer = new Audio(d.musicUrl);
-                    globalAudioPlayer._trackSrc = d.musicUrl;
-                    globalAudioPlayer.volume = parseFloat(volSlider.value);
-                    globalAudioPlayer.play().catch(() => showToast('Не удалось воспроизвести'));
-                    playBtn.innerHTML = iconPause;
-                    currentPlayBtn = playBtn;
-
-                    globalAudioPlayer.ontimeupdate = () => {
-                        if (globalAudioPlayer._trackSrc !== d.musicUrl) return;
-                        const pct = (globalAudioPlayer.currentTime / globalAudioPlayer.duration) * 100;
-                        if (!isNaN(pct) && pBar) pBar.style.width = pct + '%';
-                    };
-                    globalAudioPlayer.onended = () => {
-                        playBtn.innerHTML = iconPlay;
-                        if (pBar) pBar.style.width = '0%';
-                    };
+                pBtn.onclick = () => {
+                    if (ChatPlayer._audio) ChatPlayer._audio.volume = parseFloat(pVolume.value);
+                    ChatPlayer.play(d.musicUrl, pBtn, pBar, null, 0);
                 };
-
-                volSlider.oninput = (e) => {
-                    if (globalAudioPlayer && globalAudioPlayer._trackSrc === d.musicUrl)
-                        globalAudioPlayer.volume = parseFloat(e.target.value);
+                pTrack.addEventListener('click', e => {
+                    if (ChatPlayer._url !== d.musicUrl) return;
+                    ChatPlayer.seek((e.clientX - pTrack.getBoundingClientRect().left) / pTrack.offsetWidth);
+                });
+                pVolume.oninput = () => {
+                    if (ChatPlayer._audio) ChatPlayer._audio.volume = parseFloat(pVolume.value);
                 };
+            } else if (musicBox) {
+                musicBox.innerHTML = '';
             }
         }
     } catch(err) {
@@ -3870,16 +3877,87 @@ async function uploadToCloudinary(file) {
         /* ══════════════════════════════════════════
            MUSIC BUBBLE RENDERER
         ══════════════════════════════════════════ */
+        /* ══════════════════════════════════════════
+           CHAT PLAYER — Singleton (one Audio instance, no overlaps, no leaks)
+        ══════════════════════════════════════════ */
+        const ChatPlayer = {
+            _audio:    null,
+            _url:      null,
+            _playBtn:  null,
+            _bar:      null,
+            _durEl:    null,
+            _totalDur: 0,
+            _PLAY:  '<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>',
+            _PAUSE: '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>',
+
+            _reset() {
+                if (this._audio) {
+                    this._audio.ontimeupdate = null;
+                    this._audio.onended = null;
+                    this._audio.pause();
+                    this._audio.src = '';
+                    this._audio = null;
+                }
+                if (this._playBtn) this._playBtn.innerHTML = this._PLAY;
+                if (this._bar)    this._bar.style.width = '0%';
+                if (this._durEl && this._totalDur)
+                    this._durEl.textContent = fmtVoiceTime(this._totalDur);
+                this._url = null; this._playBtn = null;
+                this._bar = null; this._durEl = null; this._totalDur = 0;
+            },
+
+            play(url, playBtn, bar, durEl, totalDur) {
+                // Same track → toggle pause/resume
+                if (this._url === url && this._audio) {
+                    if (this._audio.paused) { this._audio.play(); playBtn.innerHTML = this._PAUSE; }
+                    else                    { this._audio.pause(); playBtn.innerHTML = this._PLAY;  }
+                    return;
+                }
+                // Stop previous
+                this._reset();
+                // Start new
+                this._url = url; this._playBtn = playBtn;
+                this._bar = bar; this._durEl = durEl; this._totalDur = totalDur || 0;
+                this._audio = new Audio(url);
+                this._audio.play().catch(() => showToast('Не удалось воспроизвести трек'));
+                playBtn.innerHTML = this._PAUSE;
+
+                this._audio.ontimeupdate = () => {
+                    if (!this._audio) return;
+                    const pct = (this._audio.currentTime / this._audio.duration) * 100;
+                    if (!isNaN(pct) && bar)   bar.style.width = pct + '%';
+                    if (durEl) durEl.textContent = fmtVoiceTime(Math.floor(this._audio.currentTime));
+                };
+                this._audio.onended = () => {
+                    playBtn.innerHTML = this._PLAY;
+                    if (bar)   bar.style.width = '0%';
+                    if (durEl) durEl.textContent = fmtVoiceTime(this._totalDur);
+                    this._url = null;
+                };
+            },
+
+            seek(ratio) {
+                if (this._audio && this._audio.duration)
+                    this._audio.currentTime = Math.max(0, Math.min(1, ratio)) * this._audio.duration;
+            },
+
+            stop() { this._reset(); }
+        };
+
+        /* ══════════════════════════════════════════
+           MUSIC BUBBLE RENDERER
+        ══════════════════════════════════════════ */
         function buildMusicBubble(msgId, d) {
             const wrap = document.createElement('div');
             wrap.className = 'msg-music';
 
             const playBtn = document.createElement('button');
             playBtn.className = 'music-play-btn';
-            playBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
+            playBtn.innerHTML = ChatPlayer._PLAY;
 
             const info = document.createElement('div');
             info.className = 'music-info';
+
             const title = document.createElement('div');
             title.className = 'music-title';
             title.textContent = d.musicTitle || 'Трек';
@@ -3893,55 +3971,22 @@ async function uploadToCloudinary(file) {
             const bar = document.createElement('div');
             bar.className = 'music-progress-bar';
             progress.appendChild(bar);
+
             info.appendChild(title); info.appendChild(dur); info.appendChild(progress);
             wrap.appendChild(playBtn); wrap.appendChild(info);
 
             playBtn.onclick = () => {
-                const src = d.musicUrl;
-                if (!src) return showToast('Ошибка: нет ссылки на аудио');
-
-                const iconPlay  = '<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
-                const iconPause = '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
-
-                // Кликнули по уже играющему треку — пауза/возобновление
-                if (globalAudioPlayer && globalAudioPlayer.src.endsWith(src.split('?')[0].split('/').pop()) || (globalAudioPlayer && globalAudioPlayer._trackSrc === src)) {
-                    if (globalAudioPlayer.paused) {
-                        globalAudioPlayer.play();
-                        playBtn.innerHTML = iconPause;
-                    } else {
-                        globalAudioPlayer.pause();
-                        playBtn.innerHTML = iconPlay;
-                    }
-                    return;
-                }
-
-                // Останавливаем прежний трек
-                if (globalAudioPlayer) {
-                    globalAudioPlayer.pause();
-                    if (currentPlayBtn) currentPlayBtn.innerHTML = iconPlay;
-                }
-
-                // Запускаем новый трек
-                globalAudioPlayer = new Audio(src);
-                globalAudioPlayer._trackSrc = src;
-                globalAudioPlayer.play().catch(() => showToast('Не удалось воспроизвести трек'));
-                playBtn.innerHTML = iconPause;
-                currentPlayBtn = playBtn;
-
-                // Прогресс через ontimeupdate (без накапливающихся setInterval)
-                globalAudioPlayer.ontimeupdate = () => {
-                    if (globalAudioPlayer._trackSrc !== src) return;
-                    const pct = (globalAudioPlayer.currentTime / globalAudioPlayer.duration) * 100;
-                    if (!isNaN(pct)) bar.style.width = pct + '%';
-                    dur.textContent = fmtVoiceTime(Math.floor(globalAudioPlayer.currentTime));
-                };
-
-                globalAudioPlayer.onended = () => {
-                    playBtn.innerHTML = iconPlay;
-                    bar.style.width = '0%';
-                    dur.textContent = fmtVoiceTime(d.musicDuration || 0);
-                };
+                if (!d.musicUrl) return showToast('Ошибка: нет ссылки на аудио');
+                ChatPlayer.play(d.musicUrl, playBtn, bar, dur, d.musicDuration || 0);
             };
+
+            // Seek by clicking the progress track
+            progress.addEventListener('click', e => {
+                if (ChatPlayer._url !== d.musicUrl) return;
+                const r = progress.getBoundingClientRect();
+                ChatPlayer.seek((e.clientX - r.left) / r.width);
+            });
+
             return wrap;
         }
 
