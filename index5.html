@@ -518,13 +518,27 @@
 
         /* Send/Mic button swap animation */
         .btn-send-wrap { position: relative; width: 40px; height: 40px; flex-shrink: 0; }
-        .btn-send-wrap .btn-send {
+        .btn-send-wrap .btn-send,
+        .btn-send-wrap .btn-mic-main {
             position: absolute; inset: 0;
             transition: opacity .18s ease, transform .18s ease;
         }
-        /* Кнопка отправки: скрыта пока нет контента */
+        .btn-mic-main {
+            width: 40px; height: 40px; border-radius: 50%; border: none;
+            background: linear-gradient(135deg, var(--accent-strong), var(--accent));
+            color: var(--accent-text);
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; box-shadow: 0 4px 16px var(--bubble-me-glow);
+            transition: filter .15s, transform .18s ease, opacity .18s ease;
+        }
+        .btn-mic-main:hover { filter: brightness(1.1); transform: scale(1.06); }
+        .btn-mic-main svg { width: 17px; height: 17px; }
+        /* State: typing → show send, hide mic */
         .btn-send-wrap.is-typing .btn-send { opacity: 1; transform: scale(1); pointer-events: auto; }
+        .btn-send-wrap.is-typing .btn-mic-main { opacity: 0; transform: scale(.7); pointer-events: none; }
+        /* State: idle → hide send, show mic */
         .btn-send-wrap:not(.is-typing) .btn-send { opacity: 0; transform: scale(.7); pointer-events: none; }
+        .btn-send-wrap:not(.is-typing) .btn-mic-main { opacity: 1; transform: scale(1); pointer-events: auto; }
 
 
         /* ═══════════════════════════════════════
@@ -1473,10 +1487,17 @@
                     <input type="file" id="imgFileInput" accept="image/*" style="display:none">
                     <input type="file" id="musicFileInput" accept="audio/*" style="display:none">
                     <input type="file" id="galleryMultiInput" accept="image/*" multiple style="display:none">
-                    <!-- Send button -->
+                    <!-- Voice button (always visible, only for recording) -->
+                    <button type="button" class="btn-voice" id="btnVoice" title="Голосовое сообщение">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+                    </button>
+                    <!-- Send / Mic swap button -->
                     <div class="btn-send-wrap" id="btnSendWrap">
                         <button type="button" class="btn-send" id="chatSend" disabled>
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z"/></svg>
+                        </button>
+                        <button type="button" class="btn-mic-main" id="btnMicMain" title="Голосовое сообщение">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
                         </button>
                     </div>
                 </div>
@@ -3601,7 +3622,7 @@ async function uploadToCloudinary(file) {
         /* ══════════════════════════════
            VOICE MESSAGES
         ══════════════════════════════ */
-        const btnVoice     = document.getElementById('btnVoice'); // null — кнопка скрыта из UI
+        const btnVoice     = document.getElementById('btnVoice');
         const voiceRecBar  = document.getElementById('voiceRecBar');
         const voiceRecTime = document.getElementById('voiceRecTime');
         const voiceRecCancel=document.getElementById('voiceRecCancel');
@@ -3618,15 +3639,15 @@ async function uploadToCloudinary(file) {
             if (!isRecording) return;
             isRecording = false;
             clearInterval(voiceTimerInt);
-            if (btnVoice) btnVoice.classList.remove('is-recording');
-            if (voiceRecBar) voiceRecBar.classList.remove('is-visible');
+            btnVoice.classList.remove('is-recording');
+            voiceRecBar.classList.remove('is-visible');
             if (mediaRecorder && mediaRecorder.state !== 'inactive') {
                 mediaRecorder._sendOnStop = send;
                 mediaRecorder.stop();
             }
         }
 
-        if (btnVoice) btnVoice.addEventListener('click', async () => {
+        btnVoice.addEventListener('click', async () => {
             if (isRecording) { stopVoiceRecording(true); return; }
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({audio:true});
@@ -3666,19 +3687,19 @@ async function uploadToCloudinary(file) {
                 };
                 mediaRecorder.start(200);
                 isRecording = true;
-                if (btnVoice) btnVoice.classList.add('is-recording');
-                if (voiceRecBar) voiceRecBar.classList.add('is-visible');
-                if (voiceRecTime) voiceRecTime.textContent = '0:00';
+                btnVoice.classList.add('is-recording');
+                voiceRecBar.classList.add('is-visible');
+                voiceRecTime.textContent = '0:00';
                 voiceTimerInt = setInterval(()=>{
                     voiceSeconds++;
-                    if (voiceRecTime) voiceRecTime.textContent = fmtVoiceTime(voiceSeconds);
-                    if (voiceSeconds >= 90) stopVoiceRecording(true);
+                    voiceRecTime.textContent = fmtVoiceTime(voiceSeconds);
+                    if (voiceSeconds >= 90) stopVoiceRecording(true); // auto-stop at 90s
                 }, 1000);
             } catch(e) {
                 showToast('❌ Нет доступа к микрофону');
             }
-        }); // end if (btnVoice)
-        if (voiceRecCancel) voiceRecCancel.addEventListener('click', ()=>stopVoiceRecording(false));
+        });
+        voiceRecCancel.addEventListener('click', ()=>stopVoiceRecording(false));
 
         /* ══════════════════════════════
            REACTIONS — FIX: works in both group & DM
@@ -4926,7 +4947,7 @@ async function uploadToCloudinary(file) {
         const attachSheetBackdrop = document.getElementById('attachSheetBackdrop');
         const btnAttach           = document.getElementById('btnAttach');
         const btnSendWrap         = document.getElementById('btnSendWrap');
-        // btnMicMain удалён из DOM — голосовые через btnVoice слева от поля ввода
+        const btnMicMain          = document.getElementById('btnMicMain');
 
         // ─── Sheet open/close ───
         function openAttachSheet() {
@@ -5183,6 +5204,10 @@ async function uploadToCloudinary(file) {
         // ─── Mic/Send swap ───
         // (updateSendMicState defined earlier as stub, already wired)
 
+        // btnMicMain mirrors btnVoice behaviour
+        btnMicMain.addEventListener('click', () => {
+            document.getElementById('btnVoice').click();
+        });
 
         // ─── Utility: compress image to base64 ───
         async function compressImageFile(file, maxKB) {
