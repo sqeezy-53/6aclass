@@ -19,79 +19,85 @@
 
     <style>
         /* ═══════════════════════════════════════
-           DESIGN TOKENS
+           DESIGN TOKENS — AURORA PREMIUM
         ═══════════════════════════════════════ */
         :root {
             --font-display: 'Outfit', system-ui, sans-serif;
             --font-body: 'DM Sans', system-ui, sans-serif;
-            --radius-xs: 8px;
-            --radius-sm: 12px;
-            --radius: 18px;
-            --radius-lg: 24px;
-            --radius-bubble-me:    20px 20px 5px 20px;
-            --radius-bubble-other: 20px 20px 20px 5px;
-            --transition: 0.22s cubic-bezier(0.4, 0, 0.2, 1);
-            --transition-slow: 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-            --sidebar-w: 310px;
+            --radius-xs: 10px;
+            --radius-sm: 14px;
+            --radius: 20px;
+            --radius-lg: 28px;
+            --radius-bubble-me:    22px 22px 6px 22px;
+            --radius-bubble-other: 22px 22px 22px 6px;
+            --transition: 0.24s cubic-bezier(0.4, 0, 0.2, 1);
+            --transition-slow: 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+            --transition-spring: 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+            --sidebar-w: 318px;
         }
 
         [data-theme="dark"] {
-            --bg-base:          #070910;
-            --bg-chat:          #0c0f17;
-            --sidebar-bg:       #0f1219;
-            --surface:          #131720;
-            --surface-2:        #181d27;
-            --surface-3:        #1e2433;
-            --surface-hover:    #1c2232;
-            --surface-active:   #1e2d42;
-            --surface-glass:    rgba(19,23,32,0.82);
-            --text:             #eef1f8;
-            --muted:            #8a95a9;
-            --muted-soft:       #5a6172;
-            --border:           rgba(255,255,255,0.07);
-            --border-focus:     rgba(94,200,255,0.45);
-            --accent:           #5ec8ff;
-            --accent-2:         #a78bfa;
-            --accent-3:         #34d399;
-            --accent-strong:    #3db5f5;
-            --accent-dim:       rgba(94,200,255,0.13);
-            --accent-text:      #040c14;
+            --bg-base:          #05070f;
+            --bg-chat:          #080c15;
+            --sidebar-bg:       #0a0e1a;
+            --surface:          #0f1422;
+            --surface-2:        #141927;
+            --surface-3:        #1a2035;
+            --surface-hover:    #171e30;
+            --surface-active:   #1c2a42;
+            --surface-glass:    rgba(12,16,30,0.85);
+            --text:             #e8edf8;
+            --muted:            #7d8da6;
+            --muted-soft:       #4d5a72;
+            --border:           rgba(255,255,255,0.06);
+            --border-strong:    rgba(255,255,255,0.1);
+            --border-focus:     rgba(99,179,255,0.5);
+            --accent:           #63b3ff;
+            --accent-2:         #b197fc;
+            --accent-3:         #4ade80;
+            --accent-strong:    #4fa8f5;
+            --accent-dim:       rgba(99,179,255,0.12);
+            --accent-text:      #030b18;
             --danger:           #f87171;
             --danger-dim:       rgba(248,113,113,0.12);
-            --warning:          #f59e0b;
-            --bubble-me-bg:     linear-gradient(145deg,#1a5fa8 0%,#2875cc 45%,#3d92e8 100%);
-            --bubble-me-glow:   rgba(61,146,232,0.22);
+            --warning:          #fbbf24;
+            --bubble-me-bg:     linear-gradient(145deg,#1454a0 0%,#2170cc 45%,#3a8fe6 100%);
+            --bubble-me-glow:   rgba(58,143,230,0.28);
             --bubble-me-text:   #ffffff;
-            --bubble-other-bg:  #181d27;
-            --bubble-other-border: rgba(255,255,255,0.08);
-            --bubble-other-text:#e8eaf0;
-            --nav-bg:           rgba(7,9,16,0.94);
-            --shadow-card:      0 20px 56px rgba(0,0,0,0.5);
-            --shadow-bubble:    0 2px 12px rgba(0,0,0,0.22);
-            --dot-color:        rgba(255,255,255,0.025);
+            --bubble-other-bg:  #141927;
+            --bubble-other-border: rgba(255,255,255,0.07);
+            --bubble-other-text:#dde4f4;
+            --nav-bg:           rgba(5,7,15,0.92);
+            --shadow-card:      0 24px 72px rgba(0,0,0,0.6), 0 4px 16px rgba(0,0,0,0.3);
+            --shadow-bubble:    0 2px 14px rgba(0,0,0,0.28);
+            --shadow-glow:      0 0 40px rgba(99,179,255,0.12);
+            --dot-color:        rgba(99,179,255,0.02);
             --noise:            0.04;
             --online-color:     #22c55e;
-            --pin-color:        #f59e0b;
-            --admin-color:      #f87171;
+            --pin-color:        #fbbf24;
+            --admin-color:      #fb7185;
+            --glass-bg:         rgba(15,20,34,0.7);
+            --glass-border:     rgba(255,255,255,0.08);
         }
 
         [data-theme="light"] {
-            --bg-base:          #e8ecf4;
-            --bg-chat:          #dde3ee;
-            --sidebar-bg:       #f0f4fb;
+            --bg-base:          #eaeff8;
+            --bg-chat:          #dfe6f4;
+            --sidebar-bg:       #f2f6fd;
             --surface:          #ffffff;
-            --surface-2:        #f4f7fc;
-            --surface-3:        #edf1f8;
-            --surface-hover:    #eaeff8;
-            --surface-active:   #dce8f8;
-            --surface-glass:    rgba(255,255,255,0.88);
-            --text:             #0f131c;
-            --muted:            #596274;
-            --muted-soft:       #9aa3b5;
-            --border:           rgba(15,20,32,0.08);
+            --surface-2:        #f5f8fe;
+            --surface-3:        #edf2fb;
+            --surface-hover:    #e8eef9;
+            --surface-active:   #dce8fa;
+            --surface-glass:    rgba(255,255,255,0.9);
+            --text:             #0d1220;
+            --muted:            #5a6a82;
+            --muted-soft:       #9daab8;
+            --border:           rgba(12,20,40,0.07);
+            --border-strong:    rgba(12,20,40,0.12);
             --border-focus:     rgba(37,99,235,0.45);
             --accent:           #2563eb;
-            --accent-2:         #6366f1;
+            --accent-2:         #7c3aed;
             --accent-3:         #059669;
             --accent-strong:    #1d4ed8;
             --accent-dim:       rgba(37,99,235,0.09);
@@ -100,29 +106,170 @@
             --danger-dim:       rgba(220,38,38,0.09);
             --warning:          #d97706;
             --bubble-me-bg:     linear-gradient(145deg,#1d4ed8 0%,#3b82f6 100%);
-            --bubble-me-glow:   rgba(59,130,246,0.18);
+            --bubble-me-glow:   rgba(59,130,246,0.22);
             --bubble-me-text:   #ffffff;
             --bubble-other-bg:  #ffffff;
-            --bubble-other-border: rgba(15,20,32,0.07);
-            --bubble-other-text:#14181f;
-            --nav-bg:           rgba(240,244,251,0.95);
-            --shadow-card:      0 16px 44px rgba(15,20,32,0.10);
-            --shadow-bubble:    0 2px 10px rgba(15,20,32,0.07);
-            --dot-color:        rgba(15,20,32,0.035);
+            --bubble-other-border: rgba(12,20,40,0.07);
+            --bubble-other-text:#12192e;
+            --nav-bg:           rgba(242,246,253,0.96);
+            --shadow-card:      0 16px 52px rgba(12,20,40,0.12), 0 2px 8px rgba(12,20,40,0.05);
+            --shadow-bubble:    0 2px 10px rgba(12,20,40,0.07);
+            --shadow-glow:      0 0 30px rgba(37,99,235,0.08);
+            --dot-color:        rgba(37,99,235,0.025);
             --noise:            0.016;
             --online-color:     #16a34a;
             --pin-color:        #d97706;
             --admin-color:      #dc2626;
+            --glass-bg:         rgba(255,255,255,0.75);
+            --glass-border:     rgba(12,20,40,0.09);
         }
 
+
+        /* ═══════════════════════════════════════
+           GLOBAL PREMIUM RESETS + ANIMATIONS
+        ═══════════════════════════════════════ */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        html { font-size: 16px; }
+        body {
+            font-family: var(--font-body);
+            background: var(--bg-base);
+            color: var(--text);
+            height: 100dvh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        @keyframes fadeIn        { from{opacity:0}          to{opacity:1} }
+        @keyframes fadeInUp      { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes msgIn         { from{opacity:0;transform:translateY(10px) scale(.97)} to{opacity:1;transform:translateY(0) scale(1)} }
+        @keyframes sidebarItem   { from{opacity:0;transform:translateX(-12px)} to{opacity:1;transform:translateX(0)} }
+        @keyframes sheetPop      { from{opacity:0;transform:scale(.94) translateY(8px)} to{opacity:1;transform:scale(1) translateY(0)} }
+        @keyframes modalIn       { from{opacity:0;transform:scale(.93) translateY(16px)} to{opacity:1;transform:scale(1) translateY(0)} }
+        @keyframes editPulse     { 0%,100%{background:inherit} 50%{background:rgba(99,179,255,.08)} }
+        @keyframes typingBounce  { 0%,60%,100%{transform:translateY(0)} 30%{transform:translateY(-7px)} }
+        @keyframes slideInLeft   { from{transform:translateX(-100%)} to{transform:translateX(0)} }
+        @keyframes profileFloat  { from{opacity:0;transform:translateY(20px) scale(.95)} to{opacity:1;transform:translateY(0) scale(1)} }
+        @keyframes badgePop      { 0%{transform:scale(0)} 70%{transform:scale(1.25)} 100%{transform:scale(1)} }
+        @keyframes shimmer       { from{background-position:200% 0} to{background-position:-200% 0} }
+        @keyframes pulseGlow     { 0%,100%{box-shadow:0 0 0 0 rgba(99,179,255,0)} 50%{box-shadow:0 0 0 8px rgba(99,179,255,0.12)} }
+
+        /* ═══ AUTH ═══ */
+        .auth-gate { position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:var(--bg-base);z-index:500;overflow:hidden; }
+        .auth-orb { position:absolute;border-radius:50%;filter:blur(80px);pointer-events:none;animation:fadeIn 1s ease; }
+        .auth-orb--1 { width:420px;height:420px;top:-100px;right:-80px;background:radial-gradient(circle,rgba(99,179,255,0.18) 0%,transparent 70%); }
+        .auth-orb--2 { width:360px;height:360px;bottom:-80px;left:-60px;background:radial-gradient(circle,rgba(177,151,252,0.14) 0%,transparent 70%); }
+        .auth-card {
+            position:relative;z-index:1;width:100%;max-width:420px;
+            background:var(--glass-bg);
+            backdrop-filter:blur(28px) saturate(160%);
+            -webkit-backdrop-filter:blur(28px) saturate(160%);
+            border:1px solid var(--glass-border);
+            border-radius:var(--radius-lg);
+            padding:44px 40px;
+            box-shadow:var(--shadow-card), var(--shadow-glow);
+            animation:modalIn .5s cubic-bezier(.34,1.1,.64,1);
+        }
+        .auth-logo { font-family:var(--font-display);font-size:2.6rem;font-weight:900;letter-spacing:-.06em;margin-bottom:6px; }
+        .auth-logo span { color:var(--accent); }
+        .auth-card h2 { font-family:var(--font-display);font-size:1.5rem;font-weight:800;letter-spacing:-.03em;margin-bottom:6px; }
+        .auth-card .sub { font-size:.85rem;color:var(--muted);margin-bottom:26px;line-height:1.6; }
+        .auth-field { margin-bottom:16px; }
+        .auth-field label { display:block;font-size:.72rem;font-weight:700;color:var(--muted);margin-bottom:7px;text-transform:uppercase;letter-spacing:.06em; }
+        .auth-input {
+            width:100%;padding:13px 16px;
+            border-radius:var(--radius-sm);
+            border:1.5px solid var(--border-strong);
+            background:var(--surface-2);
+            color:var(--text);font-size:.9rem;font-family:inherit;
+            transition:border-color var(--transition),box-shadow var(--transition);
+        }
+        .auth-input:focus { outline:none;border-color:var(--accent);box-shadow:0 0 0 4px var(--accent-dim); }
+        .auth-input::placeholder { color:var(--muted-soft); }
+        .auth-error { font-size:.8rem;color:var(--danger);min-height:1.2em;margin-bottom:8px;font-weight:600; }
+        .auth-actions { display:flex;flex-direction:column;gap:10px;margin-top:6px; }
+
+        /* ═══ BUTTONS ═══ */
+        .btn {
+            display:inline-flex;align-items:center;justify-content:center;gap:8px;
+            padding:12px 22px;border-radius:var(--radius-sm);border:none;
+            font-family:var(--font-body);font-size:.88rem;font-weight:700;
+            cursor:pointer;transition:all var(--transition);letter-spacing:.01em;
+            position:relative;overflow:hidden;
+        }
+        .btn::after { content:'';position:absolute;inset:0;background:rgba(255,255,255,0);transition:background var(--transition); }
+        .btn:hover::after { background:rgba(255,255,255,0.07); }
+        .btn:active { transform:scale(.97); }
+        .btn-primary {
+            background:linear-gradient(135deg,var(--accent-strong),var(--accent));
+            color:var(--accent-text);
+            box-shadow:0 4px 20px rgba(99,179,255,0.28);
+        }
+        .btn-primary:hover { box-shadow:0 6px 28px rgba(99,179,255,0.38);transform:translateY(-1px); }
+        .btn-ghost {
+            background:transparent;color:var(--text);
+            border:1.5px solid var(--border-strong);
+        }
+        .btn-ghost:hover { background:var(--surface-2);border-color:var(--accent);color:var(--accent); }
+        .btn-danger { background:var(--danger-dim);color:var(--danger);border:1px solid rgba(248,113,113,0.2); }
+        .btn-danger:hover { background:rgba(248,113,113,0.2); }
+        .btn.hidden { display:none !important; }
+
+        /* ═══ BAN SCREEN ═══ */
+        #bannedScreen { display:none;position:fixed;inset:0;z-index:600;background:var(--bg-base);flex-direction:column;align-items:center;justify-content:center;gap:16px; }
+        #bannedScreen.is-visible { display:flex; }
+        .banned-skull { font-size:4rem;animation:fadeInUp .5s ease; }
+        .banned-title { font-family:var(--font-display);font-size:1.8rem;font-weight:900;color:var(--danger);animation:fadeInUp .5s ease .1s both; }
+        .banned-sub { font-size:.9rem;color:var(--muted);text-align:center;line-height:1.6;max-width:300px;animation:fadeInUp .5s ease .2s both; }
+        .banned-btn { padding:12px 24px;border-radius:var(--radius-sm);font-family:inherit;font-size:.9rem;font-weight:700;cursor:pointer;border:none;animation:fadeInUp .5s ease .3s both; }
+        .banned-btn-logout { background:var(--danger);color:#fff; }
+        .banned-btn-register { background:var(--surface-2);color:var(--text);border:1px solid var(--border);display:none; }
+
+        /* ═══ SPINNER ═══ */
+        .spinner-wrap { display:flex;flex-direction:column;align-items:center;gap:12px;color:var(--muted);font-size:.85rem; }
+        .spinner { width:32px;height:32px;border:2.5px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite; }
+        @keyframes spin { to{transform:rotate(360deg)} }
+        .visually-hidden { position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap; }
+
+        /* ═══ APP LAYOUT ═══ */
+        #appRoot { display:flex;height:100dvh;overflow:hidden; }
+        #appRoot.hidden { display:none; }
+        .auth-gate.hidden { display:none; }
+
+        /* ═══ SIDEBAR ═══ */
+        .tg-sidebar {
+            width:var(--sidebar-w);flex-shrink:0;
+            display:flex;flex-direction:column;
+            background:var(--sidebar-bg);
+            border-right:1px solid var(--border);
+            overflow:hidden;height:100%;
+            transition:transform var(--transition-slow);
+        }
+        .sidebar-header {
+            display:flex;align-items:center;justify-content:space-between;
+            padding:18px 16px 14px;flex-shrink:0;
+            background:var(--nav-bg);
+            backdrop-filter:blur(20px);
+            border-bottom:1px solid var(--border);
+        }
+        .sidebar-logo {
+            font-family:var(--font-display);font-size:1.3rem;font-weight:900;
+            letter-spacing:-.04em;color:var(--text);
+        }
+        .sidebar-logo span { color:var(--accent); }
+        .sidebar-header-btns { display:flex;align-items:center;gap:4px; }
+        #homeLink { display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;color:var(--muted);text-decoration:none;transition:background var(--transition),color var(--transition); }
+        #homeLink:hover { background:var(--surface-2);color:var(--accent); }
 
 .modern-profile-player {
     display: flex;
     align-items: center;
     background: rgba(255,255,255,0.05);
     padding: 10px;
-    border-radius: 12px;
+    border-radius: 14px;
     gap: 10px;
+    border: 1px solid var(--border);
 }
 .p-volume {
     width: 60px;
@@ -590,72 +737,177 @@
         .sidebar-logo span { background:linear-gradient(100deg,var(--accent) 0%,var(--accent-2) 100%); -webkit-background-clip:text; background-clip:text; color:transparent; }
         .sidebar-header-btns { display:flex; align-items:center; gap:3px; }
 
+        /* ═══ SIDEBAR enhanced ═══ */
+        .tg-sidebar { box-shadow:4px 0 24px rgba(0,0,0,0.2); }
+        .sidebar-header { position:sticky;top:0;z-index:5; }
+        .sidebar-logo span { background:linear-gradient(100deg,var(--accent) 0%,var(--accent-2) 100%);-webkit-background-clip:text;background-clip:text;color:transparent; }
+
         /* Sidebar search */
-        .sidebar-search-wrap { padding:10px 12px 8px; flex-shrink:0; }
+        .sidebar-search-wrap { padding:12px 14px 10px; flex-shrink:0; }
         .sidebar-search-inner { position:relative; }
-        .sidebar-search-icon { position:absolute; left:11px; top:50%; transform:translateY(-50%); width:14px; height:14px; color:var(--muted-soft); pointer-events:none; }
-        .sidebar-search-input { width:100%; padding:8px 12px 8px 32px; border-radius:999px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-family:inherit; font-size:.84rem; transition:border-color var(--transition),box-shadow var(--transition); }
-        .sidebar-search-input:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-dim); }
+        .sidebar-search-icon { position:absolute; left:13px; top:50%; transform:translateY(-50%); width:14px; height:14px; color:var(--muted-soft); pointer-events:none; }
+        .sidebar-search-input {
+            width:100%; padding:10px 14px 10px 36px;
+            border-radius:999px; border:1.5px solid var(--border-strong);
+            background:var(--surface-2); color:var(--text);
+            font-family:inherit; font-size:.84rem;
+            transition:border-color var(--transition),box-shadow var(--transition);
+        }
+        .sidebar-search-input:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 4px var(--accent-dim); }
         .sidebar-search-input::placeholder { color:var(--muted-soft); }
 
         /* Folders bar */
-        .folder-bar { display:flex; gap:6px; padding:6px 12px; overflow-x:auto; scrollbar-width:none; flex-shrink:0; border-bottom:1px solid var(--border); }
+        .folder-bar {
+            display:flex; gap:6px; padding:8px 14px 10px;
+            overflow-x:auto; scrollbar-width:none; flex-shrink:0;
+            border-bottom:1px solid var(--border);
+        }
         .folder-bar::-webkit-scrollbar { display:none; }
-        .folder-tab { flex-shrink:0; padding:5px 12px; border-radius:999px; border:1px solid var(--border); background:transparent; color:var(--muted); font-family:inherit; font-size:.75rem; font-weight:600; cursor:pointer; transition:background var(--transition),color var(--transition),border-color var(--transition); white-space:nowrap; }
-        .folder-tab:hover { background:var(--surface-2); color:var(--text); }
-        .folder-tab.is-active { background:var(--accent-dim); border-color:var(--accent); color:var(--accent); }
+        .folder-tab {
+            flex-shrink:0; padding:6px 14px;
+            border-radius:999px; border:1.5px solid var(--border-strong);
+            background:transparent; color:var(--muted);
+            font-family:inherit; font-size:.76rem; font-weight:700;
+            cursor:pointer; transition:all var(--transition-spring); white-space:nowrap;
+        }
+        .folder-tab:hover { background:var(--surface-2); color:var(--text); border-color:var(--border-strong); }
+        .folder-tab.is-active {
+            background:var(--accent-dim); border-color:var(--accent);
+            color:var(--accent); box-shadow:0 0 0 3px var(--accent-dim);
+        }
 
         /* Sidebar list */
         .sidebar-list { flex:1; overflow-y:auto; overflow-x:hidden; scrollbar-width:thin; scrollbar-color:var(--border) transparent; }
-        .sidebar-list::-webkit-scrollbar { width:4px; }
+        .sidebar-list::-webkit-scrollbar { width:3px; }
         .sidebar-list::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
-        .sidebar-section-label { padding:10px 14px 4px; font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--muted-soft); }
+        .sidebar-section-label { padding:12px 16px 4px; font-size:.66rem; font-weight:800; text-transform:uppercase; letter-spacing:.1em; color:var(--muted-soft); }
 
         /* Chat item */
-        .chat-list-item { display:flex; align-items:center; gap:10px; padding:9px 14px; cursor:pointer; transition:background var(--transition); position:relative; animation:sidebarItem .22s ease both; }
+        .chat-list-item {
+            display:flex; align-items:center; gap:12px;
+            padding:11px 16px; cursor:pointer;
+            transition:background var(--transition); position:relative;
+            animation:sidebarItem .25s ease both;
+        }
         .chat-list-item:hover { background:var(--surface-hover); }
         .chat-list-item.is-active { background:var(--surface-active); }
-        .chat-list-item.is-active::before { content:''; position:absolute; left:0; top:15%; bottom:15%; width:3px; border-radius:0 3px 3px 0; background:var(--accent); }
-        .chat-list-item.is-unread .cli-name { color:var(--text); font-weight:700; }
+        .chat-list-item.is-active::before {
+            content:''; position:absolute; left:0; top:18%; bottom:18%;
+            width:3px; border-radius:0 3px 3px 0;
+            background:linear-gradient(180deg,var(--accent),var(--accent-2));
+        }
+        .chat-list-item.is-unread .cli-name { color:var(--text); font-weight:800; }
 
-        .cli-avatar { width:46px; height:46px; border-radius:50%; flex-shrink:0; position:relative; overflow:visible; }
-        .cli-avatar-inner { width:46px; height:46px; border-radius:50%; display:grid; place-items:center; font-family:var(--font-display); font-weight:800; font-size:.95rem; color:#fff; overflow:hidden; }
+        .cli-avatar { width:48px; height:48px; border-radius:50%; flex-shrink:0; position:relative; overflow:visible; }
+        .cli-avatar-inner {
+            width:48px; height:48px; border-radius:50%;
+            display:grid; place-items:center;
+            font-family:var(--font-display); font-weight:800; font-size:1rem;
+            color:#fff; overflow:hidden;
+            box-shadow:0 2px 8px rgba(0,0,0,0.2);
+        }
         .cli-avatar-inner img { width:100%; height:100%; object-fit:cover; border-radius:50%; }
-        .cli-online-dot { position:absolute; bottom:1px; right:1px; width:11px; height:11px; border-radius:50%; background:var(--online-color); border:2px solid var(--sidebar-bg); }
+        .cli-online-dot {
+            position:absolute; bottom:1px; right:1px;
+            width:12px; height:12px; border-radius:50%;
+            background:var(--online-color); border:2.5px solid var(--sidebar-bg);
+            animation:pulseGlow 2s ease-in-out infinite;
+        }
 
-        .cli-body { flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; }
+        .cli-body { flex:1; min-width:0; display:flex; flex-direction:column; gap:3px; }
         .cli-row1 { display:flex; align-items:center; justify-content:space-between; gap:6px; }
-        .cli-name { font-weight:600; font-size:.9rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1; min-width:0; color:var(--text); }
+        .cli-name { font-weight:700; font-size:.9rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1; min-width:0; color:var(--text); }
         .cli-time { font-size:.68rem; color:var(--muted); flex-shrink:0; white-space:nowrap; }
         .cli-row2 { display:flex; align-items:center; gap:5px; }
         .cli-preview { font-size:.78rem; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1; min-width:0; }
-        .cli-badge { min-width:20px; height:20px; padding:0 6px; border-radius:999px; background:var(--accent); color:var(--accent-text); font-size:.68rem; font-weight:800; display:grid; place-items:center; flex-shrink:0; }
+        .cli-badge {
+            min-width:20px; height:20px; padding:0 6px;
+            border-radius:999px;
+            background:linear-gradient(135deg,var(--accent-strong),var(--accent));
+            color:var(--accent-text); font-size:.65rem; font-weight:800;
+            display:grid; place-items:center; flex-shrink:0;
+            animation:badgePop .25s cubic-bezier(.34,1.4,.64,1);
+        }
         .cli-badge.is-muted { background:var(--muted-soft); }
         .cli-pin-icon { color:var(--pin-color); font-size:.72rem; flex-shrink:0; }
         .cli-muted-icon { color:var(--muted-soft); font-size:.72rem; flex-shrink:0; }
 
         /* Sidebar footer */
-        .sidebar-footer { padding:10px 12px; border-top:1px solid var(--border); display:flex; align-items:center; gap:8px; flex-shrink:0; }
-        .sidebar-user-av { width:32px; height:32px; border-radius:50%; display:grid; place-items:center; font-size:.75rem; font-weight:800; color:#fff; flex-shrink:0; overflow:hidden; cursor:pointer; transition:transform .15s; }
-        .sidebar-user-av:hover { transform:scale(1.08); }
+        .sidebar-footer {
+            padding:12px 14px;
+            border-top:1px solid var(--border);
+            display:flex; align-items:center; gap:10px; flex-shrink:0;
+            background:var(--nav-bg); backdrop-filter:blur(12px);
+        }
+        .sidebar-user-av {
+            width:34px; height:34px; border-radius:50%;
+            display:grid; place-items:center;
+            font-size:.78rem; font-weight:800; color:#fff;
+            flex-shrink:0; overflow:hidden; cursor:pointer;
+            transition:transform .2s,box-shadow .2s;
+            border:2px solid var(--border-strong);
+        }
+        .sidebar-user-av:hover { transform:scale(1.1); box-shadow:0 0 0 3px var(--accent-dim); }
         .sidebar-user-av img { width:100%; height:100%; object-fit:cover; border-radius:50%; }
-        .sidebar-user-name { flex:1; min-width:0; font-size:.82rem; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; cursor:pointer; }
+        .sidebar-user-name {
+            flex:1; min-width:0; font-size:.84rem; font-weight:700;
+            white-space:nowrap; overflow:hidden; text-overflow:ellipsis; cursor:pointer;
+        }
         .sidebar-user-name:hover { color:var(--accent); }
 
         /* ═══ MAIN CHAT AREA ═══ */
-        .tg-main { flex:1; min-width:0; display:flex; flex-direction:column; height:100%; position:relative; background:var(--bg-chat); background-image:radial-gradient(var(--dot-color) 1px,transparent 1px); background-size:22px 22px; }
+        .tg-main {
+            flex:1; min-width:0; display:flex; flex-direction:column;
+            height:100%; position:relative; background:var(--bg-chat);
+            background-image:
+                radial-gradient(var(--dot-color) 1px,transparent 1px);
+            background-size:24px 24px;
+        }
 
         /* Chat header */
-        .tg-chat-header { display:flex; align-items:center; gap:12px; padding:10px 16px; background:var(--nav-bg); backdrop-filter:blur(20px) saturate(180%); -webkit-backdrop-filter:blur(20px) saturate(180%); border-bottom:1px solid var(--border); flex-shrink:0; z-index:10; position:relative; overflow:hidden; }
-        .tg-chat-header::before { content:''; position:absolute; inset:0; background:radial-gradient(ellipse 120% 180% at 15% -20%,rgba(94,200,255,.1) 0%,transparent 45%),radial-gradient(ellipse 100% 160% at 85% 120%,rgba(139,92,246,.08) 0%,transparent 42%); pointer-events:none; }
-        .tg-header-av { width:38px; height:38px; border-radius:50%; display:grid; place-items:center; font-family:var(--font-display); font-weight:800; font-size:.9rem; color:#fff; flex-shrink:0; overflow:hidden; position:relative; z-index:1; cursor:pointer; transition:transform .2s; }
-        .tg-header-av:hover { transform:scale(1.06); }
+        .tg-chat-header {
+            display:flex; align-items:center; gap:14px; padding:12px 20px;
+            background:var(--nav-bg); backdrop-filter:blur(24px) saturate(180%);
+            -webkit-backdrop-filter:blur(24px) saturate(180%);
+            border-bottom:1px solid var(--border); flex-shrink:0; z-index:10;
+            position:relative; overflow:hidden;
+        }
+        .tg-chat-header::before {
+            content:''; position:absolute; inset:0;
+            background:radial-gradient(ellipse 120% 180% at 15% -20%,rgba(99,179,255,0.1) 0%,transparent 45%),
+                       radial-gradient(ellipse 100% 160% at 85% 120%,rgba(177,151,252,0.08) 0%,transparent 42%);
+            pointer-events:none;
+        }
+        .tg-header-av {
+            width:40px; height:40px; border-radius:50%;
+            display:grid; place-items:center;
+            font-family:var(--font-display); font-weight:800; font-size:.95rem; color:#fff;
+            flex-shrink:0; overflow:hidden; position:relative; z-index:1;
+            cursor:pointer; transition:transform .2s,box-shadow .2s;
+            border:2px solid rgba(255,255,255,0.15);
+        }
+        .tg-header-av:hover { transform:scale(1.08); box-shadow:0 0 0 3px var(--accent-dim); }
         .tg-header-av img { width:100%; height:100%; object-fit:cover; border-radius:50%; }
         .tg-header-info { flex:1; min-width:0; position:relative; z-index:1; }
-        .tg-header-name { font-family:var(--font-display); font-weight:800; font-size:.98rem; letter-spacing:-.02em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .tg-header-name { font-family:var(--font-display); font-weight:800; font-size:1rem; letter-spacing:-.02em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
         .tg-header-status { font-size:.73rem; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
         .tg-header-status.online { color:var(--online-color); }
         .tg-header-actions { display:flex; align-items:center; gap:4px; position:relative; z-index:1; }
+
+        /* Composer */
+        .compose-shell {
+            display:flex; gap:8px; align-items:flex-end;
+            padding:10px 10px 10px 16px;
+            border-radius:var(--radius-lg);
+            background:var(--surface);
+            border:1.5px solid var(--border-strong);
+            box-shadow:var(--shadow-bubble);
+            transition:border-color var(--transition),box-shadow var(--transition);
+        }
+        .compose-shell:focus-within {
+            border-color:rgba(99,179,255,0.4);
+            box-shadow:0 0 0 4px rgba(99,179,255,0.08),var(--shadow-bubble);
+        }
 
         /* Pinned message banner */
         .pinned-banner {
@@ -772,14 +1024,82 @@
         .voice-rec-cancel { background:none; border:none; color:var(--muted-soft); cursor:pointer; font-size:.78rem; font-weight:600; padding:4px 8px; border-radius:var(--radius-xs); transition:color var(--transition); margin-left:auto; }
         .voice-rec-cancel:hover { color:var(--danger); }
 
-        /* User profile view modal */
-        .user-profile-modal { max-width:360px; }
-        .user-profile-av { width:72px; height:72px; border-radius:50%; display:grid; place-items:center; font-size:2rem; font-weight:800; color:#fff; flex-shrink:0; border:3px solid var(--border); overflow:hidden; margin:0 auto 12px; }
-        .user-profile-av img { width:100%; height:100%; object-fit:cover; }
-        .user-profile-name { font-family:var(--font-display); font-size:1.2rem; font-weight:800; text-align:center; letter-spacing:-.02em; margin-bottom:4px; }
-        .user-profile-status { font-size:.82rem; color:var(--muted); text-align:center; margin-bottom:4px; }
-        .user-profile-bio { font-size:.88rem; color:var(--muted); text-align:center; line-height:1.5; margin-bottom:16px; padding:0 8px; min-height:1em; }
-        .user-profile-divider { height:1px; background:var(--border); margin:12px 0; }
+        /* User profile view modal - PREMIUM */
+        .user-profile-modal { max-width:380px; padding:0 !important; overflow:hidden; }
+        .upm-hero {
+            position:relative; height:100px;
+            overflow:hidden; flex-shrink:0;
+        }
+        .upm-banner-gradient {
+            position:absolute;inset:0;
+            background:linear-gradient(135deg,var(--accent) 0%,var(--accent-2) 100%);
+            opacity:0.7;
+        }
+        .user-profile-av {
+            width:84px;height:84px;border-radius:50%;
+            display:grid;place-items:center;
+            font-size:2rem;font-weight:800;color:#fff;
+            flex-shrink:0;overflow:hidden;
+            border:4px solid var(--surface);
+            box-shadow:0 4px 20px rgba(0,0,0,0.4);
+            position:absolute;bottom:-32px;left:24px;
+            z-index:2;
+        }
+        .user-profile-av img { width:100%;height:100%;object-fit:cover;border-radius:50%; }
+        .upm-badges {
+            position:absolute;bottom:-26px;right:16px;
+            display:flex;gap:6px;z-index:2;
+        }
+        .upm-badge {
+            padding:4px 10px;border-radius:999px;
+            font-size:.66rem;font-weight:800;letter-spacing:.04em;
+            text-transform:uppercase;
+            display:flex;align-items:center;gap:4px;
+        }
+        .upm-badge-admin {
+            background:linear-gradient(135deg,#f87171,#fb923c);
+            color:#fff;
+            box-shadow:0 2px 10px rgba(248,113,113,0.4);
+        }
+        .upm-badge-online {
+            background:rgba(34,197,94,0.15);
+            color:var(--online-color);
+            border:1px solid rgba(34,197,94,0.3);
+        }
+        .upm-info {
+            padding:42px 24px 16px;
+        }
+        .user-profile-name {
+            font-family:var(--font-display);font-size:1.3rem;font-weight:900;
+            letter-spacing:-.03em;margin-bottom:4px;color:var(--text);
+        }
+        .user-profile-status {
+            font-size:.8rem;color:var(--muted);margin-bottom:10px;
+            display:flex;align-items:center;gap:5px;
+        }
+        .user-profile-bio {
+            font-size:.88rem;color:var(--muted);
+            line-height:1.6;min-height:1em;
+            background:var(--surface-2);border-radius:var(--radius-sm);
+            padding:10px 14px;border:1px solid var(--border);
+            display:none;
+        }
+        .user-profile-bio:not(:empty) { display:block; }
+        .upm-stats {
+            display:flex;align-items:center;
+            margin:0 24px 16px;
+            background:var(--surface-2);border:1px solid var(--border);
+            border-radius:var(--radius-sm);padding:12px 16px;gap:12px;
+        }
+        .upm-stat {
+            display:flex;align-items:center;gap:8px;flex:1;
+        }
+        .upm-stat-icon { font-size:1.1rem; }
+        .upm-stat-label { font-size:.65rem;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.04em;line-height:1; }
+        .upm-stat-val { font-size:.82rem;font-weight:700;color:var(--text);margin-top:2px; }
+        .upm-stat-divider { width:1px;height:36px;background:var(--border);flex-shrink:0; }
+        .user-profile-divider { height:1px;background:var(--border);margin:4px 24px 12px; }
+        .user-profile-modal .modal-actions { padding:0 24px 24px !important; }
 
         .btn-send { width:40px; height:40px; border-radius:50%; border:none; background:linear-gradient(135deg,var(--accent-strong),var(--accent)); color:var(--accent-text); display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; transition:filter var(--transition),transform .15s ease,opacity var(--transition); box-shadow:0 4px 16px var(--bubble-me-glow); }
         .btn-send:disabled{opacity:.35;cursor:default;box-shadow:none}
@@ -887,28 +1207,72 @@
         .ctx-menu__divider{height:1px;background:var(--border);margin:4px 8px}
 
         /* Generic modal */
-        .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.58);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);z-index:200;display:none;place-items:center;padding:20px}
+        .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.65);backdrop-filter:blur(12px) saturate(150%);-webkit-backdrop-filter:blur(12px) saturate(150%);z-index:200;display:none;place-items:center;padding:20px}
         .modal-overlay.is-open{display:grid}
-        .modal-box{width:100%;max-width:440px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:28px 26px;box-shadow:var(--shadow-card);animation:modalIn .28s cubic-bezier(.34,1.2,.64,1)}
-        .modal-box h3{font-family:var(--font-display);font-size:1.1rem;font-weight:800;letter-spacing:-.025em;margin-bottom:8px}
-        .modal-box p.modal-sub{font-size:.85rem;color:var(--muted);margin-bottom:20px;line-height:1.5}
-        .modal-field{margin-bottom:14px}
-        .modal-field label{display:block;font-size:.74rem;font-weight:600;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em}
-        .modal-field input,.modal-field textarea,.modal-field select{width:100%;padding:11px 13px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface-2);color:var(--text);font-size:.88rem;font-family:inherit;transition:border-color var(--transition),box-shadow var(--transition)}
-        .modal-field input:focus,.modal-field textarea:focus,.modal-field select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-dim)}
-        .modal-field textarea{resize:vertical;min-height:72px}
+        .modal-box{
+            width:100%;max-width:460px;
+            background:var(--glass-bg);
+            backdrop-filter:blur(28px) saturate(160%);
+            -webkit-backdrop-filter:blur(28px) saturate(160%);
+            border:1px solid var(--glass-border);
+            border-radius:var(--radius-lg);
+            padding:32px 28px;
+            box-shadow:var(--shadow-card), var(--shadow-glow);
+            animation:modalIn .3s cubic-bezier(.34,1.2,.64,1);
+            position:relative;overflow:hidden;
+        }
+        .modal-box::before{
+            content:'';position:absolute;top:0;left:0;right:0;height:1px;
+            background:linear-gradient(90deg,transparent,rgba(255,255,255,0.15),transparent);
+        }
+        .modal-box h3{font-family:var(--font-display);font-size:1.15rem;font-weight:800;letter-spacing:-.03em;margin-bottom:10px;color:var(--text)}
+        .modal-box p.modal-sub{font-size:.85rem;color:var(--muted);margin-bottom:22px;line-height:1.6}
+        .modal-field{margin-bottom:18px}
+        .modal-field label{display:block;font-size:.72rem;font-weight:700;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.06em}
+        .modal-field input,.modal-field textarea,.modal-field select{
+            width:100%;padding:13px 16px;
+            border-radius:var(--radius-sm);
+            border:1.5px solid var(--border-strong);
+            background:var(--surface-2);
+            color:var(--text);font-size:.9rem;font-family:inherit;
+            transition:border-color var(--transition),box-shadow var(--transition),background var(--transition);
+        }
+        .modal-field input:focus,.modal-field textarea:focus,.modal-field select:focus{
+            outline:none;border-color:var(--accent);
+            box-shadow:0 0 0 4px var(--accent-dim);
+            background:var(--surface);
+        }
+        .modal-field textarea{resize:vertical;min-height:80px;line-height:1.6}
         .modal-field select{-webkit-appearance:none;cursor:pointer}
-        .modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:20px}
+        .modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:24px}
 
         /* Profile modal (wider) */
-        #profileModal .modal-box{max-width:520px}
-        .profile-av-row{display:flex;align-items:center;gap:16px;margin-bottom:20px}
-        .profile-av-big{width:64px;height:64px;border-radius:50%;display:grid;place-items:center;font-size:1.4rem;font-weight:800;color:#fff;flex-shrink:0;border:2px solid var(--border);overflow:hidden;cursor:pointer;transition:filter .2s}
-        .profile-av-big:hover{filter:brightness(.85)}
+        #profileModal .modal-box{max-width:540px}
+        .profile-av-row{display:flex;align-items:center;gap:18px;margin-bottom:24px;padding:18px;background:var(--surface-2);border-radius:var(--radius);border:1px solid var(--border)}
+        .profile-av-big{
+            width:70px;height:70px;border-radius:50%;
+            display:grid;place-items:center;
+            font-size:1.5rem;font-weight:800;color:#fff;
+            flex-shrink:0;border:3px solid var(--accent);
+            overflow:hidden;cursor:pointer;
+            transition:filter .2s,transform .2s;
+            box-shadow:0 0 0 4px var(--accent-dim);
+        }
+        .profile-av-big:hover{filter:brightness(.85);transform:scale(1.05)}
         .profile-av-big img{width:100%;height:100%;object-fit:cover}
-        .profile-status-row{display:flex;gap:8px;margin-bottom:14px}
-        .status-chip{flex:1;padding:8px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface-2);color:var(--muted);font-family:inherit;font-size:.8rem;font-weight:600;cursor:pointer;text-align:center;transition:all var(--transition)}
-        .status-chip:hover,.status-chip.is-active{background:var(--accent-dim);border-color:var(--accent);color:var(--accent)}
+        .profile-status-row{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
+        .status-chip{
+            flex:1;min-width:0;padding:9px 10px;
+            border-radius:var(--radius-sm);
+            border:1.5px solid var(--border-strong);
+            background:var(--surface-2);color:var(--muted);
+            font-family:inherit;font-size:.78rem;font-weight:700;
+            cursor:pointer;text-align:center;
+            transition:all var(--transition-spring);
+            white-space:nowrap;
+        }
+        .status-chip:hover{background:var(--surface-3);color:var(--text);border-color:var(--border-strong)}
+        .status-chip.is-active{background:var(--accent-dim);border-color:var(--accent);color:var(--accent);box-shadow:0 0 0 3px var(--accent-dim)}
 
         /* Avatar modal */
         .avatar-modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);z-index:250;display:none;place-items:center;padding:20px}
@@ -1218,7 +1582,11 @@
                     <button type="button" id="profileMusicEditTitle" title="Изменить название" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:.9rem;padding:4px 6px;border-radius:6px;transition:color .15s">✏️</button>
                     <button type="button" id="profileMusicRemove" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:1.1rem;padding:4px;border-radius:50%">✕</button>
                 </div>
-                <div style="display:flex;gap:8px">
+                <div class="modal-field" id="musicCustomTitleField" style="display:none;margin-bottom:0">
+                    <label for="profileMusicCustomTitle" style="font-size:.68rem">Отображаемое название трека</label>
+                    <input type="text" id="profileMusicCustomTitle" maxlength="60" placeholder="Например: Gazan – 67 (Six Seven)" autocomplete="off">
+                </div>
+                <div style="display:flex;gap:8px;margin-top:8px">
                     <button type="button" class="btn btn-ghost" id="profileMusicBtn" style="flex:1;font-size:.82rem;padding:8px 12px">📁 Выбрать музыку</button>
                     <button type="button" class="btn btn-ghost" id="profileMusicClearBtn" style="font-size:.82rem;padding:8px 12px;color:var(--danger);display:none">🗑 Удалить</button>
                 </div>
@@ -1425,12 +1793,38 @@
     <!-- User profile view modal -->
     <div class="modal-overlay" id="userProfileModal">
         <div class="modal-box user-profile-modal">
-            <div class="user-profile-av" id="userProfileAv"></div>
-            <div class="user-profile-name" id="userProfileName"></div>
-            <div class="user-profile-status" id="userProfileStatus"></div>
-            <div class="user-profile-bio" id="userProfileBio"></div>
+            <!-- Hero header -->
+            <div class="upm-hero">
+                <div class="upm-banner-gradient" id="upmBannerGrad"></div>
+                <div class="user-profile-av" id="userProfileAv"></div>
+                <div class="upm-badges" id="upmBadges"></div>
+            </div>
+            <!-- Info block -->
+            <div class="upm-info">
+                <div class="user-profile-name" id="userProfileName"></div>
+                <div class="user-profile-status" id="userProfileStatus"></div>
+                <div class="user-profile-bio" id="userProfileBio"></div>
+            </div>
+            <!-- Stats row -->
+            <div class="upm-stats" id="upmStats" style="display:none">
+                <div class="upm-stat" id="upmStatJoined">
+                    <span class="upm-stat-icon">📅</span>
+                    <div>
+                        <div class="upm-stat-label">В чате</div>
+                        <div class="upm-stat-val" id="upmJoinedVal">—</div>
+                    </div>
+                </div>
+                <div class="upm-stat-divider"></div>
+                <div class="upm-stat" id="upmStatStatus2">
+                    <span class="upm-stat-icon">💬</span>
+                    <div>
+                        <div class="upm-stat-label">Статус</div>
+                        <div class="upm-stat-val" id="upmStatusVal">—</div>
+                    </div>
+                </div>
+            </div>
             <!-- Music player injected here by openUserProfile() -->
-            <div id="musicBox" style="margin:12px 0 4px"></div>
+            <div id="musicBox" style="margin:14px 0 4px"></div>
             <div class="user-profile-divider"></div>
             <div class="modal-actions" style="flex-direction:column;gap:8px">
                 <button type="button" class="btn btn-primary" id="userProfileDMBtn">💬 Написать</button>
@@ -2433,6 +2827,10 @@ async function uploadToCloudinary(file) {
             c.classList.add('is-active');
         }));
         document.getElementById('profileCancel').addEventListener('click',()=>document.getElementById('profileModal').classList.remove('is-open'));
+        document.getElementById('userProfileClose').addEventListener('click',()=>{
+            document.getElementById('userProfileModal').classList.remove('is-open');
+            if (_userProfileUnsub) { _userProfileUnsub(); _userProfileUnsub = null; }
+        });
 
         /* ── Профиль: музыка ── */
         let _profileMusicB64      = null;
@@ -2459,6 +2857,12 @@ async function uploadToCloudinary(file) {
                     return;
                 }
 
+                // Показываем поле для кастомного названия
+                const customTitleField = document.getElementById('musicCustomTitleField');
+                const customTitleInp = document.getElementById('profileMusicCustomTitle');
+                if (customTitleField) customTitleField.style.display = 'block';
+                if (customTitleInp) customTitleInp.value = file.name.replace(/\.[^.]+$/, '');
+
                 // Показываем, что начали загрузку
                 _showProfileMusicCard(file.name, 'Загрузка в облако...');
 
@@ -2467,13 +2871,14 @@ async function uploadToCloudinary(file) {
                 if (url) {
                     const u = auth.currentUser;
                     try {
+                        const displayTitle = (customTitleInp && customTitleInp.value.trim()) || file.name;
                         await updateDoc(doc(db, 'users', u.uid), {
                             musicUrl: url,
-                            musicTitle: file.name,
-                            musicBase64: deleteField() // Чистим старый мусор
+                            musicTitle: displayTitle,
+                            musicBase64: deleteField()
                         });
                         
-                        _showProfileMusicCard(file.name, 'Сохранено ✓');
+                        _showProfileMusicCard(displayTitle, 'Сохранено ✓');
                         
                         _pmCard.onclick = () => {
                             const audio = new Audio(url);
@@ -2525,7 +2930,13 @@ async function uploadToCloudinary(file) {
                 if (snap.exists()) {
                     const d = snap.data();
                     if (d.musicUrl) {
-                        _showProfileMusicCard(d.musicTitle || 'Мой трек', 'Сохранено ✓');
+                        const displayTitle = d.musicTitle || 'Мой трек';
+                        _showProfileMusicCard(displayTitle, 'Сохранено ✓');
+                        // Show custom title field pre-filled
+                        const customTitleField = document.getElementById('musicCustomTitleField');
+                        const customTitleInp = document.getElementById('profileMusicCustomTitle');
+                        if (customTitleField) customTitleField.style.display = 'block';
+                        if (customTitleInp) customTitleInp.value = displayTitle;
                         // Preview click uses ChatPlayer — shares state with chat bubbles
                         _pmCard.onclick = () => {
                             const btn = _pmCard.querySelector('.pm-play-ico') || (() => {
@@ -2540,6 +2951,8 @@ async function uploadToCloudinary(file) {
                         };
                     } else {
                         if (typeof _hideProfileMusicCard === 'function') _hideProfileMusicCard();
+                        const customTitleField = document.getElementById('musicCustomTitleField');
+                        if (customTitleField) customTitleField.style.display = 'none';
                     }
                 }
             } catch(e) {
@@ -2573,6 +2986,9 @@ async function uploadToCloudinary(file) {
                 if (!trimmed) return showToast('Название не может быть пустым');
                 _pmTitle.textContent = trimmed;
                 _profileMusicTitleVal = trimmed;
+                // Also update custom title input
+                const customTitleInp = document.getElementById('profileMusicCustomTitle');
+                if (customTitleInp) customTitleInp.value = trimmed;
                 const u = auth.currentUser; if (!u) return;
                 try {
                     const snap = await getDoc(doc(db, 'users', u.uid));
@@ -2581,6 +2997,15 @@ async function uploadToCloudinary(file) {
                         showToast('✅ Название обновлено');
                     }
                 } catch(e) { showToast('Ошибка сохранения названия'); }
+            });
+        }
+
+        // Listen for changes in custom title input to update display title
+        const _pmCustomTitle = document.getElementById('profileMusicCustomTitle');
+        if (_pmCustomTitle) {
+            _pmCustomTitle.addEventListener('input', () => {
+                const val = _pmCustomTitle.value.trim();
+                if (val && _pmTitle) _pmTitle.textContent = val;
             });
         }
         /* ── Ник: валидация ── */
@@ -2657,6 +3082,15 @@ async function uploadToCloudinary(file) {
                     firestoreUpdate.musicBase64  = deleteField();
                     firestoreUpdate.musicTitle   = deleteField();
                     firestoreUpdate.musicDuration= deleteField();
+                } else {
+                    // Save custom title if changed via the input field
+                    const customTitleInp = document.getElementById('profileMusicCustomTitle');
+                    if (customTitleInp && customTitleInp.value.trim()) {
+                        const snap = await getDoc(doc(db,'users',auth.currentUser.uid));
+                        if (snap.exists() && snap.data().musicUrl) {
+                            firestoreUpdate.musicTitle = customTitleInp.value.trim();
+                        }
+                    }
                 }
                 await setDoc(doc(db,'users',u.uid), firestoreUpdate, {merge:true});
                 userProfile = {bio, status}; lsSet(PROFILE_KEY, userProfile);
@@ -2983,6 +3417,8 @@ async function uploadToCloudinary(file) {
         /* ══════════════════════════════
            USER PROFILE VIEW
         ══════════════════════════════ */
+        let _userProfileUnsub = null; // cleanup listener for profile view
+
         async function openUserProfile(uid, name) {
     // 1. Сначала находим все элементы
     const modal = document.getElementById('userProfileModal');
@@ -2991,15 +3427,31 @@ async function uploadToCloudinary(file) {
     const statEl= document.getElementById('userProfileStatus');
     const bioEl = document.getElementById('userProfileBio');
     const dmBtn = document.getElementById('userProfileDMBtn');
-    const musicBox = document.getElementById('musicBox'); // ТЕПЕРЬ ОН ОПРЕДЕЛЕН
+    const musicBox = document.getElementById('musicBox');
+    const upmStats = document.getElementById('upmStats');
+    const upmJoinedVal = document.getElementById('upmJoinedVal');
+    const upmStatusVal = document.getElementById('upmStatusVal');
+    const upmBadges = document.getElementById('upmBadges');
+    const upmBannerGrad = document.getElementById('upmBannerGrad');
+
+    // Cleanup previous listener
+    if (_userProfileUnsub) { _userProfileUnsub(); _userProfileUnsub = null; }
 
     _userProfileUid = uid;
 
     // 2. Очищаем старые данные
     if (musicBox) musicBox.innerHTML = '';
+    if (upmBadges) upmBadges.innerHTML = '';
     nameEl.textContent = name;
     bioEl.textContent  = '';
     statEl.textContent = 'Загрузка...';
+    if (upmStats) upmStats.style.display = 'none';
+
+    // Banner gradient based on uid
+    if (upmBannerGrad) {
+        const colors = avatarGradient(uid).replace('linear-gradient(135deg,','').replace(')','').split(',');
+        upmBannerGrad.style.background = `linear-gradient(135deg, ${colors.join(',')})`;
+    }
 
     // Аватарка из кэша
     applyAvatarToEl(avEl, uid, name, name, avatarCache[uid]||null);
@@ -3021,56 +3473,109 @@ async function uploadToCloudinary(file) {
     // Показываем модалку сразу
     modal.classList.add('is-open');
 
-    // 3. Загружаем данные профиля
-    try {
-        const snap = await getDoc(doc(db,'users',uid));
-        if (snap.exists()) {
-            const d = snap.data(); // ВОТ ТЕПЕРЬ 'd' СУЩЕСТВУЕТ
-            
-            if (d.avatar && !avatarCache[uid]) { 
-                avatarCache[uid]=d.avatar; 
-                applyAvatarToEl(avEl,uid,name,name,d.avatar); 
-            }
-            if (d.bio) bioEl.textContent = d.bio;
-            
-            const statusMap = {online:'🟢 В сети', away:'🟡 Отошёл', dnd:'🔴 Не беспокоить', invisible:'⚫ Невидимка'};
-            statEl.textContent = onlineUsers[uid] ? (statusMap[d.status||'online'] || '🟢 В сети') : '⚫ Не в сети';
+    // Admin badge
+    if (ADMIN_UIDS.has(uid) && upmBadges) {
+        const b = document.createElement('div');
+        b.className = 'upm-badge upm-badge-admin';
+        b.innerHTML = '⭐ ADMIN';
+        upmBadges.appendChild(b);
+    }
 
-            // 4. Отрисовываем музыку через ChatPlayer если есть
-            if (d.musicUrl && musicBox) {
-                musicBox.innerHTML = `
-                    <div class="modern-profile-player">
-                        <button class="music-play-btn" id="p-play" style="flex-shrink:0">
-                            <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                        </button>
-                        <div class="p-info" style="flex:1;min-width:0;overflow:hidden">
-                            <div class="music-title" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(d.musicTitle || 'Без названия')}</div>
-                            <div class="music-progress" style="margin-top:6px;cursor:pointer"><div class="music-progress-bar" id="p-bar"></div></div>
-                        </div>
-                        <input type="range" class="p-volume" min="0" max="1" step="0.05" value="0.8"
-                               style="width:52px;accent-color:var(--accent)" title="Громкость">
+    // Helper to render music player
+    function renderMusicPlayer(d) {
+        if (!musicBox) return;
+        if (d.musicUrl) {
+            const displayTitle = d.musicTitle || 'Без названия';
+            musicBox.innerHTML = `
+                <div class="modern-profile-player">
+                    <button class="music-play-btn" id="p-play" style="flex-shrink:0;width:38px;height:38px;border-radius:50%;border:none;background:var(--accent);color:var(--accent-text);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:filter .15s,transform .15s;box-shadow:0 4px 14px rgba(99,179,255,.35)">
+                        <svg viewBox="0 0 24 24" fill="currentColor" width="15" height="15"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                    </button>
+                    <div class="p-info" style="flex:1;min-width:0;overflow:hidden">
+                        <div class="music-title" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:.84rem;font-weight:700;margin-bottom:2px">${escapeHtml(displayTitle)}</div>
+                        <div class="music-progress" style="margin-top:6px;cursor:pointer;height:4px;background:rgba(255,255,255,.12);border-radius:999px;overflow:hidden"><div class="music-progress-bar" id="p-bar" style="height:100%;width:0%;background:var(--accent);border-radius:999px;transition:width .12s linear"></div></div>
                     </div>
-                `;
-                const pBtn    = musicBox.querySelector('#p-play');
-                const pBar    = musicBox.querySelector('#p-bar');
-                const pTrack  = musicBox.querySelector('.music-progress');
-                const pVolume = musicBox.querySelector('.p-volume');
+                    <input type="range" class="p-volume" min="0" max="1" step="0.05" value="0.8"
+                           style="width:52px;accent-color:var(--accent)" title="Громкость">
+                </div>
+            `;
+            const pBtn    = musicBox.querySelector('#p-play');
+            const pBar    = musicBox.querySelector('#p-bar');
+            const pTrack  = musicBox.querySelector('.music-progress');
+            const pVolume = musicBox.querySelector('.p-volume');
 
-                pBtn.onclick = () => {
-                    if (ChatPlayer._audio) ChatPlayer._audio.volume = parseFloat(pVolume.value);
-                    ChatPlayer.play(d.musicUrl, pBtn, pBar, null, 0);
-                };
-                pTrack.addEventListener('click', e => {
-                    if (ChatPlayer._url !== d.musicUrl) return;
-                    ChatPlayer.seek((e.clientX - pTrack.getBoundingClientRect().left) / pTrack.offsetWidth);
-                });
-                pVolume.oninput = () => {
-                    if (ChatPlayer._audio) ChatPlayer._audio.volume = parseFloat(pVolume.value);
-                };
-            } else if (musicBox) {
-                musicBox.innerHTML = '';
-            }
+            pBtn.onclick = () => {
+                if (ChatPlayer._audio) ChatPlayer._audio.volume = parseFloat(pVolume.value);
+                ChatPlayer.play(d.musicUrl, pBtn, pBar, null, 0);
+            };
+            pTrack.addEventListener('click', e => {
+                if (ChatPlayer._url !== d.musicUrl) return;
+                ChatPlayer.seek((e.clientX - pTrack.getBoundingClientRect().left) / pTrack.offsetWidth);
+            });
+            pVolume.oninput = () => {
+                if (ChatPlayer._audio) ChatPlayer._audio.volume = parseFloat(pVolume.value);
+            };
+        } else {
+            musicBox.innerHTML = '';
         }
+    }
+
+    // Helper to format join date
+    function formatJoinDate(ts) {
+        if (!ts || typeof ts.toDate !== 'function') return null;
+        const d = ts.toDate();
+        const now = new Date();
+        const diff = now - d;
+        const days = Math.floor(diff / 86400000);
+        if (days < 1) return 'Сегодня';
+        if (days < 7) return `${days} дн. назад`;
+        if (days < 30) return `${Math.floor(days/7)} нед. назад`;
+        if (days < 365) return `${Math.floor(days/30)} мес. назад`;
+        return `${Math.floor(days/365)} г. назад`;
+    }
+
+    // 3. Реактивный слушатель — onSnapshot вместо getDoc
+    try {
+        _userProfileUnsub = onSnapshot(doc(db,'users',uid), snap => {
+            if (!snap.exists()) return;
+            const d = snap.data();
+
+            if (d.avatar && !avatarCache[uid]) {
+                avatarCache[uid]=d.avatar;
+                applyAvatarToEl(avEl,uid,name,name,d.avatar);
+            }
+
+            if (d.bio && d.bio.trim()) {
+                bioEl.textContent = d.bio;
+            } else {
+                bioEl.textContent = '';
+            }
+
+            const statusMap = {online:'🟢 В сети', away:'🟡 Отошёл', dnd:'🔴 Не беспокоить', invisible:'⚫ Невидимка'};
+            const isOnline = !!onlineUsers[uid];
+            statEl.textContent = isOnline ? (statusMap[d.status||'online'] || '🟢 В сети') : '⚫ Не в сети';
+
+            // Online badge
+            if (upmBadges && isOnline && !upmBadges.querySelector('.upm-badge-online')) {
+                const ob = document.createElement('div');
+                ob.className = 'upm-badge upm-badge-online';
+                ob.innerHTML = '● Онлайн';
+                upmBadges.appendChild(ob);
+            }
+
+            // Stats
+            if (upmStats) {
+                const joined = formatJoinDate(d.createdAt);
+                if (joined) {
+                    if (upmJoinedVal) upmJoinedVal.textContent = joined;
+                    if (upmStatusVal) upmStatusVal.textContent = statusMap[d.status||'online'] || '🟢 В сети';
+                    upmStats.style.display = 'flex';
+                }
+            }
+
+            // Music — reactive
+            renderMusicPlayer(d);
+        });
     } catch(err) {
         console.error("Ошибка профиля:", err);
     }
