@@ -1487,10 +1487,7 @@
                     <input type="file" id="imgFileInput" accept="image/*" style="display:none">
                     <input type="file" id="musicFileInput" accept="audio/*" style="display:none">
                     <input type="file" id="galleryMultiInput" accept="image/*" multiple style="display:none">
-                    <!-- Voice button (always visible, only for recording) -->
-                    <button type="button" class="btn-voice" id="btnVoice" title="Голосовое сообщение">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
-                    </button>
+
                     <!-- Send / Mic swap button -->
                     <div class="btn-send-wrap" id="btnSendWrap">
                         <button type="button" class="btn-send" id="chatSend" disabled>
@@ -3639,7 +3636,7 @@ async function uploadToCloudinary(file) {
             if (!isRecording) return;
             isRecording = false;
             clearInterval(voiceTimerInt);
-            btnVoice.classList.remove('is-recording');
+            if (btnVoice) btnVoice.classList.remove('is-recording');
             voiceRecBar.classList.remove('is-visible');
             if (mediaRecorder && mediaRecorder.state !== 'inactive') {
                 mediaRecorder._sendOnStop = send;
@@ -3647,7 +3644,7 @@ async function uploadToCloudinary(file) {
             }
         }
 
-        btnVoice.addEventListener('click', async () => {
+        if (btnVoice) btnVoice.addEventListener('click', async () => {
             if (isRecording) { stopVoiceRecording(true); return; }
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({audio:true});
@@ -3687,7 +3684,7 @@ async function uploadToCloudinary(file) {
                 };
                 mediaRecorder.start(200);
                 isRecording = true;
-                btnVoice.classList.add('is-recording');
+                if (btnVoice) btnVoice.classList.add('is-recording');
                 voiceRecBar.classList.add('is-visible');
                 voiceRecTime.textContent = '0:00';
                 voiceTimerInt = setInterval(()=>{
@@ -5204,9 +5201,54 @@ async function uploadToCloudinary(file) {
         // ─── Mic/Send swap ───
         // (updateSendMicState defined earlier as stub, already wired)
 
-        // btnMicMain mirrors btnVoice behaviour
-        btnMicMain.addEventListener('click', () => {
-            document.getElementById('btnVoice').click();
+
+        // btnMicMain (синяя кнопка в idle) запускает запись напрямую
+        btnMicMain.addEventListener('click', async () => {
+            if (isRecording) { stopVoiceRecording(true); return; }
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({audio: true});
+                const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+                    ? 'audio/webm;codecs=opus' : 'audio/webm';
+                mediaRecorder = new MediaRecorder(stream, {mimeType});
+                voiceChunks = []; voiceSeconds = 0;
+                mediaRecorder.ondataavailable = e => { if (e.data.size > 0) voiceChunks.push(e.data); };
+                mediaRecorder.onstop = async () => {
+                    stream.getTracks().forEach(t => t.stop());
+                    if (!mediaRecorder._sendOnStop) return;
+                    const blob = new Blob(voiceChunks, {type: mimeType});
+                    if (blob.size > 900_000) { showToast('❌ Голосовое слишком длинное (макс ~1 мин)'); return; }
+                    const reader = new FileReader();
+                    reader.onload = async () => {
+                        const b64 = reader.result;
+                        const u = auth.currentUser; if (!u) return;
+                        const dur = voiceSeconds;
+                        const msgData = { uid: u.uid, author: displayNick(u), text: '',
+                            createdAt: serverTimestamp(), edited: false,
+                            voiceBase64: b64, voiceDuration: dur, voiceMime: mimeType };
+                        try {
+                            stickToBottom = true;
+                            if (currentChatMode === 'group') {
+                                await addDoc(messagesCol, msgData);
+                            } else {
+                                await addDoc(collection(db, 'dmConvs', currentDMConvId, 'messages'), msgData);
+                                await setDoc(doc(db, 'dmConvs', currentDMConvId), {lastText: '🎤 Голосовое', lastAt: serverTimestamp(), [`unread.${currentDMPeerUid}`]: increment(1)}, {merge: true});
+                            }
+                        } catch(e) { showToast('Ошибка: ' + e.message); }
+                    };
+                    reader.readAsDataURL(blob);
+                };
+                mediaRecorder.start(200);
+                isRecording = true;
+                voiceRecBar.classList.add('is-visible');
+                voiceRecTime.textContent = '0:00';
+                voiceTimerInt = setInterval(() => {
+                    voiceSeconds++;
+                    voiceRecTime.textContent = fmtVoiceTime(voiceSeconds);
+                    if (voiceSeconds >= 90) stopVoiceRecording(true);
+                }, 1000);
+            } catch(e) {
+                showToast('❌ Нет доступа к микрофону');
+            }
         });
 
         // ─── Utility: compress image to base64 ───
