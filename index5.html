@@ -1473,10 +1473,6 @@
                     <input type="file" id="imgFileInput" accept="image/*" style="display:none">
                     <input type="file" id="musicFileInput" accept="audio/*" style="display:none">
                     <input type="file" id="galleryMultiInput" accept="image/*" multiple style="display:none">
-                    <!-- Voice button (always visible, only for recording) -->
-                    <button type="button" class="btn-voice" id="btnVoice" title="Голосовое сообщение">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
-                    </button>
                     <!-- Send button -->
                     <div class="btn-send-wrap" id="btnSendWrap">
                         <button type="button" class="btn-send" id="chatSend" disabled>
@@ -3605,7 +3601,7 @@ async function uploadToCloudinary(file) {
         /* ══════════════════════════════
            VOICE MESSAGES
         ══════════════════════════════ */
-        const btnVoice     = document.getElementById('btnVoice');
+        const btnVoice     = document.getElementById('btnVoice'); // null — кнопка скрыта из UI
         const voiceRecBar  = document.getElementById('voiceRecBar');
         const voiceRecTime = document.getElementById('voiceRecTime');
         const voiceRecCancel=document.getElementById('voiceRecCancel');
@@ -3622,15 +3618,15 @@ async function uploadToCloudinary(file) {
             if (!isRecording) return;
             isRecording = false;
             clearInterval(voiceTimerInt);
-            btnVoice.classList.remove('is-recording');
-            voiceRecBar.classList.remove('is-visible');
+            if (btnVoice) btnVoice.classList.remove('is-recording');
+            if (voiceRecBar) voiceRecBar.classList.remove('is-visible');
             if (mediaRecorder && mediaRecorder.state !== 'inactive') {
                 mediaRecorder._sendOnStop = send;
                 mediaRecorder.stop();
             }
         }
 
-        btnVoice.addEventListener('click', async () => {
+        if (btnVoice) btnVoice.addEventListener('click', async () => {
             if (isRecording) { stopVoiceRecording(true); return; }
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({audio:true});
@@ -3670,19 +3666,19 @@ async function uploadToCloudinary(file) {
                 };
                 mediaRecorder.start(200);
                 isRecording = true;
-                btnVoice.classList.add('is-recording');
-                voiceRecBar.classList.add('is-visible');
-                voiceRecTime.textContent = '0:00';
+                if (btnVoice) btnVoice.classList.add('is-recording');
+                if (voiceRecBar) voiceRecBar.classList.add('is-visible');
+                if (voiceRecTime) voiceRecTime.textContent = '0:00';
                 voiceTimerInt = setInterval(()=>{
                     voiceSeconds++;
-                    voiceRecTime.textContent = fmtVoiceTime(voiceSeconds);
-                    if (voiceSeconds >= 90) stopVoiceRecording(true); // auto-stop at 90s
+                    if (voiceRecTime) voiceRecTime.textContent = fmtVoiceTime(voiceSeconds);
+                    if (voiceSeconds >= 90) stopVoiceRecording(true);
                 }, 1000);
             } catch(e) {
                 showToast('❌ Нет доступа к микрофону');
             }
-        });
-        voiceRecCancel.addEventListener('click', ()=>stopVoiceRecording(false));
+        }); // end if (btnVoice)
+        if (voiceRecCancel) voiceRecCancel.addEventListener('click', ()=>stopVoiceRecording(false));
 
         /* ══════════════════════════════
            REACTIONS — FIX: works in both group & DM
