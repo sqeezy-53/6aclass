@@ -262,21 +262,6 @@
         #homeLink { display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;color:var(--muted);text-decoration:none;transition:background var(--transition),color var(--transition); }
         #homeLink:hover { background:var(--surface-2);color:var(--accent); }
 
-.modern-profile-player {
-    display: flex;
-    align-items: center;
-    background: rgba(255,255,255,0.05);
-    padding: 10px;
-    border-radius: 14px;
-    gap: 10px;
-    border: 1px solid var(--border);
-}
-.p-volume {
-    width: 60px;
-    height: 4px;
-    accent-color: var(--accent);
-}
-
 
 
         /* ═══════════════════════════════════════
@@ -1026,17 +1011,20 @@
 
         /* User profile view modal - PREMIUM */
         .user-profile-modal { max-width:380px; padding:0 !important; overflow:visible !important; }
-        .user-profile-modal .upm-hero { border-radius:var(--radius-lg) var(--radius-lg) 0 0; overflow:hidden; }
+        .user-profile-modal .upm-hero { border-radius:var(--radius-lg) var(--radius-lg) 0 0; }
         .upm-hero {
             position:relative; height:120px;
-            overflow:hidden; flex-shrink:0;
+            flex-shrink:0;
             border-radius:var(--radius-lg) var(--radius-lg) 0 0;
             margin-bottom:50px;
+            /* overflow убран — аватарка должна вылезать вниз */
         }
         .upm-banner-gradient {
             position:absolute;inset:0;
             background:linear-gradient(135deg,var(--accent) 0%,var(--accent-2) 100%);
             opacity:0.75;
+            border-radius:var(--radius-lg) var(--radius-lg) 0 0;
+            overflow:hidden;
         }
         .user-profile-av {
             width:84px;height:84px;border-radius:50%;
@@ -1047,6 +1035,8 @@
             box-shadow:0 4px 20px rgba(0,0,0,0.4);
             position:absolute;bottom:-42px;left:24px;
             z-index:10;
+            /* Клипирование баннера не распространяется на аватарку */
+            isolation:isolate;
         }
         .user-profile-av img { width:100%;height:100%;object-fit:cover;border-radius:50%; }
         .upm-badges {
@@ -3507,40 +3497,58 @@ async function uploadToCloudinary(file) {
     function renderMusicPlayer(d) {
         if (!musicBox) return;
         if (d.musicUrl) {
-            const displayTitle = d.musicTitle || 'Без названия';
+            const displayTitle = escapeHtml(d.musicTitle || 'Без названия');
             musicBox.innerHTML = `
-                <div class="modern-profile-player" style="display:flex;align-items:center;background:rgba(255,255,255,0.05);padding:10px 14px;border-radius:14px;gap:10px;border:1px solid var(--border);overflow:hidden;box-sizing:border-box;width:100%">
-                    <button id="p-play" style="flex-shrink:0;width:36px;height:36px;border-radius:50%;border:none;background:var(--accent);color:var(--accent-text);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:filter .15s,transform .15s;box-shadow:0 4px 14px rgba(99,179,255,.35)">
-                        <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                <div style="
+                    display:flex;align-items:center;gap:12px;
+                    background:var(--surface-2);
+                    border:1px solid var(--border);
+                    border-radius:16px;padding:12px 14px;
+                    box-sizing:border-box;width:100%;overflow:hidden;">
+                    <button id="p-play" style="
+                        flex-shrink:0;width:40px;height:40px;border-radius:50%;
+                        border:none;background:var(--accent);color:var(--accent-text);
+                        display:flex;align-items:center;justify-content:center;
+                        cursor:pointer;transition:transform .15s,filter .15s;
+                        box-shadow:0 4px 16px rgba(99,179,255,.35)">
+                        <svg viewBox="0 0 24 24" fill="currentColor" width="15" height="15"><polygon points="5 3 19 12 5 21 5 3"/></svg>
                     </button>
-                    <div style="flex:1;min-width:0;overflow:hidden">
-                        <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:.82rem;font-weight:700;margin-bottom:5px;color:var(--text)">${escapeHtml(displayTitle)}</div>
-                        <div class="music-progress" style="cursor:pointer;height:4px;background:rgba(255,255,255,.15);border-radius:999px;overflow:hidden"><div id="p-bar" style="height:100%;width:0%;background:var(--accent);border-radius:999px;transition:width .12s linear"></div></div>
+                    <div style="flex:1;min-width:0;">
+                        <div style="
+                            white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+                            font-size:.82rem;font-weight:700;color:var(--text);
+                            margin-bottom:8px;line-height:1;">
+                            🎵 ${displayTitle}
+                        </div>
+                        <div id="p-track" style="
+                            cursor:pointer;height:4px;
+                            background:var(--border-strong);
+                            border-radius:999px;overflow:hidden;
+                            position:relative;">
+                            <div id="p-bar" style="
+                                height:100%;width:0%;
+                                background:linear-gradient(90deg,var(--accent),var(--accent-2));
+                                border-radius:999px;
+                                transition:width .12s linear;">
+                            </div>
+                        </div>
                     </div>
-                    <div style="display:flex;flex-direction:column;align-items:center;gap:3px;flex-shrink:0">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" style="color:var(--muted)"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
-                        <input type="range" id="p-volume" min="0" max="1" step="0.05" value="0.8"
-                               style="width:44px;height:3px;accent-color:var(--accent);cursor:pointer" title="Громкость">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" style="color:var(--muted);opacity:.4"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/></svg>
-                    </div>
-                </div>
-            `;
-            const pBtn    = musicBox.querySelector('#p-play');
-            const pBar    = musicBox.querySelector('#p-bar');
-            const pTrack  = musicBox.querySelector('.music-progress');
-            const pVolume = musicBox.querySelector('#p-volume');
+                </div>`;
 
-            pBtn.onclick = () => {
-                ChatPlayer.play(d.musicUrl, pBtn, pBar, null, 0);
-                if (ChatPlayer._audio) ChatPlayer._audio.volume = parseFloat(pVolume.value);
-            };
+            const pBtn   = musicBox.querySelector('#p-play');
+            const pBar   = musicBox.querySelector('#p-bar');
+            const pTrack = musicBox.querySelector('#p-track');
+
+            pBtn.onclick = () => ChatPlayer.play(d.musicUrl, pBtn, pBar, null, 0);
+
+            pBtn.addEventListener('mouseenter', () => { pBtn.style.transform='scale(1.08)'; pBtn.style.filter='brightness(1.12)'; });
+            pBtn.addEventListener('mouseleave', () => { pBtn.style.transform=''; pBtn.style.filter=''; });
+
             pTrack.addEventListener('click', e => {
                 if (ChatPlayer._url !== d.musicUrl) return;
-                ChatPlayer.seek((e.clientX - pTrack.getBoundingClientRect().left) / pTrack.offsetWidth);
+                const rect = pTrack.getBoundingClientRect();
+                ChatPlayer.seek((e.clientX - rect.left) / rect.width);
             });
-            pVolume.oninput = () => {
-                if (ChatPlayer._audio) ChatPlayer._audio.volume = parseFloat(pVolume.value);
-            };
         } else {
             musicBox.innerHTML = '';
         }
