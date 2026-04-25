@@ -518,27 +518,13 @@
 
         /* Send/Mic button swap animation */
         .btn-send-wrap { position: relative; width: 40px; height: 40px; flex-shrink: 0; }
-        .btn-send-wrap .btn-send,
-        .btn-send-wrap .btn-mic-main {
+        .btn-send-wrap .btn-send {
             position: absolute; inset: 0;
             transition: opacity .18s ease, transform .18s ease;
         }
-        .btn-mic-main {
-            width: 40px; height: 40px; border-radius: 50%; border: none;
-            background: linear-gradient(135deg, var(--accent-strong), var(--accent));
-            color: var(--accent-text);
-            display: flex; align-items: center; justify-content: center;
-            cursor: pointer; box-shadow: 0 4px 16px var(--bubble-me-glow);
-            transition: filter .15s, transform .18s ease, opacity .18s ease;
-        }
-        .btn-mic-main:hover { filter: brightness(1.1); transform: scale(1.06); }
-        .btn-mic-main svg { width: 17px; height: 17px; }
-        /* State: typing → show send, hide mic */
+        /* Кнопка отправки: скрыта пока нет контента */
         .btn-send-wrap.is-typing .btn-send { opacity: 1; transform: scale(1); pointer-events: auto; }
-        .btn-send-wrap.is-typing .btn-mic-main { opacity: 0; transform: scale(.7); pointer-events: none; }
-        /* State: idle → hide send, show mic */
         .btn-send-wrap:not(.is-typing) .btn-send { opacity: 0; transform: scale(.7); pointer-events: none; }
-        .btn-send-wrap:not(.is-typing) .btn-mic-main { opacity: 1; transform: scale(1); pointer-events: auto; }
 
 
         /* ═══════════════════════════════════════
@@ -1491,13 +1477,10 @@
                     <button type="button" class="btn-voice" id="btnVoice" title="Голосовое сообщение">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
                     </button>
-                    <!-- Send / Mic swap button -->
+                    <!-- Send button -->
                     <div class="btn-send-wrap" id="btnSendWrap">
                         <button type="button" class="btn-send" id="chatSend" disabled>
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z"/></svg>
-                        </button>
-                        <button type="button" class="btn-mic-main" id="btnMicMain" title="Голосовое сообщение">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
                         </button>
                     </div>
                 </div>
@@ -1574,7 +1557,7 @@
                 </div>
                 <div class="modal-field" id="musicCustomTitleField" style="display:none;margin-bottom:0">
                     <label for="profileMusicCustomTitle" style="font-size:.68rem">Отображаемое название трека</label>
-                    <input type="text" id="profileMusicCustomTitle" maxlength="60" placeholder="Например: Матвей-Гимн о матвее" autocomplete="off">
+                    <input type="text" id="profileMusicCustomTitle" maxlength="60" placeholder="Например: Gazan – 67 (Six Seven)" autocomplete="off">
                 </div>
                 <div style="display:flex;gap:8px;margin-top:8px">
                     <button type="button" class="btn btn-ghost" id="profileMusicBtn" style="flex:1;font-size:.82rem;padding:8px 12px">📁 Выбрать музыку</button>
@@ -4947,7 +4930,7 @@ async function uploadToCloudinary(file) {
         const attachSheetBackdrop = document.getElementById('attachSheetBackdrop');
         const btnAttach           = document.getElementById('btnAttach');
         const btnSendWrap         = document.getElementById('btnSendWrap');
-        const btnMicMain          = document.getElementById('btnMicMain');
+        // btnMicMain удалён из DOM — голосовые через btnVoice слева от поля ввода
 
         // ─── Sheet open/close ───
         function openAttachSheet() {
@@ -5204,10 +5187,6 @@ async function uploadToCloudinary(file) {
         // ─── Mic/Send swap ───
         // (updateSendMicState defined earlier as stub, already wired)
 
-        // btnMicMain mirrors btnVoice behaviour
-        btnMicMain.addEventListener('click', () => {
-            document.getElementById('btnVoice').click();
-        });
 
         // ─── Utility: compress image to base64 ───
         async function compressImageFile(file, maxKB) {
