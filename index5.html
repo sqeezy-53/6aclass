@@ -1826,6 +1826,11 @@
     </div>
 
     <!-- ══════════════════════════════════════════
+         CRYPTOJS — шифрование сообщений
+    ══════════════════════════════════════════ -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+
+    <!-- ══════════════════════════════════════════
          FIREBASE + LOGIC
     ══════════════════════════════════════════ -->
     <script type="module">
@@ -1853,6 +1858,34 @@
         const app  = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db   = getFirestore(app);
+
+        /* ══════════════════════════════
+           AES ШИФРОВАНИЕ ЧАТА
+        ══════════════════════════════ */
+        const CHAT_SECRET_KEY = "SuperSecret6A_2026";
+
+        function encryptMessage(text) {
+            if (!text) return "";
+            return CryptoJS.AES.encrypt(text, CHAT_SECRET_KEY).toString();
+        }
+
+        function decryptMessage(cipherText) {
+            if (!cipherText) return "";
+            try {
+                const bytes = CryptoJS.AES.decrypt(cipherText, CHAT_SECRET_KEY);
+                const original = bytes.toString(CryptoJS.enc.Utf8);
+                return original || "[Ошибка расшифровки]";
+            } catch(e) {
+                return "[Зашифрованное сообщение]";
+            }
+        }
+
+        // Расшифровывает текст если он зашифрован (начинается с "U2FsdGVkX1")
+        function safeDecrypt(text) {
+            if (!text) return text;
+            if (text.startsWith("U2FsdGVkX1")) return decryptMessage(text);
+            return text; // старые незашифрованные сообщения — возвращаем как есть
+        }
 
 
         // Настройки облака
@@ -3187,7 +3220,7 @@ async function uploadToCloudinary(file) {
                     ...(srcData && srcData.imageBase64 ? {imageBase64: srcData.imageBase64} : {}),
                     ...(srcData && srcData.voiceBase64 ? {voiceBase64: srcData.voiceBase64, voiceDuration: srcData.voiceDuration||0, voiceMime: srcData.voiceMime||'audio/webm'} : {}),
                 };
-                const previewText = srcData && srcData.imageBase64 ? '🖼 Картинка' : (srcData && srcData.voiceBase64 ? '🎤 Голосовое' : (msg.text || '↗️ Переслано'));
+                const previewText = srcData && srcData.imageBase64 ? '🖼 Картинка' : (srcData && srcData.voiceBase64 ? '🎤 Голосовое' : (safeDecrypt(msg.text) || '↗️ Переслано'));
                 try {
                     if (target.type==='group') await addDoc(messagesCol,msg);
                     else {
@@ -4042,7 +4075,9 @@ async function uploadToCloudinary(file) {
             const row=document.createElement('div');
             row.className='msg-row '+(isMe?'msg-row--me':'msg-row--other');
             if (!sameAuthor&&prevDocSnap) row.classList.add('msg-row--gap');
-            row.dataset.msgId=id; row.dataset.id=id; row.dataset.plain=d.text||'';
+            // Расшифровываем для хранения в dataset.plain (чтобы редактирование тоже работало)
+            const decryptedText = safeDecrypt(d.text||'');
+            row.dataset.msgId=id; row.dataset.id=id; row.dataset.plain=decryptedText;
 
             const av=document.createElement('div');
             av.className='msg-avatar'+(sameAuthor?' msg-avatar--hidden':'');
@@ -4067,7 +4102,7 @@ async function uploadToCloudinary(file) {
             // Reply quote
             if (d.replyTo){
                 const quote=document.createElement('div'); quote.className='msg-reply-quote';
-                quote.innerHTML=`<span class="msg-reply-quote-nick">${escapeHtml(d.replyTo.author||'')}</span><span class="msg-reply-quote-text">${escapeHtml(d.replyTo.text||'')}</span>`;
+                quote.innerHTML=`<span class="msg-reply-quote-nick">${escapeHtml(d.replyTo.author||'')}</span><span class="msg-reply-quote-text">${escapeHtml(safeDecrypt(d.replyTo.text||''))}</span>`;
                 quote.addEventListener('click',()=>{
                     const t=chatMessages.querySelector(`[data-msg-id="${d.replyTo.id}"]`);
                     if(t){t.scrollIntoView({behavior:'smooth',block:'center'});t.style.outline='2px solid var(--accent)';setTimeout(()=>t.style.outline='',1200);}
@@ -4175,10 +4210,10 @@ async function uploadToCloudinary(file) {
             }
 
             // Text body (skip if empty / poll / music / checklist)
-            if (d.text && !d.pollId && !d.musicBase64 && !d.musicUrl && !d.checklist) bubble.appendChild(renderMessageBody(d.text));
+            if (d.text && !d.pollId && !d.musicBase64 && !d.musicUrl && !d.checklist) bubble.appendChild(renderMessageBody(decryptedText));
 
             // URL preview
-            if (d.text&&!d.pollId&&!d.musicBase64&&!d.musicUrl&&!d.checklist&&!d.text.match(GIF_URL)) buildUrlPreview(d.text, bubble);
+            if (d.text&&!d.pollId&&!d.musicBase64&&!d.musicUrl&&!d.checklist&&!decryptedText.match(GIF_URL)) buildUrlPreview(decryptedText, bubble);
 
             // Footer
             const foot=document.createElement('div'); foot.className='msg-footer';
@@ -4205,8 +4240,8 @@ async function uploadToCloudinary(file) {
             /* Context menu — right-click or long-press */
             const showCtx=(x,y)=>{
                 const items=[
-                    {label:'Ответить', icon:'↩️', onClick:()=>startReply(id,d.author||'?',d.text||'')},
-                    {label:'Копировать', icon:'📋', onClick:()=>copyText(d.text||'')},
+                    {label:'Ответить', icon:'↩️', onClick:()=>startReply(id,d.author||'?',decryptedText||'')},
+                    {label:'Копировать', icon:'📋', onClick:()=>copyText(decryptedText||'')},
                     {label:'Переслать', icon:'↗️', onClick:()=>openForwardModal([d])},
                 ];
                 // Pin/unpin (group chat — any user can pin)
@@ -4217,7 +4252,7 @@ async function uploadToCloudinary(file) {
                 // Edit/delete own
                 if (isMe){
                     items.push({label:'---'});
-                    items.push({label:'Изменить', icon:'✏️', onClick:()=>startEditMessage(id,d.text||'')});
+                    items.push({label:'Изменить', icon:'✏️', onClick:()=>startEditMessage(id,decryptedText||'')});
                     items.push({label:'Удалить', icon:'🗑', danger:true, onClick:()=>deleteMessage(id)});
                 }
                 // Admin can delete anyone's messages in group
@@ -4254,7 +4289,7 @@ async function uploadToCloudinary(file) {
                     showToast('📌 Сообщение откреплено');
                 } else {
                     // Pin: write to chatMeta only — no permission issues
-                    const text = data.imageBase64 ? '🖼 Картинка' : (data.voiceBase64 ? '🎤 Голосовое' : (data.text||''));
+                    const text = data.imageBase64 ? '🖼 Картинка' : (data.voiceBase64 ? '🎤 Голосовое' : safeDecrypt(data.text||''));
                     await setDoc(pRef, {msgId, text, author: data.author||'', pinnedBy: auth.currentUser?.uid||''});
                     // Banner will show via onSnapshot
                     showToast('📌 Сообщение закреплено');
@@ -5358,13 +5393,13 @@ async function uploadToCloudinary(file) {
             try {
                 if (editingMessageId){
                     // Editing — text only, no image change
-                    if (currentChatMode==='group') await updateDoc(doc(db,'messages',editingMessageId),{text,edited:true});
-                    else await updateDoc(doc(db,'dmConvs',currentDMConvId,'messages',editingMessageId),{text,edited:true});
+                    if (currentChatMode==='group') await updateDoc(doc(db,'messages',editingMessageId),{text:encryptMessage(text),edited:true});
+                    else await updateDoc(doc(db,'dmConvs',currentDMConvId,'messages',editingMessageId),{text:encryptMessage(text),edited:true});
                     cancelEditMessage();
                 } else {
                     const msgData={
                         uid:u.uid, author:displayNick(u),
-                        text: text || '',
+                        text: text ? encryptMessage(text) : '',
                         createdAt:serverTimestamp(), edited:false,
                         ...(hasImg ? {imageBase64: pendingImageBase64} : {}),
                         ...(replyingTo?{replyTo:{id:replyingTo.id,author:replyingTo.author,text:replyingTo.text.slice(0,100)}}:{})
