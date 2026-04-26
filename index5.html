@@ -1902,8 +1902,10 @@
         ══════════════════════════════════════════════════════ */
 
         const E2E_PRIVATE_KEY_PREFIX = 'e2e_privkey_';
-        let myPrivateKey  = null;   // CryptoKey — приватный ключ текущего пользователя
-        let myPublicKeyB64 = null;  // string — публичный ключ в base64 (для Firebase)
+        let myPrivateKey  = null;
+        let myPublicKeyB64 = null;
+        // Кеш расшифрованных E2E текстов: msgId → plaintext
+        const _e2eDecryptedCache = new Map();
 
         // Сохранить приватный ключ в localStorage (exportable → JWK → JSON)
         async function savePrivateKey(uid, cryptoKey) {
@@ -4623,26 +4625,32 @@ async function uploadToCloudinary(file) {
                 const e2eRows = chatMessages.querySelectorAll('.msg-row[data-has-e2e="1"]');
                 e2eRows.forEach(async (rowEl) => {
                     const msgId = rowEl.dataset.id;
-                    if (rowEl.dataset.e2eDecrypted === '1') return;
+                    const bodyEl = rowEl.querySelector('[data-e2e-text]');
+                    if (!bodyEl) return;
+
+                    // Уже есть в кеше — сразу применяем
+                    if (_e2eDecryptedCache.has(msgId)) {
+                        const plain = _e2eDecryptedCache.get(msgId);
+                        rowEl.dataset.plain = plain;
+                        bodyEl.innerHTML = '';
+                        appendPlainText(bodyEl, plain);
+                        return;
+                    }
+
+                    // Расшифровываем и кешируем
                     const snap = snapshot.docs.find(d => d.id === msgId);
                     if (!snap) return;
                     const plain = await decryptDM(snap.data(), myUid);
+                    _e2eDecryptedCache.set(msgId, plain);
                     rowEl.dataset.plain = plain;
-                    rowEl.dataset.e2eDecrypted = '1';
-                    // Обновляем body с расшифрованным текстом
-                    const bodyEl = rowEl.querySelector('[data-e2e-text]');
-                    if (bodyEl) {
-                        bodyEl.innerHTML = '';
-                        appendPlainText(bodyEl, plain);
-                        // URL preview — добавляем если есть ссылка
-                        const bubble = rowEl.querySelector('.msg-bubble');
-                        if (bubble && !bubble.querySelector('.msg-url-preview')) {
-                            URL_RE.lastIndex = 0;
-                            if (URL_RE.test(plain)) buildUrlPreview(plain, bubble);
-                        }
+                    bodyEl.innerHTML = '';
+                    appendPlainText(bodyEl, plain);
+                    // URL preview
+                    const bubble = rowEl.querySelector('.msg-bubble');
+                    if (bubble && !bubble.querySelector('.msg-url-preview')) {
+                        URL_RE.lastIndex = 0;
+                        if (URL_RE.test(plain)) buildUrlPreview(plain, bubble);
                     }
-                    // Контекстное меню: обновляем текст для «Ответить» и «Копировать»
-                    // через dataset.plain — они читают его при каждом открытии
                 });
             }
         }
@@ -5723,7 +5731,7 @@ async function uploadToCloudinary(file) {
             if (_pinnedUnsub){_pinnedUnsub();_pinnedUnsub=null;}
             if (pollsUnsub){pollsUnsub();pollsUnsub=null;}
             peerHasRead=false;
-            // Сбрасываем баннер закрепа — он принадлежит только группе
+            _e2eDecryptedCache.clear(); // сбрасываем кеш расшифровки при смене чата
             pinnedMsgId=null; _pinnedBannerLastText=''; _pinnedBannerDismissed=null;
             pinnedBanner.classList.remove('is-on');
             clearImagePreview();
