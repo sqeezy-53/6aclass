@@ -2005,17 +2005,21 @@
         // Шифруем ДВА раза: для получателя И для себя (чтобы видеть своё)
         async function encryptDM(text, peerUid, myUid) {
             if (!text) return { forPeer: '', forMe: '' };
+            const peerKey = await getPeerPublicKey(peerUid);
+            if (!peerKey) {
+                // У получателя нет ключа — он ещё не заходил после обновления
+                throw new Error('У собеседника нет ключа шифрования. Попроси его перезайти в чат.');
+            }
             try {
-                const peerKey = await getPeerPublicKey(peerUid);
-                const myKey   = await importPublicKey(myPublicKeyB64);
+                const myKey = await importPublicKey(myPublicKeyB64);
                 const [forPeer, forMe] = await Promise.all([
-                    peerKey ? rsaEncrypt(peerKey, text) : '',
+                    rsaEncrypt(peerKey, text),
                     rsaEncrypt(myKey, text)
                 ]);
                 return { forPeer, forMe };
             } catch(e) {
                 console.error('encryptDM error', e);
-                return { forPeer: '', forMe: '' };
+                throw new Error('Ошибка шифрования: ' + e.message);
             }
         }
 
@@ -4233,7 +4237,7 @@ async function uploadToCloudinary(file) {
             }
 
             row.dataset.msgId=id; row.dataset.id=id; row.dataset.plain=decryptedText;
-            row.dataset.hasE2E = hasE2E ? '1' : '0';
+            row.setAttribute('data-has-e2e', hasE2E ? '1' : '0');
 
             const av=document.createElement('div');
             av.className='msg-avatar'+(sameAuthor?' msg-avatar--hidden':'');
