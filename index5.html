@@ -1946,22 +1946,60 @@
                 true, ['encrypt']);
         }
 
-        // Зашифровать строку публичным ключом → base64
+        // Зашифровать строку публичным ключом → base64 (гибридный RSA+AES)
+        // RSA шифрует только AES-ключ, AES шифрует сам текст — без ограничений на длину
         async function rsaEncrypt(publicKey, text) {
+            // 1. Генерируем одноразовый AES-256-GCM ключ
+            const aesKey = await crypto.subtle.generateKey(
+                { name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
+            const iv = crypto.getRandomValues(new Uint8Array(12));
+
+            // 2. Шифруем текст AES
             const enc = new TextEncoder();
-            const buf = await crypto.subtle.encrypt(
-                { name: 'RSA-OAEP' }, publicKey, enc.encode(text));
-            return btoa(String.fromCharCode(...new Uint8Array(buf)));
+            const cipherText = await crypto.subtle.encrypt(
+                { name: 'AES-GCM', iv }, aesKey, enc.encode(text));
+
+            // 3. Экспортируем AES-ключ и шифруем его RSA
+            const rawAesKey = await crypto.subtle.exportKey('raw', aesKey);
+            const encryptedAesKey = await crypto.subtle.encrypt(
+                { name: 'RSA-OAEP' }, publicKey, rawAesKey);
+
+            // 4. Пакуем всё в один base64: [2 байта длины RSA-части][RSA-ключ][IV][AES-шифртекст]
+            const keyLen = new Uint8Array(2);
+            new DataView(keyLen.buffer).setUint16(0, encryptedAesKey.byteLength);
+            const blob = new Uint8Array(
+                2 + encryptedAesKey.byteLength + 12 + cipherText.byteLength);
+            blob.set(keyLen, 0);
+            blob.set(new Uint8Array(encryptedAesKey), 2);
+            blob.set(iv, 2 + encryptedAesKey.byteLength);
+            blob.set(new Uint8Array(cipherText), 2 + encryptedAesKey.byteLength + 12);
+            return btoa(String.fromCharCode(...blob));
         }
 
-        // Расшифровать base64 приватным ключом → строка
+        // Расшифровать base64 приватным ключом → строка (гибридный RSA+AES)
         async function rsaDecrypt(privateKey, b64) {
             try {
-                const binary = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
-                const buf = await crypto.subtle.decrypt(
-                    { name: 'RSA-OAEP' }, privateKey, binary);
-                return new TextDecoder().decode(buf);
-            } catch(e) { return '[🔒 Не удалось расшифровать]'; }
+                const blob = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+                const keyLen = new DataView(blob.buffer).getUint16(0);
+                const encryptedAesKey = blob.slice(2, 2 + keyLen);
+                const iv = blob.slice(2 + keyLen, 2 + keyLen + 12);
+                const cipherText = blob.slice(2 + keyLen + 12);
+
+                // 1. Расшифровываем AES-ключ через RSA
+                const rawAesKey = await crypto.subtle.decrypt(
+                    { name: 'RSA-OAEP' }, privateKey, encryptedAesKey);
+
+                // 2. Импортируем AES-ключ
+                const aesKey = await crypto.subtle.importKey(
+                    'raw', rawAesKey, { name: 'AES-GCM' }, false, ['decrypt']);
+
+                // 3. Расшифровываем текст AES
+                const plain = await crypto.subtle.decrypt(
+                    { name: 'AES-GCM', iv }, aesKey, cipherText);
+                return new TextDecoder().decode(plain);
+            } catch(e) {
+                return '[🔒 Не удалось расшифровать]';
+            }
         }
 
         // Инициализация E2E для пользователя — вызывается при входе
@@ -1989,16 +2027,14 @@
                 { publicKey: myPublicKeyB64 }, { merge: true });
         }
 
-        // Получить публичный ключ любого пользователя из Firebase
+        // Получить публичный ключ любого пользователя из Firebase (без кеша — всегда свежий)
         const _pubKeyCache = {};
         async function getPeerPublicKey(uid) {
-            if (_pubKeyCache[uid]) return _pubKeyCache[uid];
+            // Всегда берём свежий ключ из Firebase — не кешируем
             const snap = await getDoc(doc(db, 'users', uid));
             const b64  = snap.data()?.publicKey;
             if (!b64) return null;
-            const key = await importPublicKey(b64);
-            _pubKeyCache[uid] = key;
-            return key;
+            return importPublicKey(b64);
         }
 
         // Зашифровать ЛС-сообщение для отправки
