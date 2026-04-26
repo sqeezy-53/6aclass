@@ -667,7 +667,7 @@ function isRed(s) { return s==='♥'||s==='♦'; }
 function bjV(c) { return ['J','Q','K'].includes(c.v)?10:c.v==='A'?11:parseInt(c.v); }
 function bjS(h) {
   let s=h.reduce((a,c)=>a+bjV(c),0), ac=h.filter(c=>c.v==='A').length;
-  while(s>21&&ac-->0) s-=10;
+  while(s>21&&ac-- >0) s-=10;
   return s;
 }
 function renderCard(card, hidden) {
