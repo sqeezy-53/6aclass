@@ -1888,6 +1888,151 @@
         }
 
 
+        /* ══════════════════════════════════════════════════════
+           E2E ШИФРОВАНИЕ ЛС (RSA-OAEP через Web Crypto API)
+           
+           Как работает:
+           - При первом входе генерируем пару ключей RSA
+           - Публичный ключ → Firebase (users/{uid}.publicKey)
+           - Приватный ключ → localStorage (ТОЛЬКО на этом устройстве)
+           - При отправке ЛС шифруем ДВА раза:
+             1) публичным ключом получателя (он сможет расшифровать)
+             2) своим публичным ключом (чтобы видеть свои сообщения)
+           - При получении — расшифровываем своим приватным ключом
+        ══════════════════════════════════════════════════════ */
+
+        const E2E_PRIVATE_KEY_PREFIX = 'e2e_privkey_';
+        let myPrivateKey  = null;   // CryptoKey — приватный ключ текущего пользователя
+        let myPublicKeyB64 = null;  // string — публичный ключ в base64 (для Firebase)
+
+        // Сохранить приватный ключ в localStorage (exportable → JWK → JSON)
+        async function savePrivateKey(uid, cryptoKey) {
+            const jwk = await crypto.subtle.exportKey('jwk', cryptoKey);
+            localStorage.setItem(E2E_PRIVATE_KEY_PREFIX + uid, JSON.stringify(jwk));
+        }
+
+        // Загрузить приватный ключ из localStorage
+        async function loadPrivateKey(uid) {
+            const raw = localStorage.getItem(E2E_PRIVATE_KEY_PREFIX + uid);
+            if (!raw) return null;
+            try {
+                const jwk = JSON.parse(raw);
+                return await crypto.subtle.importKey('jwk', jwk,
+                    { name: 'RSA-OAEP', hash: 'SHA-256' },
+                    true, ['decrypt']);
+            } catch(e) { return null; }
+        }
+
+        // Сгенерировать новую пару ключей RSA-OAEP 2048
+        async function generateKeyPair() {
+            return crypto.subtle.generateKey(
+                { name: 'RSA-OAEP', modulusLength: 2048,
+                  publicExponent: new Uint8Array([1,0,1]), hash: 'SHA-256' },
+                true, ['encrypt', 'decrypt']
+            );
+        }
+
+        // Экспортировать публичный ключ в base64 (для хранения в Firebase)
+        async function exportPublicKey(cryptoKey) {
+            const spki = await crypto.subtle.exportKey('spki', cryptoKey);
+            return btoa(String.fromCharCode(...new Uint8Array(spki)));
+        }
+
+        // Импортировать публичный ключ из base64 (из Firebase)
+        async function importPublicKey(b64) {
+            const binary = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+            return crypto.subtle.importKey('spki', binary,
+                { name: 'RSA-OAEP', hash: 'SHA-256' },
+                true, ['encrypt']);
+        }
+
+        // Зашифровать строку публичным ключом → base64
+        async function rsaEncrypt(publicKey, text) {
+            const enc = new TextEncoder();
+            const buf = await crypto.subtle.encrypt(
+                { name: 'RSA-OAEP' }, publicKey, enc.encode(text));
+            return btoa(String.fromCharCode(...new Uint8Array(buf)));
+        }
+
+        // Расшифровать base64 приватным ключом → строка
+        async function rsaDecrypt(privateKey, b64) {
+            try {
+                const binary = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+                const buf = await crypto.subtle.decrypt(
+                    { name: 'RSA-OAEP' }, privateKey, binary);
+                return new TextDecoder().decode(buf);
+            } catch(e) { return '[🔒 Не удалось расшифровать]'; }
+        }
+
+        // Инициализация E2E для пользователя — вызывается при входе
+        async function initE2EForUser(uid) {
+            // 1. Пробуем загрузить уже существующий приватный ключ
+            myPrivateKey = await loadPrivateKey(uid);
+
+            if (myPrivateKey) {
+                // Ключ уже есть — просто грузим публичный из Firebase
+                const snap = await getDoc(doc(db, 'users', uid));
+                myPublicKeyB64 = snap.data()?.publicKey || null;
+                if (myPublicKeyB64) return; // всё ок
+            }
+
+            // 2. Ключа нет (новый аккаунт или очищен localStorage) — генерируем
+            const pair = await generateKeyPair();
+            myPrivateKey  = pair.privateKey;
+            myPublicKeyB64 = await exportPublicKey(pair.publicKey);
+
+            // 3. Сохраняем приватный ключ ЛОКАЛЬНО
+            await savePrivateKey(uid, pair.privateKey);
+
+            // 4. Публичный ключ → Firebase
+            await setDoc(doc(db, 'users', uid),
+                { publicKey: myPublicKeyB64 }, { merge: true });
+        }
+
+        // Получить публичный ключ любого пользователя из Firebase
+        const _pubKeyCache = {};
+        async function getPeerPublicKey(uid) {
+            if (_pubKeyCache[uid]) return _pubKeyCache[uid];
+            const snap = await getDoc(doc(db, 'users', uid));
+            const b64  = snap.data()?.publicKey;
+            if (!b64) return null;
+            const key = await importPublicKey(b64);
+            _pubKeyCache[uid] = key;
+            return key;
+        }
+
+        // Зашифровать ЛС-сообщение для отправки
+        // Шифруем ДВА раза: для получателя И для себя (чтобы видеть своё)
+        async function encryptDM(text, peerUid, myUid) {
+            if (!text) return { forPeer: '', forMe: '' };
+            try {
+                const peerKey = await getPeerPublicKey(peerUid);
+                const myKey   = await importPublicKey(myPublicKeyB64);
+                const [forPeer, forMe] = await Promise.all([
+                    peerKey ? rsaEncrypt(peerKey, text) : '',
+                    rsaEncrypt(myKey, text)
+                ]);
+                return { forPeer, forMe };
+            } catch(e) {
+                console.error('encryptDM error', e);
+                return { forPeer: '', forMe: '' };
+            }
+        }
+
+        // Расшифровать входящее ЛС-сообщение
+        // Если я отправитель — расшифровываем forMe, иначе — forPeer
+        async function decryptDM(msgData, myUid) {
+            if (!myPrivateKey) return '[🔒 Нет ключа]';
+            // Если это моё сообщение — расшифровываем своим ключом из forMe
+            const cipher = msgData.uid === myUid ? msgData.e2eForMe : msgData.e2eForPeer;
+            if (!cipher) {
+                // Старое сообщение без E2E — пробуем AES-расшифровку
+                return safeDecrypt(msgData.text || '');
+            }
+            return rsaDecrypt(myPrivateKey, cipher);
+        }
+
+
         // Настройки облака
 const CLOUDINARY_URL = "https://api.cloudinary.com/v1_1/dvl3h61wd/auto/upload";
 const CLOUDINARY_PRESET = "chat_upload";
@@ -4075,9 +4220,20 @@ async function uploadToCloudinary(file) {
             const row=document.createElement('div');
             row.className='msg-row '+(isMe?'msg-row--me':'msg-row--other');
             if (!sameAuthor&&prevDocSnap) row.classList.add('msg-row--gap');
-            // Расшифровываем для хранения в dataset.plain (чтобы редактирование тоже работало)
-            const decryptedText = safeDecrypt(d.text||'');
+
+            // E2E ЛС или AES групповой чат
+            const hasE2E = !!(d.e2eForPeer || d.e2eForMe);
+            let decryptedText;
+            if (hasE2E) {
+                // Для E2E: рендерим плейсхолдер, расшифруем асинхронно после
+                decryptedText = '🔒';
+            } else {
+                // AES групповой чат — синхронно
+                decryptedText = safeDecrypt(d.text||'');
+            }
+
             row.dataset.msgId=id; row.dataset.id=id; row.dataset.plain=decryptedText;
+            row.dataset.hasE2E = hasE2E ? '1' : '0';
 
             const av=document.createElement('div');
             av.className='msg-avatar'+(sameAuthor?' msg-avatar--hidden':'');
@@ -4210,10 +4366,14 @@ async function uploadToCloudinary(file) {
             }
 
             // Text body (skip if empty / poll / music / checklist)
-            if (d.text && !d.pollId && !d.musicBase64 && !d.musicUrl && !d.checklist) bubble.appendChild(renderMessageBody(decryptedText));
+            if ((d.text || hasE2E) && !d.pollId && !d.musicBase64 && !d.musicUrl && !d.checklist) {
+                const bodyEl = renderMessageBody(decryptedText);
+                if (hasE2E) bodyEl.setAttribute('data-e2e-text', '1');
+                bubble.appendChild(bodyEl);
+            }
 
-            // URL preview
-            if (d.text&&!d.pollId&&!d.musicBase64&&!d.musicUrl&&!d.checklist&&!decryptedText.match(GIF_URL)) buildUrlPreview(decryptedText, bubble);
+            // URL preview (только для расшифрованных, не для плейсхолдера)
+            if ((d.text||hasE2E)&&!d.pollId&&!d.musicBase64&&!d.musicUrl&&!d.checklist&&!hasE2E&&!decryptedText.match(GIF_URL)) buildUrlPreview(decryptedText, bubble);
 
             // Footer
             const foot=document.createElement('div'); foot.className='msg-footer';
@@ -4239,9 +4399,11 @@ async function uploadToCloudinary(file) {
 
             /* Context menu — right-click or long-press */
             const showCtx=(x,y)=>{
+                // Читаем dataset.plain — он обновляется асинхронно после E2E-расшифровки
+                const plainText = row.dataset.plain || '';
                 const items=[
-                    {label:'Ответить', icon:'↩️', onClick:()=>startReply(id,d.author||'?',decryptedText||'')},
-                    {label:'Копировать', icon:'📋', onClick:()=>copyText(decryptedText||'')},
+                    {label:'Ответить', icon:'↩️', onClick:()=>startReply(id,d.author||'?',plainText)},
+                    {label:'Копировать', icon:'📋', onClick:()=>copyText(plainText)},
                     {label:'Переслать', icon:'↗️', onClick:()=>openForwardModal([d])},
                 ];
                 // Pin/unpin (group chat — any user can pin)
@@ -4252,7 +4414,7 @@ async function uploadToCloudinary(file) {
                 // Edit/delete own
                 if (isMe){
                     items.push({label:'---'});
-                    items.push({label:'Изменить', icon:'✏️', onClick:()=>startEditMessage(id,decryptedText||'')});
+                    items.push({label:'Изменить', icon:'✏️', onClick:()=>startEditMessage(id,row.dataset.plain||'')});
                     items.push({label:'Удалить', icon:'🗑', danger:true, onClick:()=>deleteMessage(id)});
                 }
                 // Admin can delete anyone's messages in group
@@ -4414,6 +4576,35 @@ async function uploadToCloudinary(file) {
                 else chatMessages.scrollTop=prevScrollTop+(chatMessages.scrollHeight-prevScrollHeight);
                 updateScrollFab(); applyMessageSearch();
             });
+
+            // E2E: асинхронно расшифруем ЛС-сообщения после рендера
+            if (currentChatMode==='dm' && myPrivateKey) {
+                const myUid = auth.currentUser?.uid || '';
+                const e2eRows = chatMessages.querySelectorAll('.msg-row[data-has-e2e="1"]');
+                e2eRows.forEach(async (rowEl) => {
+                    const msgId = rowEl.dataset.id;
+                    if (rowEl.dataset.e2eDecrypted === '1') return;
+                    const snap = snapshot.docs.find(d => d.id === msgId);
+                    if (!snap) return;
+                    const plain = await decryptDM(snap.data(), myUid);
+                    rowEl.dataset.plain = plain;
+                    rowEl.dataset.e2eDecrypted = '1';
+                    // Обновляем body с расшифрованным текстом
+                    const bodyEl = rowEl.querySelector('[data-e2e-text]');
+                    if (bodyEl) {
+                        bodyEl.innerHTML = '';
+                        appendPlainText(bodyEl, plain);
+                        // URL preview — добавляем если есть ссылка
+                        const bubble = rowEl.querySelector('.msg-bubble');
+                        if (bubble && !bubble.querySelector('.msg-url-preview')) {
+                            URL_RE.lastIndex = 0;
+                            if (URL_RE.test(plain)) buildUrlPreview(plain, bubble);
+                        }
+                    }
+                    // Контекстное меню: обновляем текст для «Ответить» и «Копировать»
+                    // через dataset.plain — они читают его при каждом открытии
+                });
+            }
         }
 
         /* ══════════════════════════════
@@ -5394,28 +5585,46 @@ async function uploadToCloudinary(file) {
                 if (editingMessageId){
                     // Editing — text only, no image change
                     if (currentChatMode==='group') await updateDoc(doc(db,'messages',editingMessageId),{text:encryptMessage(text),edited:true});
-                    else await updateDoc(doc(db,'dmConvs',currentDMConvId,'messages',editingMessageId),{text:encryptMessage(text),edited:true});
+                    else {
+                        // E2E: шифруем отредактированный текст для обоих участников
+                        const e2e = await encryptDM(text, currentDMPeerUid, u.uid);
+                        await updateDoc(doc(db,'dmConvs',currentDMConvId,'messages',editingMessageId),{
+                            text: '', e2eForPeer: e2e.forPeer, e2eForMe: e2e.forMe, edited:true
+                        });
+                    }
                     cancelEditMessage();
                 } else {
-                    const msgData={
-                        uid:u.uid, author:displayNick(u),
-                        text: text ? encryptMessage(text) : '',
-                        createdAt:serverTimestamp(), edited:false,
-                        ...(hasImg ? {imageBase64: pendingImageBase64} : {}),
-                        ...(replyingTo?{replyTo:{id:replyingTo.id,author:replyingTo.author,text:replyingTo.text.slice(0,100)}}:{})
-                    };
+                    let msgData;
                     if (currentChatMode==='group'){
+                        msgData={
+                            uid:u.uid, author:displayNick(u),
+                            text: text ? encryptMessage(text) : '',
+                            createdAt:serverTimestamp(), edited:false,
+                            ...(hasImg ? {imageBase64: pendingImageBase64} : {}),
+                            ...(replyingTo?{replyTo:{id:replyingTo.id,author:replyingTo.author,text:replyingTo.text.slice(0,100)}}:{})
+                        };
                         await addDoc(messagesCol,msgData);
                     } else {
+                        // ЛС — E2E шифрование
+                        const e2e = await encryptDM(text, currentDMPeerUid, u.uid);
+                        msgData={
+                            uid:u.uid, author:displayNick(u),
+                            text: '', // не храним plaintext
+                            e2eForPeer: e2e.forPeer,
+                            e2eForMe:   e2e.forMe,
+                            createdAt:serverTimestamp(), edited:false,
+                            ...(hasImg ? {imageBase64: pendingImageBase64} : {}),
+                            ...(replyingTo?{replyTo:{id:replyingTo.id,author:replyingTo.author,text:replyingTo.text.slice(0,100)}}:{})
+                        };
                         await addDoc(collection(db,'dmConvs',currentDMConvId,'messages'),msgData);
                         const convRef=doc(db,'dmConvs',currentDMConvId);
-                        const previewText = hasImg ? (text ? text : '🖼 Картинка') : text;
+                        const previewText = hasImg ? (text ? text : '🖼 Картинка') : '🔒 Сообщение';
                         await setDoc(convRef,{lastText:previewText,lastAt:serverTimestamp(),[`unread.${currentDMPeerUid}`]:increment(1)},{merge:true});
                     }
                     cancelReply(); lastOutboundAt=Date.now();
                     chatInput.value=''; chatInput.style.height='auto';
                     clearImagePreview();
-                    chatSend.disabled=true; // ensure button resets
+                    chatSend.disabled=true;
                 }
             } catch(e){globalStatus.textContent=e.message||String(e);globalStatus.classList.add('is-error');}
             finally{chatSend.disabled=!chatInput.value.trim()&&!pendingImageBase64;}
@@ -5575,6 +5784,8 @@ async function uploadToCloudinary(file) {
             }catch(e){_dbgLog('auth:loadProfile:error',e.message);}
             // Apply saved theme (could be 'system')
             setTheme(localStorage.getItem(THEME_KEY)||'dark');
+            // Инициализируем E2E ключи для ЛС
+            try { await initE2EForUser(user.uid); } catch(e) { _dbgLog('e2e:init:error', e.message); }
             authFormBlock.classList.add('hidden'); authGate.classList.add('hidden'); appRoot.classList.remove('hidden');
             try { startChatForUser(); } catch(e){ _dbgLog('startChat:error',e.message); }
             try { buildSidebarList(); } catch(e){ _dbgLog('buildSidebar:error',e.message); }
