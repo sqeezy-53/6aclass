@@ -2070,9 +2070,11 @@
                 const snap = await getDoc(doc(db, 'users', uid));
                 myPublicKeyB64 = snap.data()?.publicKey || null;
                 if (myPublicKeyB64) return; // всё ок
+                // Публичного нет — загружаем своим ключом заново
             }
 
-            // 2. Ключа нет (новый аккаунт или очищен localStorage) — генерируем
+            // 2. Ключа нет (новый аккаунт, другое устройство, или очищен localStorage) — генерируем новую пару
+            // ВНИМАНИЕ: старые сообщения зашифрованные старым ключом будут недоступны на этом устройстве
             const pair = await generateKeyPair();
             myPrivateKey  = pair.privateKey;
             myPublicKeyB64 = await exportPublicKey(pair.publicKey);
@@ -2080,7 +2082,7 @@
             // 3. Сохраняем приватный ключ ЛОКАЛЬНО
             await savePrivateKey(uid, pair.privateKey);
 
-            // 4. Публичный ключ → Firebase
+            // 4. Публичный ключ → Firebase (обновляем — теперь новые сообщения зашифрованы новым ключом)
             await setDoc(doc(db, 'users', uid),
                 { publicKey: myPublicKeyB64 }, { merge: true });
         }
@@ -2122,12 +2124,20 @@
         async function decryptDM(msgData, myUid) {
             if (!myPrivateKey) return '[🔒 Нет ключа]';
             // Если это моё сообщение — расшифровываем своим ключом из forMe
-            const cipher = msgData.uid === myUid ? msgData.e2eForMe : msgData.e2eForPeer;
+            const cipher = pickE2ECipher(msgData, myUid, 'e2eForPeer', 'e2eForMe');
             if (!cipher) {
                 // Старое сообщение без E2E — пробуем AES-расшифровку
                 return safeDecrypt(msgData.text || '');
             }
-            return rsaDecrypt(myPrivateKey, cipher);
+            try {
+                return await rsaDecrypt(myPrivateKey, cipher);
+            } catch (e) {
+                const fallback = msgData.uid === myUid ? msgData.e2eForPeer : msgData.e2eForMe;
+                if (fallback && fallback !== cipher) {
+                    try { return await rsaDecrypt(myPrivateKey, fallback); } catch (_) {}
+                }
+                return safeDecrypt(msgData.text || '') || '[🔒 Ошибка расшифровки]';
+            }
         }
 
         function pickE2ECipher(msgData, myUid, forPeerField, forMeField) {
@@ -2143,6 +2153,16 @@
             const cipher = pickE2ECipher(msgData, myUid, forPeerField, forMeField);
             if (!cipher) return '';
             return rsaDecrypt(myPrivateKey, cipher);
+        }
+
+        async function encryptDMToFields(text, peerUid, myUid, forPeerField, forMeField, plainField) {
+            try {
+                const e2e = await encryptDM(text, peerUid, myUid);
+                return { [forPeerField]: e2e.forPeer, [forMeField]: e2e.forMe };
+            } catch (e) {
+                console.warn('[dm aes fallback]', e.message);
+                return { [plainField]: encryptMessage(text) };
+            }
         }
 
 
@@ -5035,6 +5055,22 @@ function dataUrlToFile(dataUrl, filename) {
                         const newBubble=newRow.querySelector('.msg-bubble');
                         const oldBubble=oldRow.querySelector('.msg-bubble');
                         if (newBubble&&oldBubble) {
+                            // Skip E2E rows entirely — their bubble is built async after decrypt
+                            // Overwriting innerHTML would reset decrypted content back to 🔒 placeholder
+                            const hasE2E = oldRow.getAttribute('data-has-e2e') === '1';
+                            if (hasE2E) {
+                                // But if message was edited, invalidate decrypt cache so it re-decrypts
+                                const oldEdited = oldBubble.querySelector('.msg-edited');
+                                const newEdited = newBubble.querySelector('.msg-edited');
+                                const editedChanged = !!oldEdited !== !!newEdited;
+                                if (editedChanged) {
+                                    _e2eDecryptedCache.delete(oldRow.dataset.id);
+                                    // Full bubble replace so re-decrypt logic runs below
+                                    oldBubble.innerHTML = newBubble.innerHTML;
+                                    oldRow.removeAttribute('data-plain');
+                                }
+                                return;
+                            }
                             // Only update if no image (avoid reload flicker) and content differs
                             const hasImg=oldBubble.querySelector('.msg-img');
                             if (!hasImg && newBubble.innerHTML!==oldBubble.innerHTML) {
@@ -5048,9 +5084,13 @@ function dataUrlToFile(dataUrl, filename) {
                 } else {
                     // Order changed or new messages added — do full replacement but preserve img src
                     const imgCache={};
+                    const musicCache={};
                     chatMessages.querySelectorAll('.msg-row[data-id]').forEach(el=>{
                         const img=el.querySelector('.msg-img');
                         if (img&&img.src) imgCache[el.dataset.id]=img.src;
+                        // Preserve already-decoded music bubble for E2E messages
+                        const music=el.querySelector('.msg-music');
+                        if (music&&el.getAttribute('data-has-e2e')==='1') musicCache[el.dataset.id]=music.cloneNode(true);
                     });
                     chatMessages.querySelectorAll('.msg-row,.msg-date-sep').forEach(n=>n.remove());
                     // Restore cached img srcs in fragment before inserting
@@ -5058,6 +5098,13 @@ function dataUrlToFile(dataUrl, filename) {
                         if (imgCache[el.dataset.id]) {
                             const img=el.querySelector('.msg-img');
                             if (img) img.src=imgCache[el.dataset.id];
+                        }
+                        // Restore music bubble
+                        if (musicCache[el.dataset.id]) {
+                            const placeholder=el.querySelector('.msg-bubble [style*="расшифровк"]') || el.querySelector('.msg-bubble div[style]');
+                            const bubble=el.querySelector('.msg-bubble');
+                            if (bubble && placeholder) placeholder.replaceWith(musicCache[el.dataset.id]);
+                            else if (bubble && !bubble.querySelector('.msg-music')) bubble.prepend(musicCache[el.dataset.id]);
                         }
                     });
                     chatMessages.appendChild(frag);
@@ -5830,8 +5877,12 @@ musicSendBtn.addEventListener('click', async () => {
 
     musicSendBtn.disabled = true;
     musicSendBtn.textContent = '⏳ Загружаю 0%...';
+    const fileToUpload = _pendingMusicFile; // capture before async
+    const titleToUse = _pendingMusicTitle || _pendingMusicFile.name.replace(/\.[^.]+$/, '');
+    const durToUse = _pendingMusicDur;
+    const mimeToUse = _pendingMusicFile.type;
     try {
-        const url = await uploadToCloudinary(_pendingMusicFile, percent => {
+        const url = await uploadToCloudinary(fileToUpload, percent => {
             musicSendBtn.textContent = `⏳ Загружаю ${percent}%...`;
         });
         if (!url || !url.startsWith('https://')) throw new Error('Cloudinary не вернул ссылку на музыку');
@@ -5841,9 +5892,9 @@ musicSendBtn.addEventListener('click', async () => {
             author: displayNick(u),
             text: '',
             musicUrl: url,
-            musicTitle: _pendingMusicTitle || _pendingMusicFile.name.replace(/\.[^.]+$/, ''),
-            musicDuration: Math.round(_pendingMusicDur || 0),
-            musicMime: _pendingMusicFile.type,
+            musicTitle: titleToUse,
+            musicDuration: Math.round(durToUse || 0),
+            musicMime: mimeToUse,
             createdAt: serverTimestamp(),
             edited: false,
         };
