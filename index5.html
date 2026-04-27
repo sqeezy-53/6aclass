@@ -2130,6 +2130,21 @@
             return rsaDecrypt(myPrivateKey, cipher);
         }
 
+        function pickE2ECipher(msgData, myUid, forPeerField, forMeField) {
+            if (!msgData) return '';
+            const isMine = String(msgData.uid || '') === String(myUid || '');
+            return isMine
+                ? (msgData[forMeField] || msgData[forPeerField] || '')
+                : (msgData[forPeerField] || msgData[forMeField] || '');
+        }
+
+        async function decryptE2EField(msgData, myUid, forPeerField, forMeField) {
+            if (!myPrivateKey) throw new Error('Нет приватного ключа для расшифровки');
+            const cipher = pickE2ECipher(msgData, myUid, forPeerField, forMeField);
+            if (!cipher) return '';
+            return rsaDecrypt(myPrivateKey, cipher);
+        }
+
 
         // Настройки облака
 // ВНИМАНИЕ: unsigned upload preset виден любому в исходнике страницы.
@@ -2138,32 +2153,75 @@
 // Идеально — перейти на signed uploads через backend-сервер.
 const CLOUDINARY_URL = "https://api.cloudinary.com/v1_1/dvl3h61wd/auto/upload";
 const CLOUDINARY_PRESET = "chat_upload";
+// FIX: uploadToCloudinary ниже имеет timeout, проверки типа/размера и понятные ошибки.
 
 // Загрузка файла на Cloudinary с колбэком прогресса
 // onProgress(0..100) опционально
 async function uploadToCloudinary(file, onProgress) {
     return new Promise((resolve, reject) => {
+        if (!(file instanceof File || file instanceof Blob)) {
+            reject(new Error('Передан не файл'));
+            return;
+        }
+
+        const sizeMb = file.size / 1024 / 1024;
+        const type = file.type || '';
+        const isImage = type.startsWith('image/');
+        const isAudio = type.startsWith('audio/');
+
+        if (!isImage && !isAudio) {
+            reject(new Error('Можно загружать только картинки и аудио'));
+            return;
+        }
+        if (isImage && sizeMb > 10) {
+            reject(new Error('Картинка больше 10 МБ'));
+            return;
+        }
+        if (isAudio && sizeMb > 15) {
+            reject(new Error('Аудио больше 15 МБ'));
+            return;
+        }
+
         const xhr = new XMLHttpRequest();
         const formData = new FormData();
-        formData.append("file", file);
-        formData.append("upload_preset", CLOUDINARY_PRESET);
+        formData.append('file', file);
+        formData.append('upload_preset', CLOUDINARY_PRESET);
+        xhr.timeout = 45000;
+
         if (onProgress) {
             xhr.upload.addEventListener('progress', e => {
-                if (e.lengthComputable) onProgress(Math.round(e.loaded / e.total * 100));
+                if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
             });
         }
+
         xhr.addEventListener('load', () => {
             try {
-                const data = JSON.parse(xhr.responseText);
-                if (data.secure_url) resolve(data.secure_url);
-                else reject(new Error(data.error?.message || 'Cloudinary error'));
-            } catch(e) { reject(e); }
+                const data = JSON.parse(xhr.responseText || '{}');
+                if (xhr.status < 200 || xhr.status >= 300) {
+                    reject(new Error(data.error?.message || `Cloudinary HTTP ${xhr.status}`));
+                    return;
+                }
+                if (!data.secure_url) {
+                    reject(new Error(data.error?.message || 'Cloudinary не вернул secure_url'));
+                    return;
+                }
+                if (!String(data.secure_url).startsWith('https://')) {
+                    reject(new Error('Cloudinary вернул небезопасную ссылку'));
+                    return;
+                }
+                resolve(data.secure_url);
+            } catch (e) {
+                reject(new Error('Cloudinary вернул не JSON: ' + e.message));
+            }
         });
-        xhr.addEventListener('error', () => reject(new Error('Сеть недоступна')));
+        xhr.addEventListener('error', () => reject(new Error('Ошибка сети при загрузке в Cloudinary')));
+        xhr.addEventListener('timeout', () => reject(new Error('Cloudinary не ответил за 45 секунд')));
+        xhr.addEventListener('abort', () => reject(new Error('Загрузка отменена')));
         xhr.open('POST', CLOUDINARY_URL);
         xhr.send(formData);
     });
 }
+
 
 // Конвертирует base64 dataURL в File объект для загрузки на Cloudinary
 function dataUrlToFile(dataUrl, filename) {
@@ -3547,40 +3605,130 @@ function dataUrlToFile(dataUrl, filename) {
         }
         document.getElementById('forwardCancel').addEventListener('click',()=>document.getElementById('forwardModal').classList.remove('is-open'));
 
+        async function getForwardPayload(src, myUid) {
+            const srcData = (typeof src === 'object' && src !== null) ? (src.data ? src.data() : src) : null;
+            if (!srcData) return { text: String(src || '') };
+
+            const payload = {
+                text: srcData.text ? safeDecrypt(srcData.text) : '',
+                imageUrl: srcData.imageUrl || srcData.imageBase64 || '',
+                voiceUrl: srcData.voiceUrl || srcData.voiceBase64 || '',
+                voiceDuration: srcData.voiceDuration || 0,
+                voiceMime: srcData.voiceMime || 'audio/webm',
+                checklist: srcData.checklist || null,
+                music: srcData.musicUrl ? {
+                    url: srcData.musicUrl,
+                    title: srcData.musicTitle || 'Трек',
+                    duration: srcData.musicDuration || 0,
+                    mime: srcData.musicMime || 'audio/*'
+                } : null
+            };
+
+            if (srcData.e2eForPeer || srcData.e2eForMe) {
+                if (!myPrivateKey) throw new Error('Нет ключа для пересылки E2E-сообщения');
+                payload.text = await decryptDM(srcData, myUid);
+            }
+            if (srcData.e2eImgForPeer || srcData.e2eImgForMe)
+                payload.imageUrl = await decryptE2EField(srcData, myUid, 'e2eImgForPeer', 'e2eImgForMe');
+            if (srcData.e2eVoiceForPeer || srcData.e2eVoiceForMe)
+                payload.voiceUrl = await decryptE2EField(srcData, myUid, 'e2eVoiceForPeer', 'e2eVoiceForMe');
+            if (srcData.e2eChecklistForPeer || srcData.e2eChecklistForMe) {
+                const plain = await decryptE2EField(srcData, myUid, 'e2eChecklistForPeer', 'e2eChecklistForMe');
+                const parsed = JSON.parse(plain);
+                payload.checklist = { title: parsed.title || '', items: parsed.items || [], done: {} };
+            }
+            if (srcData.e2eMusicForPeer || srcData.e2eMusicForMe) {
+                const plain = await decryptE2EField(srcData, myUid, 'e2eMusicForPeer', 'e2eMusicForMe');
+                const parsed = JSON.parse(plain);
+                payload.music = {
+                    url: parsed.url || '',
+                    title: parsed.title || 'Трек',
+                    duration: parsed.duration || 0,
+                    mime: parsed.mime || 'audio/*'
+                };
+            }
+            return payload;
+        }
+
+        function forwardPreviewText(payload) {
+            if (payload.imageUrl) return '🖼 Картинка';
+            if (payload.voiceUrl) return '🎤 Голосовое';
+            if (payload.music?.url) return '🎵 Музыка';
+            if (payload.checklist) return '✅ Чек-лист';
+            return payload.text || '↗️ Переслано';
+        }
+
         async function sendForwardedMessages(target, srcMessages) {
             const u = auth.currentUser; if (!u) return;
             for (const src of srcMessages) {
-                // src may be a full message data object or plain text string (legacy)
-                const srcData = (typeof src === 'object' && src !== null) ? (src.data ? src.data() : src) : null;
-                const msg = {
-                    uid: u.uid,
-                    author: displayNick(u),
-                    text: srcData ? (srcData.text || '') : String(src),
-                    createdAt: serverTimestamp(),
-                    edited: false,
-                    forwarded: true,
-                    ...(srcData && srcData.imageUrl ? {imageUrl: srcData.imageUrl} : srcData && srcData.imageBase64 ? {imageUrl: srcData.imageBase64} : {}),
-                    ...(srcData && (srcData.voiceUrl||srcData.voiceBase64) ? {voiceUrl: srcData.voiceUrl||srcData.voiceBase64, voiceDuration: srcData.voiceDuration||0, voiceMime: srcData.voiceMime||'audio/webm'} : {}),
-                };
-                const previewText = srcData && (srcData.imageBase64||srcData.imageUrl) ? '🖼 Картинка' : (srcData && (srcData.voiceBase64||srcData.voiceUrl) ? '🎤 Голосовое' : (safeDecrypt(msg.text) || '↗️ Переслано'));
                 try {
-                    if (target.type==='group') await addDoc(messagesCol,msg);
-                    else {
-                        const convId=dmConvId(u.uid,target.peerUid);
-                        // E2E: шифруем пересылаемое сообщение для ЛС
-                        let dmFwdMsg = {...msg};
-                        if (myPrivateKey && target.peerUid && msg.text) {
-                            try {
-                                const fwdE2e = await encryptDM(msg.text, target.peerUid, u.uid);
-                                dmFwdMsg = { ...msg, text: '', e2eForPeer: fwdE2e.forPeer, e2eForMe: fwdE2e.forMe };
-                                // Медиа остаётся как есть — это известное ограничение
-                            } catch(encErr) { /* fallback */ }
+                    const payload = await getForwardPayload(src, u.uid);
+                    const previewText = forwardPreviewText(payload);
+                    const base = {
+                        uid: u.uid,
+                        author: displayNick(u),
+                        createdAt: serverTimestamp(),
+                        edited: false,
+                        forwarded: true
+                    };
+
+                    if (target.type === 'group') {
+                        const groupMsg = {
+                            ...base,
+                            text: payload.text ? encryptMessage(payload.text) : '',
+                            ...(payload.imageUrl ? { imageUrl: payload.imageUrl } : {}),
+                            ...(payload.voiceUrl ? { voiceUrl: payload.voiceUrl, voiceDuration: payload.voiceDuration || 0, voiceMime: payload.voiceMime || 'audio/webm' } : {}),
+                            ...(payload.music?.url ? { musicUrl: payload.music.url, musicTitle: payload.music.title, musicDuration: Math.round(payload.music.duration || 0), musicMime: payload.music.mime || 'audio/*' } : {}),
+                            ...(payload.checklist ? { checklist: payload.checklist, text: encryptMessage((payload.checklist.title || 'Чек-лист') + ': ' + (payload.checklist.items || []).join(', ')) } : {})
+                        };
+                        await addDoc(messagesCol, groupMsg);
+                    } else {
+                        const convId = dmConvId(u.uid, target.peerUid);
+                        const dmFwdMsg = { ...base, text: '' };
+
+                        if (payload.text) {
+                            const e2e = await encryptDM(payload.text, target.peerUid, u.uid);
+                            dmFwdMsg.e2eForPeer = e2e.forPeer;
+                            dmFwdMsg.e2eForMe = e2e.forMe;
                         }
-                        await addDoc(collection(db,'dmConvs',convId,'messages'),dmFwdMsg);
-                        const convRef=doc(db,'dmConvs',convId);
-                        await setDoc(convRef,{members:[u.uid,target.peerUid],names:{[u.uid]:displayNick(u),[target.peerUid]:target.name},lastText:'↗️ '+previewText,lastAt:serverTimestamp(),[`unread.${target.peerUid}`]:increment(1)},{merge:true});
+                        if (payload.imageUrl) {
+                            const e2e = await encryptDM(payload.imageUrl, target.peerUid, u.uid);
+                            dmFwdMsg.e2eImgForPeer = e2e.forPeer;
+                            dmFwdMsg.e2eImgForMe = e2e.forMe;
+                        }
+                        if (payload.voiceUrl) {
+                            const e2e = await encryptDM(payload.voiceUrl, target.peerUid, u.uid);
+                            dmFwdMsg.e2eVoiceForPeer = e2e.forPeer;
+                            dmFwdMsg.e2eVoiceForMe = e2e.forMe;
+                            dmFwdMsg.voiceDuration = payload.voiceDuration || 0;
+                            dmFwdMsg.voiceMime = payload.voiceMime || 'audio/webm';
+                        }
+                        if (payload.music?.url) {
+                            const musicJson = JSON.stringify(payload.music);
+                            const e2e = await encryptDM(musicJson, target.peerUid, u.uid);
+                            dmFwdMsg.e2eMusicForPeer = e2e.forPeer;
+                            dmFwdMsg.e2eMusicForMe = e2e.forMe;
+                            dmFwdMsg.musicDuration = Math.round(payload.music.duration || 0);
+                            dmFwdMsg.musicMime = payload.music.mime || 'audio/*';
+                        }
+                        if (payload.checklist) {
+                            const checkJson = JSON.stringify({ title: payload.checklist.title || '', items: payload.checklist.items || [] });
+                            const e2e = await encryptDM(checkJson, target.peerUid, u.uid);
+                            dmFwdMsg.e2eChecklistForPeer = e2e.forPeer;
+                            dmFwdMsg.e2eChecklistForMe = e2e.forMe;
+                        }
+
+                        if (!dmFwdMsg.e2eForPeer && !dmFwdMsg.e2eImgForPeer && !dmFwdMsg.e2eVoiceForPeer && !dmFwdMsg.e2eMusicForPeer && !dmFwdMsg.e2eChecklistForPeer)
+                            throw new Error('Нет содержимого для пересылки');
+
+                        await addDoc(collection(db, 'dmConvs', convId, 'messages'), dmFwdMsg);
+                        const convRef = doc(db, 'dmConvs', convId);
+                        await setDoc(convRef, { members:[u.uid,target.peerUid], names:{[u.uid]:displayNick(u),[target.peerUid]:target.name}, lastText:'↗️ '+previewText, lastAt:serverTimestamp(), [`unread.${target.peerUid}`]:increment(1) }, { merge:true });
                     }
-                } catch(e){ showToast('Ошибка пересылки: '+e.message); return; }
+                } catch(e) {
+                    showToast('Ошибка пересылки: ' + e.message);
+                    return;
+                }
             }
             showToast(`✅ Переслано ${srcMessages.length} сообщ.`);
         }
@@ -4040,8 +4188,9 @@ function dataUrlToFile(dataUrl, filename) {
                 mediaRecorder.onstop = async () => {
                     stream.getTracks().forEach(t=>t.stop());
                     if (!mediaRecorder._sendOnStop) return;
-                    const blob = new Blob(voiceChunks, {type: mimeType});
-                    if (blob.size > 600_000) { showToast('❌ Голосовое слишком длинное (макс ~45 сек для ЛС)'); return; }
+                    const blob = new Blob(voiceChunks, { type: mimeType });
+                    if (!voiceChunks.length || blob.size < 1000) { showToast('❌ Голосовое пустое. Удержи запись чуть дольше.'); return; }
+                    if (blob.size > 15 * 1024 * 1024) { showToast('❌ Голосовое больше 15 МБ'); return; }
                     // Convert to base64
                     // Загружаем голосовое на Cloudinary вместо base64 в Firestore
                     (async () => {
@@ -4051,25 +4200,21 @@ function dataUrlToFile(dataUrl, filename) {
                             stickToBottom = true;
                             showToast('⏳ Загружаю голосовое…');
                             const voiceFile = new File([blob], `voice_${Date.now()}.webm`, {type: mimeType});
-                            const voiceUrl = await uploadToCloudinary(voiceFile);
-                            if (!voiceUrl) throw new Error('Не удалось загрузить голосовое');
+                            const voiceUrl = await uploadToCloudinary(voiceFile, percent => {
+                                showToast(`⏳ Загружаю голосовое ${percent}%...`);
+                            });
+                            if (!voiceUrl || !voiceUrl.startsWith('https://')) throw new Error('Cloudinary не вернул ссылку на голосовое');
                             const baseMsg = { uid:u.uid, author:displayNick(u), text:'',
                                 createdAt:serverTimestamp(), edited:false,
                                 voiceUrl, voiceDuration:dur, voiceMime:mimeType };
                             if (currentChatMode==='group') {
                                 await addDoc(messagesCol, baseMsg);
                             } else {
-                                let dmMsg = {...baseMsg};
-                                // E2E: шифруем URL голосового для ЛС
-                                if (myPrivateKey && currentDMPeerUid) {
-                                    try {
-                                        const voiceE2e = await encryptDM(voiceUrl, currentDMPeerUid, u.uid);
-                                        dmMsg = { uid:u.uid, author:displayNick(u), text:'',
-                                            createdAt:serverTimestamp(), edited:false,
-                                            e2eVoiceForPeer: voiceE2e.forPeer, e2eVoiceForMe: voiceE2e.forMe,
-                                            voiceDuration:dur, voiceMime:mimeType };
-                                    } catch(encErr) { /* fallback: URL без шифрования */ }
-                                }
+                                const voiceE2e = await encryptDM(voiceUrl, currentDMPeerUid, u.uid);
+                                const dmMsg = { uid:u.uid, author:displayNick(u), text:'',
+                                    createdAt:serverTimestamp(), edited:false,
+                                    e2eVoiceForPeer: voiceE2e.forPeer, e2eVoiceForMe: voiceE2e.forMe,
+                                    voiceDuration:dur, voiceMime:mimeType };
                                 await addDoc(collection(db,'dmConvs',currentDMConvId,'messages'), dmMsg);
                                 await setDoc(doc(db,'dmConvs',currentDMConvId),{lastText:'🎤 Голосовое',lastAt:serverTimestamp(),[`unread.${currentDMPeerUid}`]:increment(1)},{merge:true});
                             }
@@ -4517,7 +4662,7 @@ function dataUrlToFile(dataUrl, filename) {
                 msgImg.className = 'msg-img'; msgImg.alt = '🖼 Загрузка…'; msgImg.loading = 'lazy';
                 msgImg.style.cssText = 'min-width:80px;min-height:60px;background:var(--surface-3)';
                 if (myPrivateKey) {
-                    const imgCipher = d.e2eImgForMe || d.e2eImgForPeer;
+                    const imgCipher = pickE2ECipher(d, myUid, 'e2eImgForPeer', 'e2eImgForMe');
                     const imgFallback = d.e2eImgForPeer || d.e2eImgForMe;
                     const applyUrl = (url) => {
                         msgImg.src = url;
@@ -4556,7 +4701,7 @@ function dataUrlToFile(dataUrl, filename) {
                 voiceWrap.appendChild(playBtn); voiceWrap.appendChild(durEl);
                 bubble.appendChild(voiceWrap);
                 if (myPrivateKey) {
-                    const vCipher = d.e2eVoiceForMe || d.e2eVoiceForPeer;
+                    const vCipher = pickE2ECipher(d, myUid, 'e2eVoiceForPeer', 'e2eVoiceForMe');
                     const vFallback = d.e2eVoiceForPeer || d.e2eVoiceForMe;
                     rsaDecrypt(myPrivateKey, vCipher).then(plainUrl => { const plainB64 = plainUrl; // voiceUrl расшифрован
                         // Заменяем плейсхолдер на полноценный плеер
@@ -4582,7 +4727,7 @@ function dataUrlToFile(dataUrl, filename) {
                         else playBtn.innerHTML = '🔒';
                     });
                 }
-            } else if (d.voiceBase64) {
+            } else if (d.voiceBase64 || d.voiceUrl) {
                 const voiceWrap = document.createElement('div');
                 voiceWrap.className = 'msg-voice';
                 const dur = d.voiceDuration||0;
@@ -4657,7 +4802,32 @@ function dataUrlToFile(dataUrl, filename) {
             }
 
             // Music message
-            if (d.musicBase64 || d.musicUrl) {
+            if (d.e2eMusicForPeer || d.e2eMusicForMe) {
+                const musicPlaceholder = document.createElement('div');
+                musicPlaceholder.textContent = '🔒 Музыка (расшифровка...)';
+                musicPlaceholder.style.cssText = 'font-size:.85rem;color:var(--muted);padding:4px 0';
+                bubble.appendChild(musicPlaceholder);
+                if (myPrivateKey) {
+                    const musicCipher = pickE2ECipher(d, myUid, 'e2eMusicForPeer', 'e2eMusicForMe');
+                    rsaDecrypt(myPrivateKey, musicCipher).then(plainJson => {
+                        try {
+                            const parsed = JSON.parse(plainJson);
+                            if (!parsed.url) throw new Error('empty url');
+                            musicPlaceholder.replaceWith(buildMusicBubble(id, {
+                                ...d,
+                                musicUrl: parsed.url,
+                                musicTitle: parsed.title || 'Трек',
+                                musicDuration: Math.round(parsed.duration || d.musicDuration || 0),
+                                musicMime: parsed.mime || d.musicMime || 'audio/*'
+                            }));
+                        } catch(e) {
+                            musicPlaceholder.textContent = '🔒 Музыка (ошибка данных)';
+                        }
+                    }).catch(() => {
+                        musicPlaceholder.textContent = '🔒 Музыка';
+                    });
+                }
+            } else if (d.musicBase64 || d.musicUrl) {
                 bubble.appendChild(buildMusicBubble(id, d));
             }
 
@@ -4668,7 +4838,7 @@ function dataUrlToFile(dataUrl, filename) {
                 clPlaceholder.style.cssText = 'font-size:.85rem;color:var(--muted);padding:4px 0';
                 bubble.appendChild(clPlaceholder);
                 if (myPrivateKey) {
-                    const clCipher = d.e2eChecklistForMe || d.e2eChecklistForPeer;
+                    const clCipher = pickE2ECipher(d, myUid, 'e2eChecklistForPeer', 'e2eChecklistForMe');
                     const clFallback = d.e2eChecklistForPeer || d.e2eChecklistForMe;
                     rsaDecrypt(myPrivateKey, clCipher).then(plainJson => {
                         try {
@@ -5592,14 +5762,8 @@ function dataUrlToFile(dataUrl, filename) {
                         await addDoc(messagesCol, { ...baseMsg, imageUrl });
                     } else {
                         const cid = currentDMConvId;
-                        let dmImgMsg = { ...baseMsg, imageUrl };
-                        // E2E: шифруем URL для ЛС
-                        if (myPrivateKey && currentDMPeerUid) {
-                            try {
-                                const imgE2e = await encryptDM(imageUrl, currentDMPeerUid, u.uid);
-                                dmImgMsg = { ...baseMsg, e2eImgForPeer: imgE2e.forPeer, e2eImgForMe: imgE2e.forMe };
-                            } catch(encErr) { /* fallback: отправляем URL без шифрования */ }
-                        }
+                        const imgE2e = await encryptDM(imageUrl, currentDMPeerUid, u.uid);
+                        const dmImgMsg = { ...baseMsg, e2eImgForPeer: imgE2e.forPeer, e2eImgForMe: imgE2e.forMe };
                         await addDoc(collection(db, 'dmConvs', cid, 'messages'), dmImgMsg);
                         await setDoc(doc(db,'dmConvs',cid), {lastText:'🖼 Фото', lastAt: serverTimestamp(), [`unread.${currentDMPeerUid}`]: increment(1)}, {merge:true});
                     }
@@ -5657,46 +5821,78 @@ function dataUrlToFile(dataUrl, filename) {
             musicFileInput.value = '';
         });
 
-        musicSendBtn.addEventListener('click', async () => {
-            const u = auth.currentUser; if (!u) return;
-            if (!_pendingMusicFile) { showToast('Выбери файл'); return; }
-            musicSendBtn.disabled = true;
-            musicSendBtn.textContent = '⏳ Загружаю...';
-            try {
-                const url = await uploadToCloudinary(_pendingMusicFile);
-                if (!url) { showToast('Ошибка загрузки файла'); return; }
-                const msg = {
-                    uid: u.uid, author: displayNick(u),
-                    text: '',
-                    musicUrl: url,
-                    musicTitle: _pendingMusicTitle,
-                    musicDuration: Math.round(_pendingMusicDur || 0),
-                    createdAt: serverTimestamp(), edited: false,
-                };
-                if (currentChatMode === 'group') {
-                    await addDoc(messagesCol, msg);
-                } else {
-                    const cid = currentDMConvId;
-                    await addDoc(collection(db,'dmConvs',cid,'messages'), msg);
-                    await setDoc(doc(db,'dmConvs',cid), {
-                        lastText: `🎵 ${_pendingMusicTitle}`,
-                        lastAt: serverTimestamp(),
-                        [`unread.${currentDMPeerUid}`]: increment(1)
-                    }, {merge:true});
-                }
-                // Сброс
-                _pendingMusicFile = null; _pendingMusicTitle = ''; _pendingMusicDur = 0;
-                musicPreviewCard.classList.remove('is-visible');
-                musicFileInput.value = '';
-                closeAttachSheet();
-                showToast('🎵 Музыка отправлена!');
-            } catch(e) {
-                showToast('Ошибка: ' + e.message);
-            } finally {
-                musicSendBtn.disabled = false;
-                musicSendBtn.textContent = 'Отправить музыку';
-            }
+musicSendBtn.addEventListener('click', async () => {
+    const u = auth.currentUser;
+    if (!u) { showToast('Нужно войти в аккаунт'); return; }
+    if (!_pendingMusicFile) { showToast('Выбери файл'); return; }
+    if (!_pendingMusicFile.type.startsWith('audio/')) { showToast('Это не аудиофайл'); return; }
+    if (_pendingMusicFile.size > 15 * 1024 * 1024) { showToast('Аудио больше 15 МБ'); return; }
+
+    musicSendBtn.disabled = true;
+    musicSendBtn.textContent = '⏳ Загружаю 0%...';
+    try {
+        const url = await uploadToCloudinary(_pendingMusicFile, percent => {
+            musicSendBtn.textContent = `⏳ Загружаю ${percent}%...`;
         });
+        if (!url || !url.startsWith('https://')) throw new Error('Cloudinary не вернул ссылку на музыку');
+
+        const msg = {
+            uid: u.uid,
+            author: displayNick(u),
+            text: '',
+            musicUrl: url,
+            musicTitle: _pendingMusicTitle || _pendingMusicFile.name.replace(/\.[^.]+$/, ''),
+            musicDuration: Math.round(_pendingMusicDur || 0),
+            musicMime: _pendingMusicFile.type,
+            createdAt: serverTimestamp(),
+            edited: false,
+        };
+
+        if (currentChatMode === 'group') {
+            await addDoc(messagesCol, msg);
+        } else {
+            const cid = currentDMConvId;
+            const musicPayload = {
+                url,
+                title: msg.musicTitle,
+                duration: msg.musicDuration,
+                mime: msg.musicMime
+            };
+            const musicE2e = await encryptDM(JSON.stringify(musicPayload), currentDMPeerUid, u.uid);
+            await addDoc(collection(db, 'dmConvs', cid, 'messages'), {
+                uid: u.uid,
+                author: displayNick(u),
+                text: '',
+                e2eMusicForPeer: musicE2e.forPeer,
+                e2eMusicForMe: musicE2e.forMe,
+                musicDuration: msg.musicDuration,
+                musicMime: msg.musicMime,
+                createdAt: serverTimestamp(),
+                edited: false,
+            });
+            await setDoc(doc(db, 'dmConvs', cid), {
+                lastText: '🎵 Музыка',
+                lastAt: serverTimestamp(),
+                [`unread.${currentDMPeerUid}`]: increment(1)
+            }, { merge: true });
+        }
+
+        _pendingMusicFile = null;
+        _pendingMusicB64 = null;
+        _pendingMusicTitle = '';
+        _pendingMusicDur = 0;
+        musicPreviewCard.classList.remove('is-visible');
+        musicFileInput.value = '';
+        closeAttachSheet();
+        showToast('🎵 Музыка отправлена!');
+    } catch (e) {
+        console.error('[music upload]', e);
+        showToast('Ошибка музыки: ' + e.message);
+    } finally {
+        musicSendBtn.disabled = false;
+        musicSendBtn.textContent = 'Отправить музыку';
+    }
+});
 
         // ─── Checklist tab ───
         const checklistTitle    = document.getElementById('checklistTitle');
@@ -5751,15 +5947,10 @@ function dataUrlToFile(dataUrl, filename) {
                 else {
                     const cid = currentDMConvId;
                     // E2E: шифруем содержимое чек-листа как JSON-строку
-                    let dmCheckMsg = {...msg};
-                    if (myPrivateKey && currentDMPeerUid) {
-                        try {
-                            const checkJson = JSON.stringify({ title, items });
-                            const checkE2e = await encryptDM(checkJson, currentDMPeerUid, u.uid);
-                            dmCheckMsg = { uid: u.uid, author: displayNick(u), text: '', createdAt: serverTimestamp(), edited: false,
-                                e2eChecklistForPeer: checkE2e.forPeer, e2eChecklistForMe: checkE2e.forMe };
-                        } catch(encErr) { /* fallback to plain */ }
-                    }
+                    const checkJson = JSON.stringify({ title, items });
+                    const checkE2e = await encryptDM(checkJson, currentDMPeerUid, u.uid);
+                    const dmCheckMsg = { uid: u.uid, author: displayNick(u), text: '', createdAt: serverTimestamp(), edited: false,
+                        e2eChecklistForPeer: checkE2e.forPeer, e2eChecklistForMe: checkE2e.forMe };
                     await addDoc(collection(db,'dmConvs',cid,'messages'), dmCheckMsg);
                     await setDoc(doc(db,'dmConvs',cid), {lastText:'✅ '+(title||'Чек-лист'), lastAt:serverTimestamp(), [`unread.${currentDMPeerUid}`]:increment(1)},{merge:true});
                 }
@@ -5793,8 +5984,9 @@ function dataUrlToFile(dataUrl, filename) {
                 mediaRecorder.onstop = async () => {
                     stream.getTracks().forEach(t => t.stop());
                     if (!mediaRecorder._sendOnStop) return;
-                    const blob = new Blob(voiceChunks, {type: mimeType});
-                    if (blob.size > 600_000) { showToast('❌ Голосовое слишком длинное (макс ~45 сек для ЛС)'); return; }
+                    const blob = new Blob(voiceChunks, { type: mimeType });
+                    if (!voiceChunks.length || blob.size < 1000) { showToast('❌ Голосовое пустое. Удержи запись чуть дольше.'); return; }
+                    if (blob.size > 15 * 1024 * 1024) { showToast('❌ Голосовое больше 15 МБ'); return; }
                     // Загружаем голосовое на Cloudinary
                     (async () => {
                         const u = auth.currentUser; if (!u) return;
@@ -5803,24 +5995,21 @@ function dataUrlToFile(dataUrl, filename) {
                             stickToBottom = true;
                             showToast('⏳ Загружаю голосовое…');
                             const voiceFile = new File([blob], `voice_${Date.now()}.webm`, {type: mimeType});
-                            const voiceUrl = await uploadToCloudinary(voiceFile);
-                            if (!voiceUrl) throw new Error('Не удалось загрузить голосовое');
+                            const voiceUrl = await uploadToCloudinary(voiceFile, percent => {
+                                showToast(`⏳ Загружаю голосовое ${percent}%...`);
+                            });
+                            if (!voiceUrl || !voiceUrl.startsWith('https://')) throw new Error('Cloudinary не вернул ссылку на голосовое');
                             const baseMsg = { uid:u.uid, author:displayNick(u), text:'',
                                 createdAt:serverTimestamp(), edited:false,
                                 voiceUrl, voiceDuration:dur, voiceMime:mimeType };
                             if (currentChatMode === 'group') {
                                 await addDoc(messagesCol, baseMsg);
                             } else {
-                                let dmMsg = {...baseMsg};
-                                if (myPrivateKey && currentDMPeerUid) {
-                                    try {
-                                        const voiceE2e = await encryptDM(voiceUrl, currentDMPeerUid, u.uid);
-                                        dmMsg = { uid:u.uid, author:displayNick(u), text:'',
-                                            createdAt:serverTimestamp(), edited:false,
-                                            e2eVoiceForPeer: voiceE2e.forPeer, e2eVoiceForMe: voiceE2e.forMe,
-                                            voiceDuration:dur, voiceMime:mimeType };
-                                    } catch(encErr) { /* fallback */ }
-                                }
+                                const voiceE2e = await encryptDM(voiceUrl, currentDMPeerUid, u.uid);
+                                const dmMsg = { uid:u.uid, author:displayNick(u), text:'',
+                                    createdAt:serverTimestamp(), edited:false,
+                                    e2eVoiceForPeer: voiceE2e.forPeer, e2eVoiceForMe: voiceE2e.forMe,
+                                    voiceDuration:dur, voiceMime:mimeType };
                                 await addDoc(collection(db, 'dmConvs', currentDMConvId, 'messages'), dmMsg);
                                 await setDoc(doc(db, 'dmConvs', currentDMConvId), {lastText: '🎤 Голосовое', lastAt: serverTimestamp(), [`unread.${currentDMPeerUid}`]: increment(1)}, {merge: true});
                             }
