@@ -2066,23 +2066,39 @@
             myPrivateKey = await loadPrivateKey(uid);
 
             if (myPrivateKey) {
-                // Ключ уже есть — просто грузим публичный из Firebase
+                // Ключ есть — грузим публичный из Firebase
                 const snap = await getDoc(doc(db, 'users', uid));
-                myPublicKeyB64 = snap.data()?.publicKey || null;
-                if (myPublicKeyB64) return; // всё ок
-                // Публичного нет — загружаем своим ключом заново
+                const storedPublicB64 = snap.data()?.publicKey || null;
+
+                if (storedPublicB64) {
+                    // Проверяем: наш приватный ключ соответствует публичному в Firebase?
+                    // Шифруем тестовую строку публичным → пробуем расшифровать приватным
+                    try {
+                        const pubKey = await importPublicKey(storedPublicB64);
+                        const testCipher = await rsaEncrypt(pubKey, 'e2e_test');
+                        const testPlain  = await rsaDecrypt(myPrivateKey, testCipher);
+                        if (testPlain === 'e2e_test') {
+                            // Всё ок — ключи совпадают
+                            myPublicKeyB64 = storedPublicB64;
+                            return;
+                        }
+                    } catch(_) {}
+                    // Ключи НЕ совпадают — приватный из localStorage не подходит к публичному в Firebase
+                    // Это случается если пользователь очистил localStorage или зашёл с другого устройства
+                    // Генерируем новую пару — старые сообщения расшифровать не получится
+                    _dbgLog('e2e:key_mismatch', 'Regenerating RSA key pair');
+                }
             }
 
-            // 2. Ключа нет (новый аккаунт, другое устройство, или очищен localStorage) — генерируем новую пару
-            // ВНИМАНИЕ: старые сообщения зашифрованные старым ключом будут недоступны на этом устройстве
+            // 2. Генерируем новую пару ключей
             const pair = await generateKeyPair();
-            myPrivateKey  = pair.privateKey;
+            myPrivateKey   = pair.privateKey;
             myPublicKeyB64 = await exportPublicKey(pair.publicKey);
 
-            // 3. Сохраняем приватный ключ ЛОКАЛЬНО
+            // 3. Сохраняем приватный ключ ЛОКАЛЬНО (зашифрованный AES через uid+salt)
             await savePrivateKey(uid, pair.privateKey);
 
-            // 4. Публичный ключ → Firebase (обновляем — теперь новые сообщения зашифрованы новым ключом)
+            // 4. Публичный ключ → Firebase (обновляем — новые сообщения будут шифроваться новым ключом)
             await setDoc(doc(db, 'users', uid),
                 { publicKey: myPublicKeyB64 }, { merge: true });
         }
@@ -2121,23 +2137,31 @@
 
         // Расшифровать входящее ЛС-сообщение
         // Если я отправитель — расшифровываем forMe, иначе — forPeer
+        // Пробуем оба поля если первое не работает (защита от рассинхронизации ключей)
         async function decryptDM(msgData, myUid) {
             if (!myPrivateKey) return '[🔒 Нет ключа]';
-            // Если это моё сообщение — расшифровываем своим ключом из forMe
             const cipher = pickE2ECipher(msgData, myUid, 'e2eForPeer', 'e2eForMe');
             if (!cipher) {
                 // Старое сообщение без E2E — пробуем AES-расшифровку
                 return safeDecrypt(msgData.text || '');
             }
+            // Пробуем основной cipher
             try {
-                return await rsaDecrypt(myPrivateKey, cipher);
-            } catch (e) {
-                const fallback = msgData.uid === myUid ? msgData.e2eForPeer : msgData.e2eForMe;
-                if (fallback && fallback !== cipher) {
-                    try { return await rsaDecrypt(myPrivateKey, fallback); } catch (_) {}
-                }
-                return safeDecrypt(msgData.text || '') || '[🔒 Ошибка расшифровки]';
+                const result = await rsaDecrypt(myPrivateKey, cipher);
+                if (result && !result.startsWith('[')) return result;
+            } catch (_) {}
+            // Пробуем второй вариант (forPeer если был forMe и наоборот)
+            const alt = cipher === msgData.e2eForPeer ? msgData.e2eForMe : msgData.e2eForPeer;
+            if (alt && alt !== cipher) {
+                try {
+                    const result2 = await rsaDecrypt(myPrivateKey, alt);
+                    if (result2 && !result2.startsWith('[')) return result2;
+                } catch (_) {}
             }
+            // Fallback: старый AES
+            const aesResult = safeDecrypt(msgData.text || '');
+            if (aesResult && !aesResult.startsWith('[')) return aesResult;
+            return '[🔒 Ошибка расшифровки]';
         }
 
         function pickE2ECipher(msgData, myUid, forPeerField, forMeField) {
@@ -5055,22 +5079,6 @@ function dataUrlToFile(dataUrl, filename) {
                         const newBubble=newRow.querySelector('.msg-bubble');
                         const oldBubble=oldRow.querySelector('.msg-bubble');
                         if (newBubble&&oldBubble) {
-                            // Skip E2E rows entirely — their bubble is built async after decrypt
-                            // Overwriting innerHTML would reset decrypted content back to 🔒 placeholder
-                            const hasE2E = oldRow.getAttribute('data-has-e2e') === '1';
-                            if (hasE2E) {
-                                // But if message was edited, invalidate decrypt cache so it re-decrypts
-                                const oldEdited = oldBubble.querySelector('.msg-edited');
-                                const newEdited = newBubble.querySelector('.msg-edited');
-                                const editedChanged = !!oldEdited !== !!newEdited;
-                                if (editedChanged) {
-                                    _e2eDecryptedCache.delete(oldRow.dataset.id);
-                                    // Full bubble replace so re-decrypt logic runs below
-                                    oldBubble.innerHTML = newBubble.innerHTML;
-                                    oldRow.removeAttribute('data-plain');
-                                }
-                                return;
-                            }
                             // Only update if no image (avoid reload flicker) and content differs
                             const hasImg=oldBubble.querySelector('.msg-img');
                             if (!hasImg && newBubble.innerHTML!==oldBubble.innerHTML) {
@@ -5084,13 +5092,9 @@ function dataUrlToFile(dataUrl, filename) {
                 } else {
                     // Order changed or new messages added — do full replacement but preserve img src
                     const imgCache={};
-                    const musicCache={};
                     chatMessages.querySelectorAll('.msg-row[data-id]').forEach(el=>{
                         const img=el.querySelector('.msg-img');
                         if (img&&img.src) imgCache[el.dataset.id]=img.src;
-                        // Preserve already-decoded music bubble for E2E messages
-                        const music=el.querySelector('.msg-music');
-                        if (music&&el.getAttribute('data-has-e2e')==='1') musicCache[el.dataset.id]=music.cloneNode(true);
                     });
                     chatMessages.querySelectorAll('.msg-row,.msg-date-sep').forEach(n=>n.remove());
                     // Restore cached img srcs in fragment before inserting
@@ -5098,13 +5102,6 @@ function dataUrlToFile(dataUrl, filename) {
                         if (imgCache[el.dataset.id]) {
                             const img=el.querySelector('.msg-img');
                             if (img) img.src=imgCache[el.dataset.id];
-                        }
-                        // Restore music bubble
-                        if (musicCache[el.dataset.id]) {
-                            const placeholder=el.querySelector('.msg-bubble [style*="расшифровк"]') || el.querySelector('.msg-bubble div[style]');
-                            const bubble=el.querySelector('.msg-bubble');
-                            if (bubble && placeholder) placeholder.replaceWith(musicCache[el.dataset.id]);
-                            else if (bubble && !bubble.querySelector('.msg-music')) bubble.prepend(musicCache[el.dataset.id]);
                         }
                     });
                     chatMessages.appendChild(frag);
@@ -5877,12 +5874,8 @@ musicSendBtn.addEventListener('click', async () => {
 
     musicSendBtn.disabled = true;
     musicSendBtn.textContent = '⏳ Загружаю 0%...';
-    const fileToUpload = _pendingMusicFile; // capture before async
-    const titleToUse = _pendingMusicTitle || _pendingMusicFile.name.replace(/\.[^.]+$/, '');
-    const durToUse = _pendingMusicDur;
-    const mimeToUse = _pendingMusicFile.type;
     try {
-        const url = await uploadToCloudinary(fileToUpload, percent => {
+        const url = await uploadToCloudinary(_pendingMusicFile, percent => {
             musicSendBtn.textContent = `⏳ Загружаю ${percent}%...`;
         });
         if (!url || !url.startsWith('https://')) throw new Error('Cloudinary не вернул ссылку на музыку');
@@ -5892,9 +5885,9 @@ musicSendBtn.addEventListener('click', async () => {
             author: displayNick(u),
             text: '',
             musicUrl: url,
-            musicTitle: titleToUse,
-            musicDuration: Math.round(durToUse || 0),
-            musicMime: mimeToUse,
+            musicTitle: _pendingMusicTitle || _pendingMusicFile.name.replace(/\.[^.]+$/, ''),
+            musicDuration: Math.round(_pendingMusicDur || 0),
+            musicMime: _pendingMusicFile.type,
             createdAt: serverTimestamp(),
             edited: false,
         };
@@ -6419,8 +6412,11 @@ musicSendBtn.addEventListener('click', async () => {
                             banned: false,
                         });
                     } else {
-                        // Update only safe fields — never overwrite banned/admin
-                        await setDoc(doc(db,'users',u.uid),{uid:u.uid,email:u.email||''},{merge:true});
+                        // Update only safe fields — never overwrite banned/admin/uid/stars
+                        // NOTE: 'uid' field is blocked by Firestore rules on update, so don't include it
+                        if (u.email) {
+                            await setDoc(doc(db,'users',u.uid),{email:u.email},{merge:true});
+                        }
                     }
                 }
             }catch(e){_dbgLog('auth:saveDoc:error',e.message);}
