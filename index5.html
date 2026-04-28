@@ -2092,7 +2092,12 @@
             }
         }
 
-        // Инициализация E2E для пользователя — вызывается при входе
+        // Инициализация E2E для ЛС.
+        // ВАЖНО: больше НЕ вызывается при обычном входе в чат.
+        // Мастер-код запрашивается только при первом открытии ЛС в текущей вкладке.
+        let _e2eUnlockedUid = null;
+        let _e2eUnlockPromise = null;
+
         async function initE2EForUser(uid) {
             try {
                 const result = await window.E2E.initE2EForUser(
@@ -2101,14 +2106,52 @@
                 myPrivateKey   = result.privateKey;
                 myPublicKeyB64 = result.publicKeyB64;
                 if (!myPrivateKey) {
-                    _dbgLog('e2e:init', 'E2E отключён (пользователь отменил пароль)');
+                    _e2eUnlockedUid = null;
+                    _dbgLog('e2e:init', 'E2E отключён (пользователь отменил мастер-код)');
                 } else {
-                    _dbgLog('e2e:init', 'E2E инициализирован успешно');
+                    _e2eUnlockedUid = uid;
+                    _dbgLog('e2e:init', 'E2E разблокирован для текущей вкладки');
                 }
+                return result;
             } catch(e) {
+                myPrivateKey = null;
+                myPublicKeyB64 = null;
+                _e2eUnlockedUid = null;
                 _dbgLog('e2e:init:error', e.message);
                 console.error('[e2e] initE2EForUser failed:', e);
+                return { privateKey: null, publicKeyB64: null };
             }
+        }
+
+        async function ensureDME2EUnlocked(uid) {
+            if (!uid) return false;
+            if (myPrivateKey && myPublicKeyB64 && _e2eUnlockedUid === uid) return true;
+            if (_e2eUnlockPromise) return _e2eUnlockPromise;
+
+            _e2eUnlockPromise = (async () => {
+                const result = await initE2EForUser(uid);
+                const ok = !!(result && result.privateKey && result.publicKeyB64);
+                if (!ok) {
+                    showToast('🔒 ЛС не открыты: нужен мастер-код');
+                    return false;
+                }
+                showToast('🔓 ЛС разблокированы до закрытия вкладки');
+                return true;
+            })();
+
+            try {
+                return await _e2eUnlockPromise;
+            } finally {
+                _e2eUnlockPromise = null;
+            }
+        }
+
+        function resetDME2ESession() {
+            myPrivateKey = null;
+            myPublicKeyB64 = null;
+            _e2eUnlockedUid = null;
+            _e2eUnlockPromise = null;
+            _e2eDecryptedCache.clear();
         }
 
         // Получить публичный ключ любого пользователя из Firebase (без кеша — всегда свежий)
@@ -3289,6 +3332,10 @@ function dataUrlToFile(dataUrl, filename) {
         async function openDMWith(peerUid, peerName) {
             const u = auth.currentUser; if (!u) return;
             if (currentChatMode==='dm'&&currentDMPeerUid===peerUid) return;
+
+            const unlocked = await ensureDME2EUnlocked(u.uid);
+            if (!unlocked) return;
+
             currentChatMode='dm'; currentDMPeerUid=peerUid; currentDMPeerName=peerName;
             currentDMConvId=dmConvId(u.uid, peerUid);
 
@@ -6593,6 +6640,7 @@ musicSendBtn.addEventListener('click', async () => {
             authChecking.classList.add('hidden');
             if (_banUnsub){_banUnsub();_banUnsub=null;}
             if (!user){
+                resetDME2ESession();
                 authFormBlock.classList.remove('hidden'); authGate.classList.remove('hidden');
                 appRoot.classList.add('hidden'); authPass.value=''; tearDownChat(); return;
             }
@@ -6652,8 +6700,9 @@ musicSendBtn.addEventListener('click', async () => {
             }catch(e){_dbgLog('auth:loadProfile:error',e.message);}
             // Apply saved theme (could be 'system')
             setTheme(localStorage.getItem(THEME_KEY)||'dark');
-            // Инициализируем E2E ключи для ЛС
-            try { await initE2EForUser(user.uid); } catch(e) { _dbgLog('e2e:init:error', e.message); }
+            // E2E для ЛС больше не инициализируется при обычном входе.
+            // Мастер-код запрашивается только при первом открытии личного чата.
+            resetDME2ESession();
             authFormBlock.classList.add('hidden'); authGate.classList.add('hidden'); appRoot.classList.remove('hidden');
             try { startChatForUser(); } catch(e){ _dbgLog('startChat:error',e.message); }
             try { buildSidebarList(); } catch(e){ _dbgLog('buildSidebar:error',e.message); }
