@@ -31,7 +31,7 @@ from pydantic import BaseModel, field_validator
 from dotenv import load_dotenv
 
 # ── Загружаем переменные окружения из .env ──────────────────────
-load_dotenv(override=False)
+load_dotenv()
 
 # ── Конфигурация (НИКОГДА не хардкоди эти значения в коде) ──────
 PERSPECTIVE_API_KEY   = os.environ["PERSPECTIVE_API_KEY"]      # Google Perspective

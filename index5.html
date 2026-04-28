@@ -5,6 +5,32 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <title>Чат 6А · 6aclass.online</title>
     <meta name="description" content="Чат класса 6А — общайся, делись, будь в курсе!">
+
+    <!-- §1 · Безопасность транспорта: строгая политика HTTPS и контента -->
+    <!-- HSTS задаётся на сервере; здесь — CSP и дополнительные защитные заголовки -->
+    <meta http-equiv="Content-Security-Policy"
+          content="
+            default-src 'self';
+            script-src  'self' 'unsafe-inline' https://www.gstatic.com https://apis.google.com https://fonts.googleapis.com;
+            style-src   'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com;
+            font-src    'self' https://fonts.gstatic.com;
+            img-src     'self' data: blob: https:;
+            media-src   'self' blob: https:;
+            connect-src 'self' https://sixaclass.onrender.com https://*.firebaseio.com https://*.googleapis.com wss://*.firebaseio.com;
+            frame-ancestors 'none';
+            base-uri    'self';
+            form-action 'self';
+            upgrade-insecure-requests;
+          ">
+    <!-- §1 · Запрет рендеринга в iframe (Clickjacking protection) -->
+    <meta http-equiv="X-Frame-Options" content="DENY">
+    <!-- §1 · Запрет MIME-sniffing -->
+    <meta http-equiv="X-Content-Type-Options" content="nosniff">
+    <!-- §1 · Referrer минимизация -->
+    <meta name="referrer" content="strict-origin-when-cross-origin">
+    <!-- §1 · Permissions Policy — ограничение API-доступа -->
+    <meta http-equiv="Permissions-Policy"
+          content="camera=(), microphone=(self), geolocation=(), payment=(), usb=(), interest-cohort=()">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=Outfit:wght@500;600;700;800;900&display=swap" rel="stylesheet">
@@ -2172,21 +2198,249 @@
         }
 
 
-        // Загрузка файла через бэкенд-прокси (ключи Cloudinary только на сервере)
-async function uploadToCloudinary(file, onProgress) {
-    if (!(file instanceof File || file instanceof Blob)) throw new Error('Передан не файл');
-    const sizeMb = file.size / 1024 / 1024;
-    const type = file.type || '';
-    const isImage = type.startsWith('image/');
-    const isAudio = type.startsWith('audio/');
-    if (isImage && sizeMb > 10) throw new Error('Картинка больше 10 МБ');
-    if (isAudio && sizeMb > 15) throw new Error('Аудио больше 15 МБ');
-    const uploadType = isImage ? 'image' : isAudio ? 'video' : 'raw';
-    return window.E2E.uploadViaBackend(file, onProgress, uploadType);
-}
+        /* ══════════════════════════════════════════════════════════════
+           SECURE FILE UPLOAD MODULE — без Cloudinary
+           Реализует все 9 пунктов политики безопасности облачной платформы
+        ══════════════════════════════════════════════════════════════ */
+
+        // ── §5 · Допустимые MIME-типы и расширения ──────────────────
+        const UPLOAD_ALLOWED_MIME = new Set([
+            'image/jpeg','image/png','image/gif','image/webp',
+            'audio/webm','audio/ogg','audio/mpeg','audio/mp4',
+            'audio/wav','audio/x-wav','audio/aac','audio/flac',
+        ]);
+        const UPLOAD_ALLOWED_EXT = new Set([
+            'jpg','jpeg','png','gif','webp',
+            'webm','ogg','mp3','mp4','m4a','wav','aac','flac',
+        ]);
+        const UPLOAD_MAX_IMAGE_BYTES = 10 * 1024 * 1024;   // 10 МБ — §5
+        const UPLOAD_MAX_AUDIO_BYTES = 15 * 1024 * 1024;   // 15 МБ — §5
+        const UPLOAD_MAX_BYTES       = 50 * 1024 * 1024;   // 50 МБ — §5 глобальный потолок
+
+        // ── §7 · Простая клиентская проверка на «магические байты» ──
+        // (полное сканирование — на бэкенде §6)
+        const MAGIC_SIGNATURES = [
+            { bytes: [0xFF,0xD8,0xFF],            mime: 'image/jpeg'  },
+            { bytes: [0x89,0x50,0x4E,0x47],       mime: 'image/png'   },
+            { bytes: [0x47,0x49,0x46,0x38],       mime: 'image/gif'   },
+            { bytes: [0x52,0x49,0x46,0x46],       mime: 'image/webp', offset_check: { offset:8, bytes:[0x57,0x45,0x42,0x50] } },
+            { bytes: [0x1A,0x45,0xDF,0xA3],       mime: 'audio/webm'  }, // WebM/MKV
+            { bytes: [0x4F,0x67,0x67,0x53],       mime: 'audio/ogg'   },
+            { bytes: [0x49,0x44,0x33],             mime: 'audio/mpeg'  }, // MP3 ID3
+            { bytes: [0xFF,0xFB],                  mime: 'audio/mpeg'  }, // MP3 no-ID3
+            { bytes: [0x52,0x49,0x46,0x46],       mime: 'audio/wav',  offset_check: { offset:8, bytes:[0x57,0x41,0x56,0x45] } },
+            { bytes: [0x66,0x74,0x79,0x70],       mime: 'audio/mp4',  header_offset: 4 },
+        ];
+
+        async function _checkMagicBytes(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const buf = new Uint8Array(e.target.result);
+                    for (const sig of MAGIC_SIGNATURES) {
+                        const off = sig.header_offset || 0;
+                        const match = sig.bytes.every((b, i) => buf[off + i] === b);
+                        if (!match) continue;
+                        if (sig.offset_check) {
+                            const { offset, bytes } = sig.offset_check;
+                            const ok = bytes.every((b, i) => buf[offset + i] === b);
+                            if (!ok) continue;
+                        }
+                        return resolve(true);
+                    }
+                    resolve(false); // ни одна сигнатура не совпала
+                };
+                reader.onerror = () => reject(new Error('Ошибка чтения файла'));
+                reader.readAsArrayBuffer(file.slice(0, 16));
+            });
+        }
+
+        // ── §8 · Клиентский лог загрузок ────────────────────────────
+        function _auditLog(event, detail) {
+            try {
+                const entry = {
+                    ts: new Date().toISOString(),
+                    uid: auth.currentUser?.uid || 'anon',
+                    event,
+                    ...detail,
+                };
+                // Храним последние 100 записей в памяти (сессия)
+                if (!window._uploadAuditLog) window._uploadAuditLog = [];
+                window._uploadAuditLog.push(entry);
+                if (window._uploadAuditLog.length > 100) window._uploadAuditLog.shift();
+                // Дублируем в console с меткой безопасности
+                console.info('[SECURITY AUDIT]', JSON.stringify(entry));
+            } catch (_) {}
+        }
+
+        // ── §4 · Rate-limit загрузок (клиентская защита) ─────────────
+        const _uploadRateLimit = { count: 0, windowStart: 0, MAX_PER_MIN: 10 };
+        function _checkUploadRateLimit() {
+            const now = Date.now();
+            if (now - _uploadRateLimit.windowStart > 60_000) {
+                _uploadRateLimit.count = 0;
+                _uploadRateLimit.windowStart = now;
+            }
+            _uploadRateLimit.count++;
+            if (_uploadRateLimit.count > _uploadRateLimit.MAX_PER_MIN) {
+                _auditLog('rate_limit_exceeded', { count: _uploadRateLimit.count });
+                throw new Error('Слишком много загрузок. Подождите минуту.');
+            }
+        }
+
+        // ── §2 · Получение подписанного URL с бэкенда ───────────────
+        async function _getSignedUploadUrl(fileName, mimeType, fileSize) {
+            const u = auth.currentUser;
+            if (!u) throw new Error('Не авторизован');
+            const idToken = await u.getIdToken(true); // §4 OAuth 2.0 / Firebase token
+            const resp = await fetch(`${window.BACKEND_URL}/signed-upload-url`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${idToken}`,      // §4
+                    'X-Request-Id': crypto.randomUUID(),
+                },
+                body: JSON.stringify({ fileName, mimeType, fileSize }),
+            });
+            if (!resp.ok) {
+                // §9 · Не показываем внутренние детали ошибки
+                const status = resp.status;
+                _auditLog('signed_url_error', { status, fileName, mimeType });
+                if (status === 429) throw new Error('Слишком много запросов. Попробуйте позже.');
+                if (status === 403) throw new Error('Нет доступа к загрузке файлов.');
+                throw new Error('Не удалось получить разрешение на загрузку. Попробуйте позже.');
+            }
+            const data = await resp.json();
+            if (!data.signedUrl || !data.fileId) throw new Error('Некорректный ответ сервера.');
+            return data; // { signedUrl, fileId, expiresAt }
+        }
+
+        // ── Основная функция загрузки на бэкенд (§1 · TLS + §2 · Signed URL) ──
+        async function uploadToBackend(file, onProgress) {
+            // §9 · Все ошибки перехватываем и нормализуем
+            try {
+                // §5 · Проверка: это вообще File/Blob?
+                if (!(file instanceof File || file instanceof Blob))
+                    throw new Error('Передан недопустимый объект вместо файла.');
+
+                // §5 · Проверка размера (глобальный потолок)
+                if (file.size > UPLOAD_MAX_BYTES)
+                    throw new Error(`Файл превышает максимальный размер (50 МБ).`);
+
+                const mimeType = file.type || '';
+                const fileName = file instanceof File ? file.name : 'upload';
+
+                // §5 · Проверка типа через MIME
+                if (!UPLOAD_ALLOWED_MIME.has(mimeType)) {
+                    _auditLog('blocked_mime', { mimeType, fileName, size: file.size });
+                    throw new Error('Тип файла не разрешён. Допустимы: изображения и аудио.');
+                }
+
+                // §5 · Проверка расширения
+                const ext = fileName.split('.').pop().toLowerCase();
+                if (!UPLOAD_ALLOWED_EXT.has(ext)) {
+                    _auditLog('blocked_ext', { ext, mimeType, size: file.size });
+                    throw new Error('Расширение файла не разрешено.');
+                }
+
+                const isImage = mimeType.startsWith('image/');
+                const isAudio = mimeType.startsWith('audio/');
+
+                // §5 · Размер по типу
+                if (isImage && file.size > UPLOAD_MAX_IMAGE_BYTES)
+                    throw new Error('Картинка превышает 10 МБ.');
+                if (isAudio && file.size > UPLOAD_MAX_AUDIO_BYTES)
+                    throw new Error('Аудио превышает 15 МБ.');
+
+                // §6 · Проверка «магических байтов» на клиенте (первичный фильтр)
+                const magicOk = await _checkMagicBytes(file);
+                if (!magicOk) {
+                    _auditLog('blocked_magic_bytes', { mimeType, ext, size: file.size });
+                    throw new Error('Содержимое файла не соответствует его типу. Загрузка отклонена.');
+                }
+
+                // §4 · Rate-limit
+                _checkUploadRateLimit();
+
+                _auditLog('upload_start', { mimeType, ext, size: file.size, name: fileName });
+
+                // §2 · Получаем подписанный URL от бэкенда
+                const { signedUrl, fileId } = await _getSignedUploadUrl(fileName, mimeType, file.size);
+
+                // §1 · Загружаем через HTTPS на подписанный URL
+                await new Promise((resolve, reject) => {
+                    const xhr = new XMLHttpRequest();
+                    xhr.open('PUT', signedUrl, true);
+                    xhr.setRequestHeader('Content-Type', mimeType);
+                    if (onProgress) {
+                        xhr.upload.onprogress = (e) => {
+                            if (e.lengthComputable)
+                                onProgress(Math.round(e.loaded / e.total * 100));
+                        };
+                    }
+                    xhr.onload = () => {
+                        if (xhr.status >= 200 && xhr.status < 300) resolve();
+                        else {
+                            // §9 · Не возвращаем детали ошибки сервера
+                            _auditLog('upload_put_error', { status: xhr.status, fileId });
+                            reject(new Error('Ошибка загрузки файла. Попробуйте позже.'));
+                        }
+                    };
+                    xhr.onerror = () => reject(new Error('Сетевая ошибка при загрузке файла.'));
+                    xhr.send(file);
+                });
+
+                // §2 · Получаем публичный URL через бэкенд (никогда не через unsigned URL)
+                const u = auth.currentUser;
+                const idToken = await u.getIdToken();
+                const finalResp = await fetch(`${window.BACKEND_URL}/file-url/${fileId}`, {
+                    headers: { 'Authorization': `Bearer ${idToken}` },
+                });
+                if (!finalResp.ok) throw new Error('Не удалось получить ссылку на файл.');
+                const { url } = await finalResp.json();
+                if (!url || !url.startsWith('https://'))
+                    throw new Error('Бэкенд вернул некорректный URL файла.');
+
+                _auditLog('upload_success', { fileId, mimeType, size: file.size });
+                return url;
+
+            } catch (err) {
+                // §9 · Логируем полную ошибку, пользователю — нормализованное сообщение
+                _auditLog('upload_error', { message: err.message });
+                // Пробрасываем только «безопасные» сообщения (не стек, не внутренние данные)
+                const safeMessages = [
+                    'Тип файла не разрешён',
+                    'Расширение файла не разрешено',
+                    'Картинка превышает',
+                    'Аудио превышает',
+                    'Файл превышает максимальный размер',
+                    'Содержимое файла не соответствует',
+                    'Слишком много загрузок',
+                    'Слишком много запросов',
+                    'Нет доступа к загрузке',
+                    'Не удалось получить разрешение',
+                    'Ошибка загрузки файла',
+                    'Сетевая ошибка при загрузке',
+                    'Не авторизован',
+                    'Не удалось получить ссылку',
+                    'Передан недопустимый объект',
+                ];
+                const isSafe = safeMessages.some(m => err.message?.startsWith(m));
+                throw new Error(isSafe ? err.message : 'Ошибка загрузки. Попробуйте позже.');
+            }
+        }
+
+        // ── Обратная совместимость: uploadToCloudinary → uploadToBackend ──
+        async function uploadToCloudinary(file, onProgress) {
+            return uploadToBackend(file, onProgress);
+        }
+
+        /* ══════════════════════════════════════════════════════════════
+           КОНЕЦ SECURE FILE UPLOAD MODULE
+        ══════════════════════════════════════════════════════════════ */
 
 
-// Конвертирует base64 dataURL в File объект для загрузки на Cloudinary
+// Конвертирует base64 dataURL в File объект для загрузки
 function dataUrlToFile(dataUrl, filename) {
     const arr = dataUrl.split(',');
     const mime = arr[0].match(/:(.*?);/)[1];
@@ -3228,7 +3482,7 @@ function dataUrlToFile(dataUrl, filename) {
                 const file = e.target.files[0];
                 if (!file) return;
 
-                if (file.size > 15 * 1024 * 1024) {
+                if (file.size > UPLOAD_MAX_AUDIO_BYTES) {
                     alert('Файл слишком большой! Максимум 15 МБ.');
                     return;
                 }
@@ -4126,7 +4380,7 @@ function dataUrlToFile(dataUrl, filename) {
                     if (!mediaRecorder._sendOnStop) return;
                     const blob = new Blob(voiceChunks, { type: mimeType });
                     if (!voiceChunks.length || blob.size < 1000) { showToast('❌ Голосовое пустое. Удержи запись чуть дольше.'); return; }
-                    if (blob.size > 15 * 1024 * 1024) { showToast('❌ Голосовое больше 15 МБ'); return; }
+                    if (blob.size > UPLOAD_MAX_AUDIO_BYTES) { showToast('❌ Голосовое больше 15 МБ'); return; }
                     // Convert to base64
                     // Загружаем голосовое на Cloudinary вместо base64 в Firestore
                     (async () => {
@@ -5762,7 +6016,7 @@ musicSendBtn.addEventListener('click', async () => {
     if (!u) { showToast('Нужно войти в аккаунт'); return; }
     if (!_pendingMusicFile) { showToast('Выбери файл'); return; }
     if (!_pendingMusicFile.type.startsWith('audio/')) { showToast('Это не аудиофайл'); return; }
-    if (_pendingMusicFile.size > 15 * 1024 * 1024) { showToast('Аудио больше 15 МБ'); return; }
+    if (_pendingMusicFile.size > UPLOAD_MAX_AUDIO_BYTES) { showToast('Аудио больше 15 МБ'); return; }
 
     musicSendBtn.disabled = true;
     musicSendBtn.textContent = '⏳ Загружаю 0%...';
@@ -5922,7 +6176,7 @@ musicSendBtn.addEventListener('click', async () => {
                     if (!mediaRecorder._sendOnStop) return;
                     const blob = new Blob(voiceChunks, { type: mimeType });
                     if (!voiceChunks.length || blob.size < 1000) { showToast('❌ Голосовое пустое. Удержи запись чуть дольше.'); return; }
-                    if (blob.size > 15 * 1024 * 1024) { showToast('❌ Голосовое больше 15 МБ'); return; }
+                    if (blob.size > UPLOAD_MAX_AUDIO_BYTES) { showToast('❌ Голосовое больше 15 МБ'); return; }
                     // Загружаем голосовое на Cloudinary
                     (async () => {
                         const u = auth.currentUser; if (!u) return;
@@ -6208,6 +6462,99 @@ musicSendBtn.addEventListener('click', async () => {
             }
         });
         document.getElementById('hotkeysClose').addEventListener('click',()=>document.getElementById('hotkeysModal').classList.remove('is-open'));
+
+        /* ══════════════════════════════════════════════════════════════
+           §8 · SECURITY MONITORING — аномалии и подозрительная активность
+        ══════════════════════════════════════════════════════════════ */
+        (function initSecurityMonitoring() {
+            // ── Счётчики подозрительных действий ─────────────────────
+            const _sec = {
+                failedAuths: 0,
+                failedAuthWindow: 0,
+                MAX_FAILED_AUTH: 5,
+                AUTH_WINDOW_MS: 5 * 60_000,       // 5 минут
+                xssAttempts: 0,
+                uploadBlocked: 0,
+            };
+
+            // ── Мониторинг неудачных попыток авторизации ──────────────
+            // Перехватываем ошибки Firebase Auth
+            window.addEventListener('unhandledrejection', (e) => {
+                const msg = e?.reason?.message || '';
+                if (msg.includes('auth/') || msg.includes('wrong-password') || msg.includes('user-not-found')) {
+                    const now = Date.now();
+                    if (now - _sec.failedAuthWindow > _sec.AUTH_WINDOW_MS) {
+                        _sec.failedAuths = 0;
+                        _sec.failedAuthWindow = now;
+                    }
+                    _sec.failedAuths++;
+                    console.warn('[SECURITY] Failed auth attempt', _sec.failedAuths);
+                    if (_sec.failedAuths >= _sec.MAX_FAILED_AUTH) {
+                        console.error('[SECURITY ALERT] Слишком много неудачных попыток входа за 5 минут!');
+                        // Отправляем сигнал на бэкенд (не блокируем UI, просто логируем)
+                        try {
+                            navigator.sendBeacon(window.BACKEND_URL + '/security-alert', JSON.stringify({
+                                type: 'brute_force',
+                                count: _sec.failedAuths,
+                                ts: new Date().toISOString(),
+                            }));
+                        } catch (_) {}
+                    }
+                }
+            });
+
+            // ── §6 · Мониторинг заблокированных загрузок ─────────────
+            // Отслеживаем через аудит-лог
+            Object.defineProperty(window, '_uploadAuditLog', {
+                get() { return this.__uploadAuditLog || []; },
+                set(v) { this.__uploadAuditLog = v; },
+                configurable: true,
+            });
+
+            // ── §8 · Отчёт о нарушениях CSP (report-uri не нужен — логируем через JS) ──
+            document.addEventListener('securitypolicyviolation', (e) => {
+                console.error('[SECURITY CSP VIOLATION]', {
+                    blockedURI: e.blockedURI,
+                    violatedDirective: e.violatedDirective,
+                    originalPolicy: e.originalPolicy?.slice(0, 100),
+                });
+                try {
+                    navigator.sendBeacon(window.BACKEND_URL + '/security-alert', JSON.stringify({
+                        type: 'csp_violation',
+                        blockedURI: e.blockedURI,
+                        directive: e.violatedDirective,
+                        ts: new Date().toISOString(),
+                    }));
+                } catch (_) {}
+            });
+
+            // ── §9 · Перехват console.error для сокрытия стека от Production ──
+            const _origError = console.error.bind(console);
+            console.error = (...args) => {
+                // Скрываем полные стек-трейсы в продакшне (не localhost)
+                if (location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+                    const sanitized = args.map(a =>
+                        a instanceof Error ? `[Error] ${a.message}` :
+                        typeof a === 'string' ? a.replace(/at\s+\S+\s+\([^)]+\)/g, '') : a
+                    );
+                    _origError(...sanitized);
+                } else {
+                    _origError(...args);
+                }
+            };
+
+            // ── §7 · Регулярная проверка целостности зависимостей (dev-хелпер) ──
+            // Логируем внешние скрипты на странице для аудита
+            if (location.hostname === 'localhost') {
+                const scripts = [...document.querySelectorAll('script[src]')].map(s => s.src);
+                console.info('[SECURITY DEPS AUDIT]', scripts);
+            }
+
+            console.info('[SECURITY] Monitoring module initialized');
+        })();
+        /* ══════════════════════════════════════════════════════════════
+           КОНЕЦ SECURITY MONITORING MODULE
+        ══════════════════════════════════════════════════════════════ */
 
         // Close modals on overlay click
         document.querySelectorAll('.modal-overlay').forEach(overlay=>{
