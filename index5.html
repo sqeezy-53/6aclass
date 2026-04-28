@@ -17,6 +17,12 @@
         })();
     </script>
 
+    <!-- E2E Security Module + Backend -->
+    <script>
+        window.BACKEND_URL = 'https://sixaclass.onrender.com/api';
+    </script>
+    <script src="e2e-security-refactor.js"></script>
+
     <style>
         /* ═══════════════════════════════════════
            DESIGN TOKENS — AURORA PREMIUM
@@ -2062,45 +2068,21 @@
 
         // Инициализация E2E для пользователя — вызывается при входе
         async function initE2EForUser(uid) {
-            // 1. Пробуем загрузить уже существующий приватный ключ
-            myPrivateKey = await loadPrivateKey(uid);
-
-            if (myPrivateKey) {
-                // Ключ есть — грузим публичный из Firebase
-                const snap = await getDoc(doc(db, 'users', uid));
-                const storedPublicB64 = snap.data()?.publicKey || null;
-
-                if (storedPublicB64) {
-                    // Проверяем: наш приватный ключ соответствует публичному в Firebase?
-                    // Шифруем тестовую строку публичным → пробуем расшифровать приватным
-                    try {
-                        const pubKey = await importPublicKey(storedPublicB64);
-                        const testCipher = await rsaEncrypt(pubKey, 'e2e_test');
-                        const testPlain  = await rsaDecrypt(myPrivateKey, testCipher);
-                        if (testPlain === 'e2e_test') {
-                            // Всё ок — ключи совпадают
-                            myPublicKeyB64 = storedPublicB64;
-                            return;
-                        }
-                    } catch(_) {}
-                    // Ключи НЕ совпадают — приватный из localStorage не подходит к публичному в Firebase
-                    // Это случается если пользователь очистил localStorage или зашёл с другого устройства
-                    // Генерируем новую пару — старые сообщения расшифровать не получится
-                    _dbgLog('e2e:key_mismatch', 'Regenerating RSA key pair');
+            try {
+                const result = await window.E2E.initE2EForUser(
+                    uid, db, doc, getDoc, setDoc
+                );
+                myPrivateKey   = result.privateKey;
+                myPublicKeyB64 = result.publicKeyB64;
+                if (!myPrivateKey) {
+                    _dbgLog('e2e:init', 'E2E отключён (пользователь отменил пароль)');
+                } else {
+                    _dbgLog('e2e:init', 'E2E инициализирован успешно');
                 }
+            } catch(e) {
+                _dbgLog('e2e:init:error', e.message);
+                console.error('[e2e] initE2EForUser failed:', e);
             }
-
-            // 2. Генерируем новую пару ключей
-            const pair = await generateKeyPair();
-            myPrivateKey   = pair.privateKey;
-            myPublicKeyB64 = await exportPublicKey(pair.publicKey);
-
-            // 3. Сохраняем приватный ключ ЛОКАЛЬНО (зашифрованный AES через uid+salt)
-            await savePrivateKey(uid, pair.privateKey);
-
-            // 4. Публичный ключ → Firebase (обновляем — новые сообщения будут шифроваться новым ключом)
-            await setDoc(doc(db, 'users', uid),
-                { publicKey: myPublicKeyB64 }, { merge: true });
         }
 
         // Получить публичный ключ любого пользователя из Firebase (без кеша — всегда свежий)
@@ -2190,80 +2172,17 @@
         }
 
 
-        // Настройки облака
-// ВНИМАНИЕ: unsigned upload preset виден любому в исходнике страницы.
-// Для защиты от злоупотреблений: в настройках Cloudinary включи ограничение
-// по allowed_formats, max_file_size и upload rate limit для этого preset.
-// Идеально — перейти на signed uploads через backend-сервер.
-const CLOUDINARY_URL = "https://api.cloudinary.com/v1_1/dvl3h61wd/auto/upload";
-const CLOUDINARY_PRESET = "chat_upload";
-// FIX: uploadToCloudinary ниже имеет timeout, проверки типа/размера и понятные ошибки.
-
-// Загрузка файла на Cloudinary с колбэком прогресса
-// onProgress(0..100) опционально
+        // Загрузка файла через бэкенд-прокси (ключи Cloudinary только на сервере)
 async function uploadToCloudinary(file, onProgress) {
-    return new Promise((resolve, reject) => {
-        if (!(file instanceof File || file instanceof Blob)) {
-            reject(new Error('Передан не файл'));
-            return;
-        }
-
-        const sizeMb = file.size / 1024 / 1024;
-        const type = file.type || '';
-        const isImage = type.startsWith('image/');
-        const isAudio = type.startsWith('audio/');
-
-        if (!isImage && !isAudio) {
-            reject(new Error('Можно загружать только картинки и аудио'));
-            return;
-        }
-        if (isImage && sizeMb > 10) {
-            reject(new Error('Картинка больше 10 МБ'));
-            return;
-        }
-        if (isAudio && sizeMb > 15) {
-            reject(new Error('Аудио больше 15 МБ'));
-            return;
-        }
-
-        const xhr = new XMLHttpRequest();
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('upload_preset', CLOUDINARY_PRESET);
-        xhr.timeout = 45000;
-
-        if (onProgress) {
-            xhr.upload.addEventListener('progress', e => {
-                if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
-            });
-        }
-
-        xhr.addEventListener('load', () => {
-            try {
-                const data = JSON.parse(xhr.responseText || '{}');
-                if (xhr.status < 200 || xhr.status >= 300) {
-                    reject(new Error(data.error?.message || `Cloudinary HTTP ${xhr.status}`));
-                    return;
-                }
-                if (!data.secure_url) {
-                    reject(new Error(data.error?.message || 'Cloudinary не вернул secure_url'));
-                    return;
-                }
-                if (!String(data.secure_url).startsWith('https://')) {
-                    reject(new Error('Cloudinary вернул небезопасную ссылку'));
-                    return;
-                }
-                resolve(data.secure_url);
-            } catch (e) {
-                reject(new Error('Cloudinary вернул не JSON: ' + e.message));
-            }
-        });
-        xhr.addEventListener('error', () => reject(new Error('Ошибка сети при загрузке в Cloudinary')));
-        xhr.addEventListener('timeout', () => reject(new Error('Cloudinary не ответил за 45 секунд')));
-        xhr.addEventListener('abort', () => reject(new Error('Загрузка отменена')));
-        xhr.open('POST', CLOUDINARY_URL);
-        xhr.send(formData);
-    });
+    if (!(file instanceof File || file instanceof Blob)) throw new Error('Передан не файл');
+    const sizeMb = file.size / 1024 / 1024;
+    const type = file.type || '';
+    const isImage = type.startsWith('image/');
+    const isAudio = type.startsWith('audio/');
+    if (isImage && sizeMb > 10) throw new Error('Картинка больше 10 МБ');
+    if (isAudio && sizeMb > 15) throw new Error('Аудио больше 15 МБ');
+    const uploadType = isImage ? 'image' : isAudio ? 'video' : 'raw';
+    return window.E2E.uploadViaBackend(file, onProgress, uploadType);
 }
 
 
@@ -2299,40 +2218,13 @@ function dataUrlToFile(dataUrl, filename) {
         const ADMIN_UIDS = new Set(['iMey77WyBccVB1wVFlqdWlrviLx2']);
 
         /* ══════════════════════════════════════════════════════
-           MODERATION — Perspective API + система варнов
+           MODERATION — через бэкенд (ключ только на сервере)
         ══════════════════════════════════════════════════════ */
-        const PERSPECTIVE_KEY      = 'AIzaSyAzVI05aBPPL0MVQIGOYssDvbpow_fXJSc';
         const TOXICITY_THRESHOLD   = 0.7;
         const MAX_WARNS            = 3;
 
-        /**
-         * Проверяет текст через Perspective API.
-         * Возвращает true если токсичность >= TOXICITY_THRESHOLD.
-         * При ошибке сети/API возвращает false (пропускает сообщение).
-         */
         async function checkToxicity(text) {
-            if (!text || !text.trim()) return false;
-            try {
-                const res = await fetch(
-                    `https://commentanalyzer.googleapis.com/v1alpha1/comments:analyze?key=${PERSPECTIVE_KEY}`,
-                    {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            comment: { text },
-                            languages: ['ru', 'en'],
-                            requestedAttributes: { TOXICITY: {} }
-                        })
-                    }
-                );
-                if (!res.ok) return false; // не ломаем чат при проблемах с API
-                const data = await res.json();
-                const score = data?.attributeScores?.TOXICITY?.summaryScore?.value ?? 0;
-                return score >= TOXICITY_THRESHOLD;
-            } catch (e) {
-                console.warn('[moderation] Perspective API недоступен:', e.message);
-                return false; // fail-open: пропускаем при ошибке сети
-            }
+            return window.E2E.checkToxicity(text);
         }
 
         /**
