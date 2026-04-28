@@ -34,9 +34,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ── Конфигурация (НИКОГДА не хардкоди эти значения в коде) ──────
-PERSPECTIVE_API_KEY   = os.environ["PERSPECTIVE_API_KEY"]      # Google Perspective
-CLOUDINARY_CLOUD_NAME = os.environ["CLOUDINARY_CLOUD_NAME"]    # dvl3h61wd (пример)
-CLOUDINARY_UPLOAD_PRESET = os.environ["CLOUDINARY_UPLOAD_PRESET"]  # unsigned preset
+PERSPECTIVE_API_KEY   = os.environ.get("PERSPECTIVE_API_KEY", "")      # Google Perspective
+CLOUDINARY_CLOUD_NAME = os.environ.get("CLOUDINARY_CLOUD_NAME", "")    # dvl3h61wd (пример)
+CLOUDINARY_UPLOAD_PRESET = os.environ.get("CLOUDINARY_UPLOAD_PRESET", "")  # unsigned preset
 CLOUDINARY_API_KEY    = os.environ.get("CLOUDINARY_API_KEY", "")
 CLOUDINARY_API_SECRET = os.environ.get("CLOUDINARY_API_SECRET", "")
 ALLOWED_ORIGINS       = os.environ.get("ALLOWED_ORIGINS", "https://6aclass.online").split(",")
@@ -51,7 +51,7 @@ MAX_UPLOAD_BYTES = int(os.environ.get("MAX_UPLOAD_BYTES", str(50 * 1024 * 1024))
 ALLOWED_MIME_TYPES = {
     "image/jpeg", "image/png", "image/webp", "image/gif",
     "audio/webm", "audio/ogg", "audio/mpeg", "audio/mp4",
-    "audio/wav", "video/webm",
+    "audio/wav", "audio/x-wav", "audio/aac", "audio/flac", "video/webm",
     "application/octet-stream",  # зашифрованные E2E-блобы
 }
 
@@ -101,8 +101,19 @@ app.add_middleware(
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["GET", "POST"],
-    allow_headers=["Content-Type", "Authorization"],
+    allow_headers=["Content-Type", "Authorization", "X-Request-Id"],
 )
+
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault("Permissions-Policy", "camera=(), geolocation=(), payment=(), usb=()")
+    response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload")
+    return response
 
 # ══════════════════════════════════════════════════════════════════
 #  § 1  HEALTHCHECK
@@ -195,6 +206,39 @@ async def moderate(request: Request, body: ModerateRequest):
     return JSONResponse({"toxic": is_toxic, "score": round(max_score, 4)})
 
 
+
+DANGEROUS_EXTENSIONS = {
+    "exe", "dll", "bat", "cmd", "com", "scr", "msi", "ps1", "sh", "php", "phtml", "js", "jar", "py", "rb"
+}
+
+MAGIC_SIGNATURES = {
+    "image/jpeg": [b"\xff\xd8\xff"],
+    "image/png":  [b"\x89PNG\r\n\x1a\n"],
+    "image/gif":  [b"GIF87a", b"GIF89a"],
+    "image/webp": [b"RIFF"],
+    "audio/ogg":  [b"OggS"],
+    "audio/mpeg": [b"ID3", b"\xff\xfb", b"\xff\xf3", b"\xff\xf2"],
+    "audio/wav":  [b"RIFF"],
+    "audio/x-wav": [b"RIFF"],
+    "video/webm": [b"\x1a\x45\xdf\xa3"],
+}
+
+def validate_upload_content(filename: str, content_type: str, content: bytes, upload_type: str) -> None:
+    ext = (filename.rsplit('.', 1)[-1] if '.' in filename else '').lower()
+    if ext in DANGEROUS_EXTENSIONS:
+        raise HTTPException(status_code=415, detail="Опасное расширение файла запрещено")
+    if not content:
+        raise HTTPException(status_code=400, detail="Пустой файл")
+
+    header = content[:16]
+    if upload_type == "image":
+        allowed = MAGIC_SIGNATURES.get(content_type, [])
+        if not allowed or not any(header.startswith(sig) for sig in allowed):
+            raise HTTPException(status_code=415, detail="Содержимое файла не соответствует MIME-типу")
+    if b"<script" in content[:4096].lower() or b"<?php" in content[:4096].lower():
+        raise HTTPException(status_code=415, detail="Файл похож на исполняемый скрипт")
+
+
 # ══════════════════════════════════════════════════════════════════
 #  § 3  ЗАГРУЗКА ФАЙЛОВ — Cloudinary прокси
 # ══════════════════════════════════════════════════════════════════
@@ -239,6 +283,12 @@ async def upload(
     content_type = file.content_type or "application/octet-stream"
     if type != "raw" and content_type not in ALLOWED_MIME_TYPES:
         raise HTTPException(status_code=415, detail=f"Недопустимый MIME-тип: {content_type}")
+
+    validate_upload_content(file.filename or "upload", content_type, content, type)
+
+    if not CLOUDINARY_CLOUD_NAME or not CLOUDINARY_UPLOAD_PRESET:
+        logger.error("[upload] Cloudinary env is not configured")
+        raise HTTPException(status_code=500, detail="Загрузка файлов не настроена на сервере")
 
     # Для зашифрованных блобов всегда resource_type=raw
     resource_type = "raw" if type == "raw" else type
@@ -303,6 +353,21 @@ def _cloudinary_sign(params: dict) -> str:
     )
     payload = sorted_params + CLOUDINARY_API_SECRET
     return hashlib.sha256(payload.encode()).hexdigest()
+
+
+
+@app.post("/api/security-alert")
+async def security_alert(request: Request):
+    """Принимает клиентские security/audit события. Не раскрывает детали наружу."""
+    client_ip = get_client_ip(request)
+    if not check_rate_limit(client_ip, "security-alert"):
+        raise HTTPException(status_code=429, detail="Слишком много запросов")
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    logger.warning("[security-alert] ip=%s event=%s", client_ip, data.get("event", "unknown"))
+    return {"ok": True}
 
 
 # ══════════════════════════════════════════════════════════════════

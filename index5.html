@@ -11,7 +11,7 @@
     <meta http-equiv="Content-Security-Policy"
           content="
             default-src 'self';
-            script-src  'self' 'unsafe-inline' https://www.gstatic.com https://apis.google.com https://fonts.googleapis.com;
+            script-src  'self' 'unsafe-inline' https://www.gstatic.com https://apis.google.com https://fonts.googleapis.com https://cdnjs.cloudflare.com;
             style-src   'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com;
             font-src    'self' https://fonts.gstatic.com;
             img-src     'self' data: blob: https:;
@@ -1864,7 +1864,7 @@
     <!-- ══════════════════════════════════════════
          CRYPTOJS — шифрование сообщений
     ══════════════════════════════════════════ -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
 
     <!-- ══════════════════════════════════════════
          FIREBASE + LOGIC
@@ -2288,142 +2288,113 @@
             }
         }
 
-        // ── §2 · Получение подписанного URL с бэкенда ───────────────
-        async function _getSignedUploadUrl(fileName, mimeType, fileSize) {
-            const u = auth.currentUser;
-            if (!u) throw new Error('Не авторизован');
-            const idToken = await u.getIdToken(true); // §4 OAuth 2.0 / Firebase token
-            const resp = await fetch(`${window.BACKEND_URL}/signed-upload-url`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${idToken}`,      // §4
-                    'X-Request-Id': crypto.randomUUID(),
-                },
-                body: JSON.stringify({ fileName, mimeType, fileSize }),
-            });
-            if (!resp.ok) {
-                // §9 · Не показываем внутренние детали ошибки
-                const status = resp.status;
-                _auditLog('signed_url_error', { status, fileName, mimeType });
-                if (status === 429) throw new Error('Слишком много запросов. Попробуйте позже.');
-                if (status === 403) throw new Error('Нет доступа к загрузке файлов.');
-                throw new Error('Не удалось получить разрешение на загрузку. Попробуйте позже.');
-            }
-            const data = await resp.json();
-            if (!data.signedUrl || !data.fileId) throw new Error('Некорректный ответ сервера.');
-            return data; // { signedUrl, fileId, expiresAt }
-        }
-
-        // ── Основная функция загрузки на бэкенд (§1 · TLS + §2 · Signed URL) ──
+        // ── Основная функция загрузки через существующий бэкенд /api/upload ──
         async function uploadToBackend(file, onProgress) {
-            // §9 · Все ошибки перехватываем и нормализуем
             try {
-                // §5 · Проверка: это вообще File/Blob?
                 if (!(file instanceof File || file instanceof Blob))
                     throw new Error('Передан недопустимый объект вместо файла.');
 
-                // §5 · Проверка размера (глобальный потолок)
                 if (file.size > UPLOAD_MAX_BYTES)
-                    throw new Error(`Файл превышает максимальный размер (50 МБ).`);
+                    throw new Error('Файл превышает максимальный размер (50 МБ).');
 
-                const mimeType = file.type || '';
-                const fileName = file instanceof File ? file.name : 'upload';
+                const mimeType = file.type || 'application/octet-stream';
+                const fileName = file instanceof File ? file.name : 'upload.bin';
+                const ext = (fileName.split('.').pop() || '').toLowerCase();
 
-                // §5 · Проверка типа через MIME
                 if (!UPLOAD_ALLOWED_MIME.has(mimeType)) {
                     _auditLog('blocked_mime', { mimeType, fileName, size: file.size });
                     throw new Error('Тип файла не разрешён. Допустимы: изображения и аудио.');
                 }
 
-                // §5 · Проверка расширения
-                const ext = fileName.split('.').pop().toLowerCase();
                 if (!UPLOAD_ALLOWED_EXT.has(ext)) {
                     _auditLog('blocked_ext', { ext, mimeType, size: file.size });
                     throw new Error('Расширение файла не разрешено.');
                 }
 
                 const isImage = mimeType.startsWith('image/');
+                const isVideo = mimeType.startsWith('video/');
                 const isAudio = mimeType.startsWith('audio/');
 
-                // §5 · Размер по типу
                 if (isImage && file.size > UPLOAD_MAX_IMAGE_BYTES)
                     throw new Error('Картинка превышает 10 МБ.');
                 if (isAudio && file.size > UPLOAD_MAX_AUDIO_BYTES)
                     throw new Error('Аудио превышает 15 МБ.');
 
-                // §6 · Проверка «магических байтов» на клиенте (первичный фильтр)
                 const magicOk = await _checkMagicBytes(file);
                 if (!magicOk) {
                     _auditLog('blocked_magic_bytes', { mimeType, ext, size: file.size });
                     throw new Error('Содержимое файла не соответствует его типу. Загрузка отклонена.');
                 }
 
-                // §4 · Rate-limit
                 _checkUploadRateLimit();
-
                 _auditLog('upload_start', { mimeType, ext, size: file.size, name: fileName });
 
-                // §2 · Получаем подписанный URL от бэкенда
-                const { signedUrl, fileId } = await _getSignedUploadUrl(fileName, mimeType, file.size);
+                const uploadType = isImage ? 'image' : (isVideo ? 'video' : 'raw');
+                const form = new FormData();
+                form.append('file', file, fileName);
+                form.append('type', uploadType);
 
-                // §1 · Загружаем через HTTPS на подписанный URL
-                await new Promise((resolve, reject) => {
+                const idToken = auth.currentUser
+                    ? await auth.currentUser.getIdToken().catch(() => '')
+                    : '';
+
+                const url = await new Promise((resolve, reject) => {
                     const xhr = new XMLHttpRequest();
-                    xhr.open('PUT', signedUrl, true);
-                    xhr.setRequestHeader('Content-Type', mimeType);
+                    xhr.open('POST', `${window.BACKEND_URL}/upload`, true);
+                    if (idToken) xhr.setRequestHeader('Authorization', `Bearer ${idToken}`);
+
                     if (onProgress) {
                         xhr.upload.onprogress = (e) => {
-                            if (e.lengthComputable)
-                                onProgress(Math.round(e.loaded / e.total * 100));
+                            if (e.lengthComputable) onProgress(Math.round(e.loaded / e.total * 100));
                         };
                     }
+
                     xhr.onload = () => {
-                        if (xhr.status >= 200 && xhr.status < 300) resolve();
-                        else {
-                            // §9 · Не возвращаем детали ошибки сервера
-                            _auditLog('upload_put_error', { status: xhr.status, fileId });
-                            reject(new Error('Ошибка загрузки файла. Попробуйте позже.'));
+                        let data = null;
+                        try { data = JSON.parse(xhr.responseText || '{}'); } catch (_) {}
+
+                        if (xhr.status >= 200 && xhr.status < 300 && data && data.url) {
+                            if (!String(data.url).startsWith('https://')) {
+                                reject(new Error('Бэкенд вернул некорректный URL файла.'));
+                                return;
+                            }
+                            resolve(data.url);
+                            return;
                         }
+
+                        const detail = data && (data.detail || data.error || data.message);
+                        if (xhr.status === 413) reject(new Error(detail || 'Файл слишком большой.'));
+                        else if (xhr.status === 415) reject(new Error(detail || 'Тип файла не разрешён.'));
+                        else if (xhr.status === 429) reject(new Error('Слишком много запросов. Попробуйте позже.'));
+                        else reject(new Error(detail || 'Ошибка загрузки файла. Попробуйте позже.'));
                     };
                     xhr.onerror = () => reject(new Error('Сетевая ошибка при загрузке файла.'));
-                    xhr.send(file);
+                    xhr.send(form);
                 });
 
-                // §2 · Получаем публичный URL через бэкенд (никогда не через unsigned URL)
-                const u = auth.currentUser;
-                const idToken = await u.getIdToken();
-                const finalResp = await fetch(`${window.BACKEND_URL}/file-url/${fileId}`, {
-                    headers: { 'Authorization': `Bearer ${idToken}` },
-                });
-                if (!finalResp.ok) throw new Error('Не удалось получить ссылку на файл.');
-                const { url } = await finalResp.json();
-                if (!url || !url.startsWith('https://'))
-                    throw new Error('Бэкенд вернул некорректный URL файла.');
-
-                _auditLog('upload_success', { fileId, mimeType, size: file.size });
+                _auditLog('upload_success', { mimeType, size: file.size, uploadType });
                 return url;
 
             } catch (err) {
-                // §9 · Логируем полную ошибку, пользователю — нормализованное сообщение
                 _auditLog('upload_error', { message: err.message });
-                // Пробрасываем только «безопасные» сообщения (не стек, не внутренние данные)
                 const safeMessages = [
                     'Тип файла не разрешён',
                     'Расширение файла не разрешено',
                     'Картинка превышает',
                     'Аудио превышает',
                     'Файл превышает максимальный размер',
+                    'Файл слишком большой',
                     'Содержимое файла не соответствует',
                     'Слишком много загрузок',
                     'Слишком много запросов',
-                    'Нет доступа к загрузке',
-                    'Не удалось получить разрешение',
                     'Ошибка загрузки файла',
                     'Сетевая ошибка при загрузке',
                     'Не авторизован',
-                    'Не удалось получить ссылку',
+                    'Бэкенд вернул некорректный URL файла',
                     'Передан недопустимый объект',
+                    'Cloudinary не ответил',
+                    'Ошибка Cloudinary',
+                    'Cloudinary не вернул ссылку',
                 ];
                 const isSafe = safeMessages.some(m => err.message?.startsWith(m));
                 throw new Error(isSafe ? err.message : 'Ошибка загрузки. Попробуйте позже.');
@@ -3865,11 +3836,11 @@ function dataUrlToFile(dataUrl, filename) {
                     if (target.type === 'group') {
                         const groupMsg = {
                             ...base,
-                            text: payload.text ? encryptMessage(payload.text) : '',
+                            text: payload.text || '',
                             ...(payload.imageUrl ? { imageUrl: payload.imageUrl } : {}),
                             ...(payload.voiceUrl ? { voiceUrl: payload.voiceUrl, voiceDuration: payload.voiceDuration || 0, voiceMime: payload.voiceMime || 'audio/webm' } : {}),
                             ...(payload.music?.url ? { musicUrl: payload.music.url, musicTitle: payload.music.title, musicDuration: Math.round(payload.music.duration || 0), musicMime: payload.music.mime || 'audio/*' } : {}),
-                            ...(payload.checklist ? { checklist: payload.checklist, text: encryptMessage((payload.checklist.title || 'Чек-лист') + ': ' + (payload.checklist.items || []).join(', ')) } : {})
+                            ...(payload.checklist ? { checklist: payload.checklist, text: (payload.checklist.title || 'Чек-лист') + ': ' + (payload.checklist.items || []).join(', ') } : {})
                         };
                         await addDoc(messagesCol, groupMsg);
                     } else {
@@ -4777,16 +4748,9 @@ function dataUrlToFile(dataUrl, filename) {
             row.className='msg-row '+(isMe?'msg-row--me':'msg-row--other');
             if (!sameAuthor&&prevDocSnap) row.classList.add('msg-row--gap');
 
-            // E2E ЛС или AES групповой чат
-            const hasE2E = !!(d.e2eForPeer || d.e2eForMe);
-            let decryptedText;
-            if (hasE2E) {
-                // Для E2E: рендерим плейсхолдер, расшифруем асинхронно после
-                decryptedText = '🔒';
-            } else {
-                // AES групповой чат — синхронно
-                decryptedText = safeDecrypt(d.text||'');
-            }
+            // E2E включается только в личных чатах. Основной чат хранится и читается как обычный plaintext.
+            const hasE2E = currentChatMode === 'dm' && !!(d.e2eForPeer || d.e2eForMe);
+            let decryptedText = hasE2E ? '🔒' : safeDecrypt(d.text || '');
 
             row.dataset.msgId=id; row.dataset.id=id; row.dataset.plain=decryptedText;
             row.setAttribute('data-has-e2e', hasE2E ? '1' : '0');
@@ -4847,7 +4811,7 @@ function dataUrlToFile(dataUrl, filename) {
             if (d.forwarded){const fw=document.createElement('div');fw.style.cssText='font-size:.72rem;color:var(--accent);margin-bottom:4px;font-weight:600';fw.textContent='↗️ Переслано';bubble.appendChild(fw);}
 
             // Image (if any) — E2E: расшифровываем Cloudinary URL, затем показываем img
-            if (d.e2eImgForPeer || d.e2eImgForMe) {
+            if (currentChatMode === 'dm' && (d.e2eImgForPeer || d.e2eImgForMe)) {
                 const msgImg = document.createElement('img');
                 msgImg.className = 'msg-img'; msgImg.alt = '🖼 Загрузка…'; msgImg.loading = 'lazy';
                 msgImg.style.cssText = 'min-width:80px;min-height:60px;background:var(--surface-3)';
@@ -4879,7 +4843,7 @@ function dataUrlToFile(dataUrl, filename) {
             }
 
             // Voice message (if any) — поддержка E2E зашифрованных голосовых в ЛС
-            if (d.e2eVoiceForPeer || d.e2eVoiceForMe) {
+            if (currentChatMode === 'dm' && (d.e2eVoiceForPeer || d.e2eVoiceForMe)) {
                 // Показываем плейсхолдер, расшифровываем асинхронно
                 const voiceWrap = document.createElement('div');
                 voiceWrap.className = 'msg-voice';
@@ -4992,7 +4956,7 @@ function dataUrlToFile(dataUrl, filename) {
             }
 
             // Music message
-            if (d.e2eMusicForPeer || d.e2eMusicForMe) {
+            if (currentChatMode === 'dm' && (d.e2eMusicForPeer || d.e2eMusicForMe)) {
                 const musicPlaceholder = document.createElement('div');
                 musicPlaceholder.textContent = '🔒 Музыка (расшифровка...)';
                 musicPlaceholder.style.cssText = 'font-size:.85rem;color:var(--muted);padding:4px 0';
@@ -5022,7 +4986,7 @@ function dataUrlToFile(dataUrl, filename) {
             }
 
             // Checklist message — поддержка E2E зашифрованных чек-листов
-            if (d.e2eChecklistForPeer || d.e2eChecklistForMe) {
+            if (currentChatMode === 'dm' && (d.e2eChecklistForPeer || d.e2eChecklistForMe)) {
                 const clPlaceholder = document.createElement('div');
                 clPlaceholder.textContent = '🔒 Чек-лист (расшифровка...)';
                 clPlaceholder.style.cssText = 'font-size:.85rem;color:var(--muted);padding:4px 0';
@@ -6343,7 +6307,7 @@ musicSendBtn.addEventListener('click', async () => {
             try {
                 if (editingMessageId){
                     // Editing — text only, no image change
-                    if (currentChatMode==='group') await updateDoc(doc(db,'messages',editingMessageId),{text:encryptMessage(text),edited:true});
+                    if (currentChatMode==='group') await updateDoc(doc(db,'messages',editingMessageId),{text:text,edited:true});
                     else {
                         // E2E: шифруем отредактированный текст для обоих участников
                         const e2e = await encryptDM(text, currentDMPeerUid, u.uid);
@@ -6379,7 +6343,7 @@ musicSendBtn.addEventListener('click', async () => {
                         }
                         msgData={
                             uid:u.uid, author:displayNick(u),
-                            text: text ? encryptMessage(text) : '',
+                            text: text || '',
                             createdAt:serverTimestamp(), edited:false,
                             ...(hasImg && pendingImageUrl ? {imageUrl: pendingImageUrl} : {}),
                             ...(replyingTo?{replyTo:{id:replyingTo.id,author:replyingTo.author,text:replyingTo.text.slice(0,100)}}:{})
