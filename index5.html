@@ -1355,71 +1355,106 @@
 
 
         /* ═══════════════════════════════════════
-           PATCH 2026-04: compact search, online count, settings drawer
+           FINAL FIX: unified profile panel + desktop modal + mini player
         ═══════════════════════════════════════ */
-        .online-bar { gap:10px; padding:8px 16px; }
-        .online-count-pill {
-            display:inline-flex; align-items:center; gap:8px;
-            padding:5px 12px; border-radius:999px;
-            background:var(--surface-2); border:1px solid var(--border);
-            color:var(--text); font-size:.78rem; font-weight:800;
-            white-space:nowrap;
+        #profileModal {
+            background: rgba(0,0,0,.62);
+            backdrop-filter: blur(18px) saturate(145%);
+            -webkit-backdrop-filter: blur(18px) saturate(145%);
         }
-        .online-count-pill::before {
-            content:''; width:8px; height:8px; border-radius:50%;
-            background:var(--online-color); box-shadow:0 0 0 4px rgba(34,197,94,.12);
-        }
-        .online-status-note { color:var(--muted); font-size:.72rem; }
-
-        .header-search-wrap {
-            flex:0 0 38px !important; width:38px; max-width:38px !important;
-            height:38px; display:flex; align-items:center; justify-content:center;
-            border-radius:999px; transition:flex-basis var(--transition),max-width var(--transition),width var(--transition),background var(--transition);
-            cursor:pointer;
-        }
-        .header-search-wrap:hover { background:var(--surface-2); }
-        .header-search-wrap.is-open,
-        .header-search-wrap:focus-within {
-            flex-basis:min(260px,34vw) !important; width:min(260px,34vw); max-width:min(260px,34vw) !important;
-            background:transparent; cursor:text;
-        }
-        .header-search-wrap .header-search-icon { left:12px; pointer-events:none; z-index:2; }
-        .header-search-wrap .header-search {
-            width:38px; min-width:38px; padding-left:30px; opacity:0;
-            transition:opacity var(--transition),width var(--transition),border-color var(--transition),box-shadow var(--transition);
-        }
-        .header-search-wrap.is-open .header-search,
-        .header-search-wrap:focus-within .header-search {
-            width:100%; opacity:1;
-        }
-        @media(max-width:768px){
-            .header-search-wrap.is-open,
-            .header-search-wrap:focus-within { flex-basis:160px !important; width:160px; max-width:160px !important; }
-        }
-
-        #profileModal { place-items:stretch end; padding:0; }
         #profileModal .settings-drawer {
-            width:min(900px,100vw); max-width:none; height:100dvh; border-radius:28px 0 0 28px;
-            padding:0; display:grid; grid-template-columns:220px minmax(0,1fr);
-            overflow:hidden; animation:settingsDrawerIn .28s cubic-bezier(.4,0,.2,1);
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            box-shadow: var(--shadow-card), var(--shadow-glow);
+            overflow: hidden;
         }
-        @keyframes settingsDrawerIn { from{opacity:0;transform:translateX(36px)} to{opacity:1;transform:translateX(0)} }
-        .settings-nav { background:var(--surface-2); border-right:1px solid var(--border); padding:22px 14px; display:flex; flex-direction:column; gap:8px; }
-        .settings-nav-title { font-family:var(--font-display); font-size:1.1rem; font-weight:900; margin:0 8px 10px; }
-        .settings-tab-btn { border:none; background:transparent; color:var(--muted); border-radius:14px; padding:11px 13px; text-align:left; cursor:pointer; font:inherit; font-weight:800; transition:background var(--transition),color var(--transition),transform .15s; }
-        .settings-tab-btn:hover { background:var(--surface-3); color:var(--text); transform:translateX(2px); }
-        .settings-tab-btn.is-active { background:var(--accent-dim); color:var(--accent); box-shadow:inset 0 0 0 1px rgba(99,179,255,.18); }
-        .settings-content { min-width:0; overflow-y:auto; padding:28px min(34px,5vw); }
-        .settings-panel { display:none; animation:fadeInUp .2s ease both; }
+        .settings-hero {
+            display:flex; align-items:center; gap:18px;
+            padding:24px 26px 18px;
+            background:
+                radial-gradient(ellipse 120% 180% at 0% 0%, var(--accent-dim), transparent 52%),
+                var(--surface-2);
+            border-bottom:1px solid var(--border);
+        }
+        .settings-hero-info { flex:1; min-width:0; }
+        .settings-hero-title {
+            font-family:var(--font-display); font-size:1.25rem; font-weight:900;
+            letter-spacing:-.03em; margin-bottom:4px; white-space:nowrap;
+            overflow:hidden; text-overflow:ellipsis;
+        }
+        .settings-hero-sub { color:var(--muted); font-size:.82rem; line-height:1.45; }
+        .settings-tab-row {
+            display:flex; gap:8px; padding:14px 20px 0;
+            overflow-x:auto; scrollbar-width:none;
+        }
+        .settings-tab-row::-webkit-scrollbar { display:none; }
+        .settings-tab-btn {
+            border:1.5px solid var(--border-strong); background:transparent;
+            color:var(--muted); border-radius:999px; padding:9px 14px;
+            font:inherit; font-size:.82rem; font-weight:800; cursor:pointer;
+            white-space:nowrap; transition:background var(--transition),color var(--transition),border-color var(--transition),box-shadow var(--transition),transform .15s;
+        }
+        .settings-tab-btn:hover { background:var(--surface-2); color:var(--text); transform:translateY(-1px); }
+        .settings-tab-btn.is-active { background:var(--accent-dim); color:var(--accent); border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-dim); }
+        .settings-content { padding:20px 24px 24px; overflow:auto; min-height:0; }
+        .settings-panel { display:none; animation:fadeInUp .18s ease both; }
         .settings-panel.is-active { display:block; }
-        .settings-panel h3 { font-family:var(--font-display); font-size:1.25rem; font-weight:900; letter-spacing:-.03em; margin-bottom:18px; }
-        .settings-actions { position:sticky; bottom:0; display:flex; gap:10px; justify-content:flex-end; margin-top:24px; padding:16px 0 4px; background:linear-gradient(180deg,transparent,var(--glass-bg) 32%); backdrop-filter:blur(10px); }
-        @media(max-width:720px){
-            #profileModal .settings-drawer { grid-template-columns:1fr; border-radius:0; }
-            .settings-nav { flex-direction:row; overflow-x:auto; padding:12px; border-right:none; border-bottom:1px solid var(--border); }
-            .settings-nav-title { display:none; }
-            .settings-tab-btn { white-space:nowrap; flex-shrink:0; }
-            .settings-content { padding:20px 16px; }
+        .settings-panel h3 { font-family:var(--font-display); font-size:1.08rem; font-weight:900; letter-spacing:-.025em; margin:0 0 16px; }
+        .settings-actions { display:flex; justify-content:flex-end; gap:10px; padding:14px 24px 22px; border-top:1px solid var(--border); background:linear-gradient(180deg,transparent,var(--surface-glass)); }
+        .settings-help { font-size:.75rem; color:var(--muted); line-height:1.5; margin-top:7px; }
+        .music-url-row { display:flex; gap:8px; align-items:center; }
+        .music-url-row input { flex:1; }
+        .mini-profile-player {
+            position:fixed; left:18px; bottom:max(18px, env(safe-area-inset-bottom));
+            z-index:360; display:none; align-items:center; gap:10px;
+            width:min(320px, calc(100vw - 36px)); padding:10px 12px;
+            border-radius:20px; background:var(--surface-glass);
+            border:1px solid var(--glass-border); box-shadow:0 16px 48px rgba(0,0,0,.35);
+            backdrop-filter:blur(18px) saturate(150%); -webkit-backdrop-filter:blur(18px) saturate(150%);
+        }
+        .mini-profile-player.is-visible { display:flex; }
+        .mini-player-btn {
+            width:38px; height:38px; border-radius:50%; border:none; flex-shrink:0;
+            display:grid; place-items:center; cursor:pointer;
+            color:var(--accent-text); background:linear-gradient(135deg,var(--accent-strong),var(--accent));
+            box-shadow:0 6px 18px var(--bubble-me-glow); transition:transform .15s, filter .15s;
+        }
+        .mini-player-btn:hover { transform:scale(1.06); filter:brightness(1.08); }
+        .mini-player-info { min-width:0; flex:1; }
+        .mini-player-title { font-size:.82rem; font-weight:900; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .mini-player-sub { font-size:.68rem; color:var(--muted); margin-top:1px; }
+        .mini-player-close { border:none; background:transparent; color:var(--muted); cursor:pointer; font-size:1.05rem; border-radius:50%; width:28px; height:28px; }
+        .mini-player-close:hover { color:var(--danger); background:var(--danger-dim); }
+        .msg-read-tick { color:var(--muted); font-weight:800; }
+        .msg-read-tick.is-read { color:#38bdf8; }
+        [data-theme="light"] .msg-read-tick.is-read { color:#2563eb; }
+
+        @media (min-width:1024px) {
+            #profileModal { place-items:center; padding:34px; }
+            #profileModal .settings-drawer {
+                width:min(860px, calc(100vw - 90px));
+                height:auto; max-height:min(760px, calc(100dvh - 88px));
+                border-radius:30px; display:flex; flex-direction:column;
+                animation:modalIn .24s cubic-bezier(.34,1.2,.64,1);
+            }
+            #profileModal .settings-content { max-height:calc(100dvh - 310px); }
+        }
+        @media (max-width:1023px) {
+            #profileModal { place-items:stretch end; padding:0; }
+            #profileModal .settings-drawer {
+                width:min(480px, 100vw); max-width:none; height:100dvh;
+                border-radius:28px 0 0 28px; display:flex; flex-direction:column;
+                animation:slideInLeft .24s cubic-bezier(.4,0,.2,1) reverse;
+            }
+            #profileModal .settings-content { flex:1; }
+        }
+        @media (max-width:640px) {
+            #profileModal .settings-drawer { width:100vw; border-radius:0; }
+            .settings-hero { padding:20px 16px 14px; }
+            .settings-tab-row { padding:12px 14px 0; }
+            .settings-content { padding:18px 16px 20px; }
+            .settings-actions { padding:12px 16px 18px; }
+            .mini-profile-player { left:10px; right:10px; width:auto; bottom:max(10px, env(safe-area-inset-bottom)); }
         }
 
     </style>
@@ -1623,39 +1658,39 @@
         </div>
     </div>
 
-    <!-- Profile / settings drawer -->
+    <!-- Unified Profile / settings panel -->
     <div class="modal-overlay" id="profileModal">
-        <div class="modal-box settings-drawer">
-            <aside class="settings-nav" aria-label="Разделы настроек">
-                <div class="settings-nav-title">⚙️ Настройки</div>
-                <button type="button" class="settings-tab-btn is-active" data-settings-tab="profile">👤 Профиль</button>
-                <button type="button" class="settings-tab-btn" data-settings-tab="prefs">🎛 Настройки</button>
-                <button type="button" class="settings-tab-btn" data-settings-tab="music">🎵 Музыка</button>
-            </aside>
+        <div class="modal-box settings-drawer" role="dialog" aria-modal="true" aria-label="Панель профиля">
+            <div class="settings-hero">
+                <div class="profile-av-big" id="profileAvBig" title="Сменить аватарку" style="cursor:pointer"></div>
+                <div class="settings-hero-info">
+                    <div class="settings-hero-title" id="settingsHeroName">Профиль</div>
+                    <div class="settings-hero-sub">Аватар, ник, статус, оформление и музыка профиля.</div>
+                    <button type="button" class="btn btn-ghost" id="btnChangeAvatarInProfile" style="margin-top:10px;padding:7px 12px;font-size:.8rem;width:fit-content">🖼 Сменить аватарку</button>
+                </div>
+            </div>
+
+            <div class="settings-tab-row" aria-label="Разделы профиля">
+                <button type="button" class="settings-tab-btn is-active" data-settings-tab="account">Аккаунт</button>
+                <button type="button" class="settings-tab-btn" data-settings-tab="appearance">Внешний вид</button>
+                <button type="button" class="settings-tab-btn" data-settings-tab="music">Музыка</button>
+            </div>
+
             <div class="settings-content">
-                <section class="settings-panel is-active" data-settings-panel="profile">
-                    <h3>👤 Профиль</h3>
-                    <div class="profile-av-row">
-                        <div class="profile-av-big" id="profileAvBig" title="Сменить аватарку" style="cursor:pointer"></div>
-                        <div style="display:flex;flex-direction:column;gap:8px">
-                            <div style="font-size:.82rem;color:var(--muted);line-height:1.5">Аватар и имя видны всем участникам чата.</div>
-                            <button type="button" class="btn btn-ghost" id="btnChangeAvatarInProfile" style="padding:7px 12px;font-size:.8rem;width:fit-content">🖼 Сменить аватарку</button>
-                        </div>
-                    </div>
+                <section class="settings-panel is-active" data-settings-panel="account">
+                    <h3>Аккаунт</h3>
                     <div class="modal-field">
                         <label for="profileName">Имя / ник <span style="font-size:.7rem;color:var(--muted);font-weight:400">(только визуально, не меняет аккаунт)</span></label>
                         <input type="text" id="profileName" maxlength="32" placeholder="Твой ник" autocomplete="off">
-                        <div id="nickPreview" style="margin-top:6px;font-size:.8rem;color:var(--muted);display:none">Предпросмотр: <strong id="nickPreviewText" style="color:var(--accent)"></strong></div>
+                        <div id="nickPreview" style="margin-top:6px;font-size:.8rem;color:var(--muted);display:none">
+                            Предпросмотр: <strong id="nickPreviewText" style="color:var(--accent)"></strong>
+                        </div>
                         <div id="nickError" style="margin-top:4px;font-size:.76rem;color:var(--danger);display:none"></div>
                     </div>
                     <div class="modal-field">
                         <label for="profileBio">О себе</label>
                         <textarea id="profileBio" maxlength="200" placeholder="Несколько слов о себе…"></textarea>
                     </div>
-                </section>
-
-                <section class="settings-panel" data-settings-panel="prefs">
-                    <h3>🎛 Настройки</h3>
                     <div class="modal-field">
                         <label>Статус</label>
                         <div class="profile-status-row" id="profileStatusRow">
@@ -1664,8 +1699,12 @@
                             <button type="button" class="status-chip" data-status="dnd">🔴 Не беспокоить</button>
                             <button type="button" class="status-chip" data-status="invisible">⚫ Невидимка</button>
                         </div>
-                        <div style="font-size:.75rem;color:var(--muted);line-height:1.5;margin-top:8px">Невидимка убирает тебя из счётчика онлайна и показывает другим “не в сети”.</div>
+                        <div class="settings-help">Невидимка убирает тебя из счётчика онлайна и показывает другим «не в сети».</div>
                     </div>
+                </section>
+
+                <section class="settings-panel" data-settings-panel="appearance">
+                    <h3>Внешний вид</h3>
                     <div class="modal-field">
                         <label for="profileTheme">Тема оформления</label>
                         <select id="profileTheme">
@@ -1677,9 +1716,16 @@
                 </section>
 
                 <section class="settings-panel" data-settings-panel="music">
-                    <h3>🎵 Музыка профиля</h3>
+                    <h3>Музыка</h3>
+                    <div class="modal-field">
+                        <label for="profileMusicUrl">Ссылка на аудио</label>
+                        <div class="music-url-row">
+                            <input type="url" id="profileMusicUrl" placeholder="https://example.com/track.mp3" autocomplete="off">
+                        </div>
+                        <div class="settings-help">Лучше использовать прямую HTTPS-ссылку на аудиофайл: mp3, webm, ogg, wav.</div>
+                    </div>
                     <input type="file" id="profileMusicInput" accept="audio/*" style="display:none">
-                    <div id="profileMusicCard" style="display:none;align-items:center;gap:10px;background:var(--surface-2);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:12px;border:1px solid var(--border)">
+                    <div id="profileMusicCard" style="display:none;align-items:center;gap:10px;background:var(--surface-2);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:8px;border:1px solid var(--border)">
                         <span style="font-size:1.4rem;flex-shrink:0">🎵</span>
                         <div style="flex:1;overflow:hidden;min-width:0">
                             <div id="profileMusicTitle" style="font-size:.85rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">—</div>
@@ -1688,21 +1734,20 @@
                         <button type="button" id="profileMusicEditTitle" title="Изменить название" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:.9rem;padding:4px 6px;border-radius:6px;transition:color .15s">✏️</button>
                         <button type="button" id="profileMusicRemove" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:1.1rem;padding:4px;border-radius:50%">✕</button>
                     </div>
-                    <div class="modal-field" id="musicCustomTitleField" style="display:none;margin-bottom:12px">
+                    <div class="modal-field" id="musicCustomTitleField" style="display:none;margin-bottom:0">
                         <label for="profileMusicCustomTitle" style="font-size:.68rem">Отображаемое название трека</label>
-                        <input type="text" id="profileMusicCustomTitle" maxlength="60" placeholder="Например: Gazan – 67 (Six Seven)" autocomplete="off">
+                        <input type="text" id="profileMusicCustomTitle" maxlength="60" placeholder="Например: мой трек" autocomplete="off">
                     </div>
-                    <div style="font-size:.78rem;color:var(--muted);margin-bottom:12px;line-height:1.5">Максимум 15 МБ. Поддерживаются mp3, ogg, m4a, wav и webm.</div>
-                    <div style="display:flex;gap:8px;margin-top:8px">
-                        <button type="button" class="btn btn-ghost" id="profileMusicBtn" style="flex:1;font-size:.82rem;padding:8px 12px">📁 Выбрать музыку</button>
+                    <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+                        <button type="button" class="btn btn-ghost" id="profileMusicBtn" style="flex:1;font-size:.82rem;padding:8px 12px">📁 Загрузить файл</button>
                         <button type="button" class="btn btn-ghost" id="profileMusicClearBtn" style="font-size:.82rem;padding:8px 12px;color:var(--danger);display:none">🗑 Удалить</button>
                     </div>
                 </section>
+            </div>
 
-                <div class="settings-actions">
-                    <button type="button" class="btn btn-ghost" id="profileCancel">Закрыть</button>
-                    <button type="button" class="btn btn-primary" id="profileSave">Сохранить</button>
-                </div>
+            <div class="settings-actions">
+                <button type="button" class="btn btn-ghost" id="profileCancel">Закрыть</button>
+                <button type="button" class="btn btn-primary" id="profileSave">Сохранить</button>
             </div>
         </div>
     </div>
@@ -1939,6 +1984,18 @@
     <!-- Shared overlays -->
     <div class="sheet-backdrop" id="sheetBackdrop"></div>
     <div class="ctx-menu" id="ctxMenu" role="menu"></div>
+
+    <div class="mini-profile-player" id="miniProfilePlayer" aria-live="polite">
+        <button type="button" class="mini-player-btn" id="miniProfilePlay" title="Играть / пауза">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="15" height="15"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        </button>
+        <div class="mini-player-info">
+            <div class="mini-player-title" id="miniProfileTitle">Музыка профиля</div>
+            <div class="mini-player-sub" id="miniProfileSub">готово к воспроизведению</div>
+        </div>
+        <button type="button" class="mini-player-close" id="miniProfileClose" title="Скрыть">×</button>
+    </div>
+
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <div class="reaction-picker" id="reactionPicker" style="display:none"></div>
 
@@ -2023,133 +2080,163 @@
            - При получении — расшифровываем своим приватным ключом
         ══════════════════════════════════════════════════════ */
 
+        const E2E_PRIVATE_KEY_PREFIX = 'e2e_privkey_';
         let myPrivateKey  = null;
         let myPublicKeyB64 = null;
-
-        // Кеш расшифрованных E2E-сообщений: msgId -> { sig, decoded }
+        // Кеш расшифрованных E2E текстов: msgId → plaintext
         const _e2eDecryptedCache = new Map();
-        // Object URL, созданные после E2E-расшифровки медиа: msgId -> Set<url>
-        const _e2eObjectUrls = new Map();
 
-        function e2eMsgSignature(msgData) {
-            return [
-                msgData?.e2eForPeer || '', msgData?.e2eForMe || '',
-                msgData?.e2eImgForPeer || '', msgData?.e2eImgForMe || '',
-                msgData?.e2eVoiceForPeer || '', msgData?.e2eVoiceForMe || '',
-                msgData?.e2eMusicForPeer || '', msgData?.e2eMusicForMe || '',
-                msgData?.e2eChecklistForPeer || '', msgData?.e2eChecklistForMe || '',
-                msgData?.edited ? '1' : '0'
-            ].join('|');
+        // ── Защита приватного ключа паролем (AES-GCM) ──
+        // Ключ шифруется через PBKDF2 из uid пользователя + фиксированной соли устройства.
+        // Это не замена паролю, но защищает от банального чтения localStorage расширениями —
+        // без uid (который знает только Firebase Auth сессия) расшифровать нельзя.
+        const E2E_KEY_SALT_PREFIX = 'e2e_salt_';
+
+        async function deriveKeyFromUid(uid, salt) {
+            const enc = new TextEncoder();
+            const baseKey = await crypto.subtle.importKey('raw', enc.encode(uid),
+                'PBKDF2', false, ['deriveKey']);
+            return crypto.subtle.deriveKey(
+                { name: 'PBKDF2', salt, iterations: 100_000, hash: 'SHA-256' },
+                baseKey, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']
+            );
         }
 
-        function registerMessageObjectUrl(msgId, url) {
-            if (!msgId || !url || !String(url).startsWith('blob:')) return;
-            if (!_e2eObjectUrls.has(msgId)) _e2eObjectUrls.set(msgId, new Set());
-            _e2eObjectUrls.get(msgId).add(url);
-        }
-
-        function revokeMessageObjectUrls(msgId) {
-            const urls = _e2eObjectUrls.get(msgId);
-            if (!urls) return;
-            urls.forEach(url => {
-                try { URL.revokeObjectURL(url); } catch (_) {}
-            });
-            _e2eObjectUrls.delete(msgId);
-        }
-
-        function revokeAllE2EObjectUrls() {
-            [..._e2eObjectUrls.keys()].forEach(revokeMessageObjectUrls);
-        }
-
-        async function e2eDecryptMessage(msgData, myUid, msgId) {
-            if (!msgData) return {};
-            const sig = e2eMsgSignature(msgData);
-            if (msgId && _e2eDecryptedCache.has(msgId)) {
-                const cached = _e2eDecryptedCache.get(msgId);
-                if (cached && cached.sig === sig) return cached.decoded;
-                revokeMessageObjectUrls(msgId);
+        // Сохранить приватный ключ в localStorage (зашифрованный AES-GCM через PBKDF2(uid))
+        async function savePrivateKey(uid, cryptoKey) {
+            const jwk = await crypto.subtle.exportKey('jwk', cryptoKey);
+            const plain = new TextEncoder().encode(JSON.stringify(jwk));
+            // Получаем или генерируем соль для этого браузера
+            let saltB64 = localStorage.getItem(E2E_KEY_SALT_PREFIX + uid);
+            let salt;
+            if (saltB64) {
+                salt = Uint8Array.from(atob(saltB64), c => c.charCodeAt(0));
+            } else {
+                salt = crypto.getRandomValues(new Uint8Array(16));
+                saltB64 = btoa(String.fromCharCode(...salt));
+                localStorage.setItem(E2E_KEY_SALT_PREFIX + uid, saltB64);
             }
-            const decoded = await window.E2E.decryptMessage(msgData, myUid, myPrivateKey);
-            if (msgId) {
-                ['imageObjectUrl', 'voiceObjectUrl', 'musicObjectUrl'].forEach(k => {
-                    if (decoded && decoded[k]) registerMessageObjectUrl(msgId, decoded[k]);
-                });
-                _e2eDecryptedCache.set(msgId, { sig, decoded });
+            const iv = crypto.getRandomValues(new Uint8Array(12));
+            const aesKey = await deriveKeyFromUid(uid, salt);
+            const cipher = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, aesKey, plain);
+            // Пакуем: [12 байт IV][зашифрованный JWK]
+            const blob = new Uint8Array(12 + cipher.byteLength);
+            blob.set(iv, 0); blob.set(new Uint8Array(cipher), 12);
+            localStorage.setItem(E2E_PRIVATE_KEY_PREFIX + uid, btoa(String.fromCharCode(...blob)));
+        }
+
+        // Загрузить приватный ключ из localStorage (расшифровываем AES-GCM)
+        async function loadPrivateKey(uid) {
+            const raw = localStorage.getItem(E2E_PRIVATE_KEY_PREFIX + uid);
+            if (!raw) return null;
+            try {
+                // Попытка 1: новый формат (зашифрованный blob)
+                const saltB64 = localStorage.getItem(E2E_KEY_SALT_PREFIX + uid);
+                if (saltB64) {
+                    const salt = Uint8Array.from(atob(saltB64), c => c.charCodeAt(0));
+                    const blob = Uint8Array.from(atob(raw), c => c.charCodeAt(0));
+                    const iv = blob.slice(0, 12);
+                    const cipher = blob.slice(12);
+                    const aesKey = await deriveKeyFromUid(uid, salt);
+                    const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, aesKey, cipher);
+                    const jwk = JSON.parse(new TextDecoder().decode(plain));
+                    return await crypto.subtle.importKey('jwk', jwk,
+                        { name: 'RSA-OAEP', hash: 'SHA-256' }, true, ['decrypt']);
+                }
+                // Попытка 2: старый формат (plaintext JWK) — миграция
+                const jwk = JSON.parse(raw);
+                if (jwk.kty) {
+                    const key = await crypto.subtle.importKey('jwk', jwk,
+                        { name: 'RSA-OAEP', hash: 'SHA-256' }, true, ['decrypt']);
+                    // Мигрируем: перезаписываем в защищённый формат
+                    await savePrivateKey(uid, key);
+                    return key;
+                }
+            } catch(e) { return null; }
+            return null;
+        }
+
+        // Сгенерировать новую пару ключей RSA-OAEP 2048
+        async function generateKeyPair() {
+            return crypto.subtle.generateKey(
+                { name: 'RSA-OAEP', modulusLength: 2048,
+                  publicExponent: new Uint8Array([1,0,1]), hash: 'SHA-256' },
+                true, ['encrypt', 'decrypt']
+            );
+        }
+
+        // Экспортировать публичный ключ в base64 (для хранения в Firebase)
+        async function exportPublicKey(cryptoKey) {
+            const spki = await crypto.subtle.exportKey('spki', cryptoKey);
+            return btoa(String.fromCharCode(...new Uint8Array(spki)));
+        }
+
+        // Импортировать публичный ключ из base64 (из Firebase)
+        async function importPublicKey(b64) {
+            const binary = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+            return crypto.subtle.importKey('spki', binary,
+                { name: 'RSA-OAEP', hash: 'SHA-256' },
+                true, ['encrypt']);
+        }
+
+        // Зашифровать строку публичным ключом → base64 (гибридный RSA+AES)
+        // RSA шифрует только AES-ключ, AES шифрует сам текст — без ограничений на длину
+        async function rsaEncrypt(publicKey, text) {
+            // 1. Генерируем одноразовый AES-256-GCM ключ
+            const aesKey = await crypto.subtle.generateKey(
+                { name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
+            const iv = crypto.getRandomValues(new Uint8Array(12));
+
+            // 2. Шифруем текст AES
+            const enc = new TextEncoder();
+            const cipherText = await crypto.subtle.encrypt(
+                { name: 'AES-GCM', iv }, aesKey, enc.encode(text));
+
+            // 3. Экспортируем AES-ключ и шифруем его RSA
+            const rawAesKey = await crypto.subtle.exportKey('raw', aesKey);
+            const encryptedAesKey = await crypto.subtle.encrypt(
+                { name: 'RSA-OAEP' }, publicKey, rawAesKey);
+
+            // 4. Пакуем всё в один base64: [2 байта длины RSA-части][RSA-ключ][IV][AES-шифртекст]
+            const keyLen = new Uint8Array(2);
+            new DataView(keyLen.buffer).setUint16(0, encryptedAesKey.byteLength);
+            const blob = new Uint8Array(
+                2 + encryptedAesKey.byteLength + 12 + cipherText.byteLength);
+            blob.set(keyLen, 0);
+            blob.set(new Uint8Array(encryptedAesKey), 2);
+            blob.set(iv, 2 + encryptedAesKey.byteLength);
+            blob.set(new Uint8Array(cipherText), 2 + encryptedAesKey.byteLength + 12);
+            return btoa(String.fromCharCode(...blob));
+        }
+
+        // Расшифровать base64 приватным ключом → строка (гибридный RSA+AES)
+        async function rsaDecrypt(privateKey, b64) {
+            try {
+                const blob = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+                const keyLen = new DataView(blob.buffer).getUint16(0);
+                const encryptedAesKey = blob.slice(2, 2 + keyLen);
+                const iv = blob.slice(2 + keyLen, 2 + keyLen + 12);
+                const cipherText = blob.slice(2 + keyLen + 12);
+
+                // 1. Расшифровываем AES-ключ через RSA
+                const rawAesKey = await crypto.subtle.decrypt(
+                    { name: 'RSA-OAEP' }, privateKey, encryptedAesKey);
+
+                // 2. Импортируем AES-ключ
+                const aesKey = await crypto.subtle.importKey(
+                    'raw', rawAesKey, { name: 'AES-GCM' }, false, ['decrypt']);
+
+                // 3. Расшифровываем текст AES
+                const plain = await crypto.subtle.decrypt(
+                    { name: 'AES-GCM', iv }, aesKey, cipherText);
+                return new TextDecoder().decode(plain);
+            } catch(e) {
+                return '[🔒 Не удалось расшифровать]';
             }
-            return decoded || {};
-        }
-
-        async function e2eDecryptText(msgData, myUid, msgId) {
-            const decoded = await e2eDecryptMessage(msgData, myUid, msgId);
-            return decoded.text || safeDecrypt(msgData?.text || '');
-        }
-
-        async function e2eDecryptReplyText(replyTo, msgUid, myUid) {
-            if (!replyTo || !myPrivateKey) return '';
-            const isMine = String(msgUid || '') === String(myUid || '');
-            const primary = isMine
-                ? (replyTo.e2eForMe || replyTo.e2eForPeer || '')
-                : (replyTo.e2eForPeer || replyTo.e2eForMe || '');
-            const fallback = primary === replyTo.e2eForPeer ? replyTo.e2eForMe : replyTo.e2eForPeer;
-            try {
-                if (primary) return await window.E2E.rsaDecrypt(myPrivateKey, primary);
-            } catch (_) {}
-            try {
-                if (fallback) return await window.E2E.rsaDecrypt(myPrivateKey, fallback);
-            } catch (_) {}
-            return '🔒';
-        }
-
-        async function e2eEncryptText(text, peerUid, myUid) {
-            return window.E2E.encryptDM(text || '', peerUid, myUid, myPrivateKey, db, doc, getDoc);
-        }
-
-        async function e2eUploadViaBackend(blob, onProgress) {
-            return window.E2E.uploadViaBackend(blob, onProgress, 'raw');
-        }
-
-        async function sendE2EDirectMessageTo({ convId, peerUid, authorName, ...payload }) {
-            const u = auth.currentUser;
-            if (!u) throw new Error('Нужно войти в аккаунт');
-            if (!convId || !peerUid) throw new Error('ЛС не выбрано');
-            const ok = await ensureDME2EUnlocked(u.uid);
-            if (!ok) throw new Error('ЛС не разблокированы');
-            return window.E2E.sendDirectMessage({
-                convId,
-                peerUid,
-                myUid: u.uid,
-                authorName: authorName || displayNick(u),
-                myPrivateKey,
-                firestoreDb: db,
-                fsCollection: collection,
-                fsAddDoc: addDoc,
-                fsSetDoc: setDoc,
-                fsDoc: doc,
-                fsGetDoc: getDoc,
-                fsServerTimestamp: serverTimestamp,
-                fsIncrement: increment,
-                uploadToCloudinary: e2eUploadViaBackend,
-                ...payload,
-            });
-        }
-
-        async function sendE2EDirectMessage(payload) {
-            return sendE2EDirectMessageTo({
-                convId: currentDMConvId,
-                peerUid: currentDMPeerUid,
-                ...payload,
-            });
-        }
-
-        async function blobFromUrl(url, fallbackType = 'application/octet-stream') {
-            const resp = await fetch(url);
-            if (!resp.ok) throw new Error('Не удалось прочитать медиа для пересылки');
-            const blob = await resp.blob();
-            if (blob.type) return blob;
-            return new Blob([await blob.arrayBuffer()], { type: fallbackType });
         }
 
         // Инициализация E2E для ЛС.
+        // ВАЖНО: больше НЕ вызывается при обычном входе в чат.
         // Мастер-код запрашивается только при первом открытии ЛС в текущей вкладке.
         let _e2eUnlockedUid = null;
         let _e2eUnlockPromise = null;
@@ -2208,8 +2295,94 @@
             _e2eUnlockedUid = null;
             _e2eUnlockPromise = null;
             _e2eDecryptedCache.clear();
-            revokeAllE2EObjectUrls();
         }
+
+        // Получить публичный ключ любого пользователя из Firebase (без кеша — всегда свежий)
+        const _pubKeyCache = {};
+        async function getPeerPublicKey(uid) {
+            // Всегда берём свежий ключ из Firebase — не кешируем
+            const snap = await getDoc(doc(db, 'users', uid));
+            const b64  = snap.data()?.publicKey;
+            if (!b64) return null;
+            return importPublicKey(b64);
+        }
+
+        // Зашифровать ЛС-сообщение для отправки
+        // Шифруем ДВА раза: для получателя И для себя (чтобы видеть своё)
+        async function encryptDM(text, peerUid, myUid) {
+            if (!text) return { forPeer: '', forMe: '' };
+            const peerKey = await getPeerPublicKey(peerUid);
+            if (!peerKey) {
+                // У получателя нет ключа — он ещё не заходил после обновления
+                throw new Error('У собеседника нет ключа шифрования. Попроси его перезайти в чат.');
+            }
+            try {
+                const myKey = await importPublicKey(myPublicKeyB64);
+                const [forPeer, forMe] = await Promise.all([
+                    rsaEncrypt(peerKey, text),
+                    rsaEncrypt(myKey, text)
+                ]);
+                return { forPeer, forMe };
+            } catch(e) {
+                console.error('encryptDM error', e);
+                throw new Error('Ошибка шифрования: ' + e.message);
+            }
+        }
+
+        // Расшифровать входящее ЛС-сообщение
+        // Если я отправитель — расшифровываем forMe, иначе — forPeer
+        // Пробуем оба поля если первое не работает (защита от рассинхронизации ключей)
+        async function decryptDM(msgData, myUid) {
+            if (!myPrivateKey) return '[🔒 Нет ключа]';
+            const cipher = pickE2ECipher(msgData, myUid, 'e2eForPeer', 'e2eForMe');
+            if (!cipher) {
+                // Старое сообщение без E2E — пробуем AES-расшифровку
+                return safeDecrypt(msgData.text || '');
+            }
+            // Пробуем основной cipher
+            try {
+                const result = await rsaDecrypt(myPrivateKey, cipher);
+                if (result && !result.startsWith('[')) return result;
+            } catch (_) {}
+            // Пробуем второй вариант (forPeer если был forMe и наоборот)
+            const alt = cipher === msgData.e2eForPeer ? msgData.e2eForMe : msgData.e2eForPeer;
+            if (alt && alt !== cipher) {
+                try {
+                    const result2 = await rsaDecrypt(myPrivateKey, alt);
+                    if (result2 && !result2.startsWith('[')) return result2;
+                } catch (_) {}
+            }
+            // Fallback: старый AES
+            const aesResult = safeDecrypt(msgData.text || '');
+            if (aesResult && !aesResult.startsWith('[')) return aesResult;
+            return '[🔒 Ошибка расшифровки]';
+        }
+
+        function pickE2ECipher(msgData, myUid, forPeerField, forMeField) {
+            if (!msgData) return '';
+            const isMine = String(msgData.uid || '') === String(myUid || '');
+            return isMine
+                ? (msgData[forMeField] || msgData[forPeerField] || '')
+                : (msgData[forPeerField] || msgData[forMeField] || '');
+        }
+
+        async function decryptE2EField(msgData, myUid, forPeerField, forMeField) {
+            if (!myPrivateKey) throw new Error('Нет приватного ключа для расшифровки');
+            const cipher = pickE2ECipher(msgData, myUid, forPeerField, forMeField);
+            if (!cipher) return '';
+            return rsaDecrypt(myPrivateKey, cipher);
+        }
+
+        async function encryptDMToFields(text, peerUid, myUid, forPeerField, forMeField, plainField) {
+            try {
+                const e2e = await encryptDM(text, peerUid, myUid);
+                return { [forPeerField]: e2e.forPeer, [forMeField]: e2e.forMe };
+            } catch (e) {
+                console.warn('[dm aes fallback]', e.message);
+                return { [plainField]: encryptMessage(text) };
+            }
+        }
+
 
         /* ══════════════════════════════════════════════════════════════
            SECURE FILE UPLOAD MODULE — без Cloudinary
@@ -2310,7 +2483,7 @@
                 if (file.size > UPLOAD_MAX_BYTES)
                     throw new Error('Файл превышает максимальный размер (50 МБ).');
 
-                const mimeType = normalizeMimeType(file.type || 'application/octet-stream');
+                const mimeType = file.type || 'application/octet-stream';
                 const fileName = file instanceof File ? file.name : 'upload.bin';
                 const ext = (fileName.split('.').pop() || '').toLowerCase();
 
@@ -2626,6 +2799,7 @@ function dataUrlToFile(dataUrl, filename) {
         let replyingTo            = null;           // { id, author, text }
         let selectedAvatar        = null;
         let onlineUnsub           = null;
+        let onlinePingTimer      = null;
         let sidebarDMUnsub        = null;
         let peerReadUnsub         = null;           // listener for peer's unread count
         let peerHasRead           = false;          // true = peer read our last msg
@@ -2638,7 +2812,6 @@ function dataUrlToFile(dataUrl, filename) {
         let currentDMPeerName     = null;
         let currentDMConvId       = null;
         let onlineUsers           = {};             // uid → name
-        let userStatuses          = {};             // uid → online | away | dnd
         let sidebarItems          = [];             // DM items
         let selectedMessages      = new Set();      // multi-select msg ids
         let isSelectionMode       = false;
@@ -3036,12 +3209,13 @@ function dataUrlToFile(dataUrl, filename) {
             let dmItems = sidebarItems.filter(x=>x.type==='dm');
 
             // Filter by folder
-            if (currentFolder === 'unread') dmItems = dmItems.filter(x => (x.unread || 0) > 0 && !isArchived(x.id));
-            else if (currentFolder === 'archived') dmItems = dmItems.filter(x => isArchived(x.id));
-            else dmItems = dmItems.filter(x => !isArchived(x.id));
+            if (currentFolder === 'dm') { /* only dm – hide group */ }
+            if (currentFolder === 'unread') dmItems = dmItems.filter(x=>x.unread>0);
+            if (currentFolder === 'archived') { dmItems = dmItems.filter(x=>isArchived(x.id)); }
+            else dmItems = dmItems.filter(x=>!isArchived(x.id));
 
-            // Search filter. Group is shown only in "Все" so archive/unread do not leak it.
-            let allItems = currentFolder === 'all' ? [groupItem, ...dmItems] : dmItems;
+            // Search filter
+            let allItems = currentFolder==='dm' ? dmItems : [groupItem, ...dmItems];
             if (q) {
                 allItems = allItems.filter(x=>x.name.toLowerCase().includes(q));
                 // Also surface online users not in DMs
@@ -3097,7 +3271,7 @@ function dataUrlToFile(dataUrl, filename) {
             }
             avWrap.appendChild(avInner);
             // Online dot
-            if (item.type==='dm'&&item.peerUid&&isUidOnline(item.peerUid)) {
+            if (item.type==='dm'&&item.peerUid&&onlineUsers[item.peerUid]) {
                 const dot=document.createElement('span'); dot.className='cli-online-dot'; avWrap.appendChild(dot);
             }
 
@@ -3233,52 +3407,44 @@ function dataUrlToFile(dataUrl, filename) {
         ══════════════════════════════ */
         function dmConvId(uid1, uid2) { return [uid1,uid2].sort().join('_'); }
 
-        /* Mark DM as read for current user */
-        async function markDMRead() {
-            const u=auth.currentUser;
-            if (!u||currentChatMode!=='dm'||!currentDMConvId) return;
+        /* Mark DM messages as read for current user.
+           Read receipts are per-message: outgoing message shows ✓✓ only when msg.readBy contains peerUid. */
+        let _markReadInFlight = false;
+        async function markAsRead(chatId = currentDMConvId) {
+            const u = auth.currentUser;
+            if (!u || currentChatMode !== 'dm' || !chatId || !currentDMPeerUid || _markReadInFlight) return;
+            _markReadInFlight = true;
             try {
-                await updateDoc(doc(db,'dmConvs',currentDMConvId),{[`unread.${u.uid}`]:0,[`readBy.${u.uid}`]:serverTimestamp()});
-            } catch(_){}
+                await updateDoc(doc(db,'dmConvs',chatId), { [`unread.${u.uid}`]: 0 }).catch(()=>{});
+                const qUnread = query(
+                    collection(db,'dmConvs',chatId,'messages'),
+                    where('uid','==',currentDMPeerUid),
+                    limit(80)
+                );
+                const snap = await getDocs(qUnread);
+                const batch = writeBatch(db);
+                let updates = 0;
+                snap.forEach(ms => {
+                    const data = ms.data() || {};
+                    const readBy = Array.isArray(data.readBy) ? data.readBy.map(String) : [];
+                    if (!readBy.includes(String(u.uid))) {
+                        batch.update(ms.ref, { readBy: arrayUnion(u.uid) });
+                        updates++;
+                    }
+                });
+                if (updates > 0) await batch.commit();
+            } catch(e) {
+                // If Firestore rules have not yet allowed readBy updates, keep UI usable.
+                console.warn('[read receipts] markAsRead failed:', e?.message || e);
+            } finally {
+                _markReadInFlight = false;
+            }
         }
+        async function markDMRead() { return markAsRead(currentDMConvId); }
 
-        /* Watch whether the peer has read our messages.
-           readBy.<uid> is written when a participant opens the DM or scrolls to bottom.
-           This avoids the old race where unread started at 0 and our ✓✓ state never changed.
-        */
-        let _peerHadUnread = false;
-
-        function _tsMillis(v) {
-            if (!v) return 0;
-            if (typeof v.toMillis === 'function') return v.toMillis();
-            if (typeof v === 'number') return v;
-            return 0;
-        }
-        function updateAllReadTicks() {
-            chatMessages.querySelectorAll('.msg-read-tick').forEach(t=>{
-                t.textContent = peerHasRead ? '✓✓' : '✓';
-                t.style.color  = peerHasRead ? 'var(--accent)' : '';
-            });
-        }
         function startPeerReadListener(convId, peerUid) {
             if (peerReadUnsub) { peerReadUnsub(); peerReadUnsub=null; }
             peerHasRead = false;
-            _peerHadUnread = false;
-            peerReadUnsub = onSnapshot(doc(db,'dmConvs',convId), snap=>{
-                if (!snap.exists()) return;
-                const data = snap.data();
-                const peerUnread = (data.unread||{})[peerUid] ?? 0;
-                const peerReadAt = _tsMillis((data.readBy||{})[peerUid]);
-                const lastAt = _tsMillis(data.lastAt);
-
-                if (peerUnread > 0) _peerHadUnread = true;
-                const nowRead = (peerReadAt && (!lastAt || peerReadAt >= lastAt - 1500)) || (_peerHadUnread && peerUnread === 0);
-
-                if (nowRead !== peerHasRead) {
-                    peerHasRead = !!nowRead;
-                    updateAllReadTicks();
-                }
-            });
         }
 
         // DM header click → profile of peer
@@ -3318,10 +3484,9 @@ function dataUrlToFile(dataUrl, filename) {
             if (avatarCache[peerUid]) applyAvatarToEl(tgHeaderAv,peerUid,peerName,peerName,avatarCache[peerUid]);
             else renderAvatarCircle(tgHeaderAv,peerUid,peerName,peerName);
             tgHeaderName.textContent=peerName;
-            const online = isUidOnline(peerUid);
-            const peerStatus = userStatuses[peerUid] || 'offline';
-            tgHeaderStatus.textContent = online ? statusLabel(peerStatus) : 'не в сети';
-            tgHeaderStatus.classList.toggle('online', online && peerStatus === 'online');
+            const online = onlineUsers[peerUid];
+            tgHeaderStatus.textContent=online?'в сети':'не в сети';
+            tgHeaderStatus.classList.toggle('online',!!online);
             pinnedBanner.classList.remove('is-on');
             // Bind profile click on DM header
             _bindDMHeaderProfile(peerUid, peerName);
@@ -3335,7 +3500,8 @@ function dataUrlToFile(dataUrl, filename) {
             const convRef=doc(db,'dmConvs',currentDMConvId);
             try {
                 await setDoc(convRef,{members:[u.uid,peerUid],names:{[u.uid]:displayNick(u),[peerUid]:peerName}},{merge:true});
-                await updateDoc(convRef,{[`unread.${u.uid}`]:0,[`readBy.${u.uid}`]:serverTimestamp()}).catch(()=>{});
+                await updateDoc(convRef,{[`unread.${u.uid}`]:0}).catch(()=>{});
+                markAsRead(currentDMConvId);
             } catch(_){}
 
             // Subscribe DM messages
@@ -3431,6 +3597,11 @@ function dataUrlToFile(dataUrl, filename) {
             document.querySelectorAll('.status-chip').forEach(c=>c.classList.toggle('is-active',c.dataset.status===(userProfile.status||'online')));
             // Theme select
             document.getElementById('profileTheme').value = localStorage.getItem(THEME_KEY)||'dark';
+            // Header + reset tabs
+            const heroName = document.getElementById('settingsHeroName');
+            if (heroName) heroName.textContent = displayNick(u);
+            document.querySelectorAll('.settings-tab-btn').forEach(btn => btn.classList.toggle('is-active', btn.dataset.settingsTab === 'account'));
+            document.querySelectorAll('.settings-panel').forEach(panel => panel.classList.toggle('is-active', panel.dataset.settingsPanel === 'account'));
             // Reset music state and load existing
             _profileMusicB64 = null; _profileMusicAction = null;
             _hideProfileMusicCard();
@@ -3439,20 +3610,19 @@ function dataUrlToFile(dataUrl, filename) {
         }
         document.getElementById('profileAvBig').addEventListener('click', openAvatarModal);
         document.getElementById('btnChangeAvatarInProfile').addEventListener('click', openAvatarModal);
+
+        document.querySelectorAll('.settings-tab-btn').forEach(btn => btn.addEventListener('click', () => {
+            const tab = btn.dataset.settingsTab;
+            document.querySelectorAll('.settings-tab-btn').forEach(x => x.classList.toggle('is-active', x === btn));
+            document.querySelectorAll('.settings-panel').forEach(panel => panel.classList.toggle('is-active', panel.dataset.settingsPanel === tab));
+        }));
+
         document.querySelectorAll('.status-chip').forEach(c=>c.addEventListener('click',()=>{
             document.querySelectorAll('.status-chip').forEach(x=>x.classList.remove('is-active'));
             c.classList.add('is-active');
         }));
         document.getElementById('profileCancel').addEventListener('click', () => {
             document.getElementById('profileModal').classList.remove('is-open');
-            ChatPlayer.stop();
-        });
-        document.querySelectorAll('.settings-tab-btn').forEach(btn=>{
-            btn.addEventListener('click',()=>{
-                const tab = btn.dataset.settingsTab;
-                document.querySelectorAll('.settings-tab-btn').forEach(b=>b.classList.toggle('is-active', b===btn));
-                document.querySelectorAll('.settings-panel').forEach(p=>p.classList.toggle('is-active', p.dataset.settingsPanel===tab));
-            });
         });
         document.getElementById('userProfileClose').addEventListener('click',()=>{
             document.getElementById('userProfileModal').classList.remove('is-open');
@@ -3474,6 +3644,7 @@ function dataUrlToFile(dataUrl, filename) {
         const _pmRemove   = document.getElementById('profileMusicRemove');
         const _pmBtn      = document.getElementById('profileMusicBtn');
         const _pmClearBtn = document.getElementById('profileMusicClearBtn');
+        const _pmUrlInput = document.getElementById('profileMusicUrl');
 
         /* ── Логика выбора музыки для профиля (Cloudinary) ── */
         if (_pmInput) {
@@ -3512,8 +3683,10 @@ function dataUrlToFile(dataUrl, filename) {
                         });
                         
                         _showProfileMusicCard(displayTitle, 'Сохранено ✓');
+                        if (_pmUrlInput) _pmUrlInput.value = url;
+                        updateMiniProfilePlayer({ url, title: displayTitle });
                         
-                        _pmCard.onclick = () => { ChatPlayer.playSimple(url); };
+                        _pmCard.onclick = () => { startMiniProfilePlayer(url, displayTitle); };
                     } catch (err) {
                         console.error("Ошибка БД:", err);
                         _showProfileMusicCard('Ошибка', 'Не удалось сохранить');
@@ -3536,20 +3709,22 @@ function dataUrlToFile(dataUrl, filename) {
                         musicBase64: deleteField()
                     });
                     _hideProfileMusicCard();
+                    if (_pmUrlInput) _pmUrlInput.value = '';
+                    updateMiniProfilePlayer(null);
                     showToast('Музыка удалена');
                 } catch (e) { showToast('Ошибка удаления'); }
             };
         }
 
         function _showProfileMusicCard(title, sizeStr) {
-            _pmTitle.textContent  = title;
-            _pmSize.textContent   = sizeStr;
-            _pmCard.style.display = 'flex';
-            _pmClearBtn.style.display = 'inline-flex';
+            if (_pmTitle) _pmTitle.textContent  = title;
+            if (_pmSize) _pmSize.textContent   = sizeStr;
+            if (_pmCard) _pmCard.style.display = 'flex';
+            if (_pmClearBtn) _pmClearBtn.style.display = 'inline-flex';
         }
         function _hideProfileMusicCard() {
-            _pmCard.style.display = 'none';
-            _pmClearBtn.style.display = 'none';
+            if (_pmCard) _pmCard.style.display = 'none';
+            if (_pmClearBtn) _pmClearBtn.style.display = 'none';
         }
 
         async function _loadExistingProfileMusic() {
@@ -3559,20 +3734,20 @@ function dataUrlToFile(dataUrl, filename) {
                 const snap = await getDoc(doc(db, 'users', u.uid));
                 if (snap.exists()) {
                     const d = snap.data();
+                    const customTitleField = document.getElementById('musicCustomTitleField');
+                    const customTitleInp = document.getElementById('profileMusicCustomTitle');
+                    if (_pmUrlInput) _pmUrlInput.value = d.musicUrl || '';
                     if (d.musicUrl) {
                         const displayTitle = d.musicTitle || 'Мой трек';
                         _showProfileMusicCard(displayTitle, 'Сохранено ✓');
-                        // Show custom title field pre-filled
-                        const customTitleField = document.getElementById('musicCustomTitleField');
-                        const customTitleInp = document.getElementById('profileMusicCustomTitle');
                         if (customTitleField) customTitleField.style.display = 'block';
                         if (customTitleInp) customTitleInp.value = displayTitle;
-                        // Превью трека профиля — через единый AudioManager
-                        _pmCard.onclick = () => { ChatPlayer.playSimple(d.musicUrl); };
+                        if (_pmCard) _pmCard.onclick = () => { startMiniProfilePlayer(d.musicUrl, displayTitle); };
+                        updateMiniProfilePlayer({ url: d.musicUrl, title: displayTitle });
                     } else {
                         if (typeof _hideProfileMusicCard === 'function') _hideProfileMusicCard();
-                        const customTitleField = document.getElementById('musicCustomTitleField');
                         if (customTitleField) customTitleField.style.display = 'none';
+                        updateMiniProfilePlayer(null);
                     }
                 }
             } catch(e) {
@@ -3628,6 +3803,77 @@ function dataUrlToFile(dataUrl, filename) {
                 if (val && _pmTitle) _pmTitle.textContent = val;
             });
         }
+
+        /* ── Мини-плеер профиля: не привязан к открытию чатов и не останавливается при переключении ── */
+        const miniProfilePlayer = document.getElementById('miniProfilePlayer');
+        const miniProfilePlay   = document.getElementById('miniProfilePlay');
+        const miniProfileTitle  = document.getElementById('miniProfileTitle');
+        const miniProfileSub    = document.getElementById('miniProfileSub');
+        const miniProfileClose  = document.getElementById('miniProfileClose');
+        const _miniAudio = new Audio();
+        let _miniTrack = null;
+
+        function _miniPlayIcon(isPlaying) {
+            if (!miniProfilePlay) return;
+            miniProfilePlay.innerHTML = isPlaying
+                ? '<svg viewBox="0 0 24 24" fill="currentColor" width="15" height="15"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>'
+                : '<svg viewBox="0 0 24 24" fill="currentColor" width="15" height="15"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
+        }
+        function updateMiniProfilePlayer(track) {
+            _miniTrack = track && track.url ? track : null;
+            if (!miniProfilePlayer) return;
+            if (!_miniTrack) {
+                miniProfilePlayer.classList.remove('is-visible');
+                _miniAudio.pause();
+                _miniPlayIcon(false);
+                return;
+            }
+            if (miniProfileTitle) miniProfileTitle.textContent = _miniTrack.title || 'Музыка профиля';
+            if (miniProfileSub) miniProfileSub.textContent = 'мини-плеер';
+            miniProfilePlayer.classList.add('is-visible');
+        }
+        function startMiniProfilePlayer(url, title) {
+            if (!url) return;
+            if (_miniAudio.src !== url) {
+                _miniAudio.src = url;
+                _miniAudio.currentTime = 0;
+                if (miniProfileTitle) miniProfileTitle.textContent = title || 'Музыка профиля';
+            }
+            miniProfilePlayer?.classList.add('is-visible');
+            _miniAudio.play().then(() => {
+                _miniPlayIcon(true);
+                if (miniProfileSub) miniProfileSub.textContent = 'играет';
+            }).catch(() => showToast('Не удалось воспроизвести музыку'));
+        }
+        miniProfilePlay?.addEventListener('click', () => {
+            if (!_miniTrack?.url) return;
+            if (!_miniAudio.paused) {
+                _miniAudio.pause();
+                _miniPlayIcon(false);
+                if (miniProfileSub) miniProfileSub.textContent = 'пауза';
+            } else {
+                startMiniProfilePlayer(_miniTrack.url, _miniTrack.title);
+            }
+        });
+        miniProfileClose?.addEventListener('click', () => {
+            miniProfilePlayer?.classList.remove('is-visible');
+            _miniAudio.pause();
+            _miniPlayIcon(false);
+        });
+        _miniAudio.addEventListener('ended', () => {
+            _miniPlayIcon(false);
+            if (miniProfileSub) miniProfileSub.textContent = 'завершено';
+        });
+        async function refreshMiniProfilePlayer() {
+            const u = auth.currentUser; if (!u) return;
+            try {
+                const snap = await getDoc(doc(db, 'users', u.uid));
+                if (!snap.exists()) return updateMiniProfilePlayer(null);
+                const d = snap.data();
+                updateMiniProfilePlayer(d.musicUrl ? { url: d.musicUrl, title: d.musicTitle || 'Музыка профиля' } : null);
+            } catch(_) {}
+        }
+
         /* ── Ник: валидация ── */
         const NICK_FORBIDDEN = /[<>&"'\/\\]/;
         function validateNick(v) {
@@ -3695,23 +3941,20 @@ function dataUrlToFile(dataUrl, filename) {
                 // 2. Firestore — единственный источник правды для ника
                 const firestoreUpdate = { displayName: rawName, bio, status };
 
-                // Music: save if new file selected; clear if user clicked delete
-                if (_profileMusicAction === 'set' && _profileMusicB64) {
-                    firestoreUpdate.musicBase64   = _profileMusicB64;
-                    firestoreUpdate.musicTitle    = _profileMusicTitleVal;
-                    firestoreUpdate.musicDuration = _profileMusicDur;
-                } else if (_profileMusicAction === 'clear') {
+                // Music: URL field is the source of truth for profile music.
+                const customTitleInp = document.getElementById('profileMusicCustomTitle');
+                const musicUrlRaw = (_pmUrlInput?.value || '').trim();
+                const musicTitleRaw = (customTitleInp?.value || '').trim();
+                if (_profileMusicAction === 'clear' || !musicUrlRaw) {
+                    firestoreUpdate.musicUrl      = deleteField();
                     firestoreUpdate.musicBase64   = deleteField();
                     firestoreUpdate.musicTitle    = deleteField();
                     firestoreUpdate.musicDuration = deleteField();
                 } else {
-                    const customTitleInp = document.getElementById('profileMusicCustomTitle');
-                    if (customTitleInp && customTitleInp.value.trim()) {
-                        const snap = await getDoc(doc(db,'users',u.uid));
-                        if (snap.exists() && snap.data().musicUrl) {
-                            firestoreUpdate.musicTitle = customTitleInp.value.trim();
-                        }
-                    }
+                    if (!/^https:\/\//i.test(musicUrlRaw)) throw new Error('Ссылка на музыку должна начинаться с https://');
+                    firestoreUpdate.musicUrl      = musicUrlRaw;
+                    firestoreUpdate.musicBase64   = deleteField();
+                    firestoreUpdate.musicTitle    = musicTitleRaw || 'Музыка профиля';
                 }
 
                 await setDoc(doc(db,'users',u.uid), firestoreUpdate, {merge:true});
@@ -3725,6 +3968,8 @@ function dataUrlToFile(dataUrl, filename) {
 
                 userProfile = {bio, status}; lsSet(PROFILE_KEY, userProfile);
                 _profileMusicAction = null;
+                if (firestoreUpdate.musicUrl && typeof firestoreUpdate.musicUrl === 'string') updateMiniProfilePlayer({ url: firestoreUpdate.musicUrl, title: firestoreUpdate.musicTitle || 'Музыка профиля' });
+                else if (_profileMusicAction === 'clear' || !((_pmUrlInput?.value || '').trim())) updateMiniProfilePlayer(null);
                 setTheme(theme);
                 renderSidebarUser();
                 try { pingOnline(); } catch(_){}
@@ -3813,51 +4058,36 @@ function dataUrlToFile(dataUrl, filename) {
                 } : null
             };
 
-            const hasE2E = !!(
-                srcData.e2eForPeer || srcData.e2eForMe ||
-                srcData.e2eImgForPeer || srcData.e2eImgForMe ||
-                srcData.e2eVoiceForPeer || srcData.e2eVoiceForMe ||
-                srcData.e2eMusicForPeer || srcData.e2eMusicForMe ||
-                srcData.e2eChecklistForPeer || srcData.e2eChecklistForMe
-            );
-
-            if (hasE2E) {
+            if (srcData.e2eForPeer || srcData.e2eForMe) {
                 if (!myPrivateKey) throw new Error('Нет ключа для пересылки E2E-сообщения');
-                const decoded = await e2eDecryptMessage(srcData, myUid, src.id || 'forward_' + Math.random().toString(36).slice(2));
-                if (decoded.text) payload.text = decoded.text;
-                if (decoded.imageObjectUrl) {
-                    payload.imageUrl = decoded.imageObjectUrl;
-                    payload.imageBlob = await blobFromUrl(decoded.imageObjectUrl, 'image/jpeg');
-                }
-                if (decoded.voiceObjectUrl) {
-                    payload.voiceUrl = decoded.voiceObjectUrl;
-                    payload.voiceBlob = await blobFromUrl(decoded.voiceObjectUrl, srcData.voiceMime || 'audio/webm');
-                    payload.voiceDuration = srcData.voiceDuration || 0;
-                    payload.voiceMime = srcData.voiceMime || 'audio/webm';
-                }
-                if (decoded.musicObjectUrl) {
-                    payload.music = {
-                        url: decoded.musicObjectUrl,
-                        blob: await blobFromUrl(decoded.musicObjectUrl, srcData.musicMime || 'audio/*'),
-                        title: srcData.musicTitle || 'Трек',
-                        duration: srcData.musicDuration || 0,
-                        mime: srcData.musicMime || 'audio/*'
-                    };
-                }
-                if (decoded.checklist) {
-                    const parsed = Array.isArray(decoded.checklist)
-                        ? { title: '', items: decoded.checklist, done: {} }
-                        : { title: decoded.checklist.title || '', items: decoded.checklist.items || [], done: decoded.checklist.done || {} };
-                    payload.checklist = parsed;
-                }
+                payload.text = await decryptDM(srcData, myUid);
+            }
+            if (srcData.e2eImgForPeer || srcData.e2eImgForMe)
+                payload.imageUrl = await decryptE2EField(srcData, myUid, 'e2eImgForPeer', 'e2eImgForMe');
+            if (srcData.e2eVoiceForPeer || srcData.e2eVoiceForMe)
+                payload.voiceUrl = await decryptE2EField(srcData, myUid, 'e2eVoiceForPeer', 'e2eVoiceForMe');
+            if (srcData.e2eChecklistForPeer || srcData.e2eChecklistForMe) {
+                const plain = await decryptE2EField(srcData, myUid, 'e2eChecklistForPeer', 'e2eChecklistForMe');
+                const parsed = JSON.parse(plain);
+                payload.checklist = { title: parsed.title || '', items: parsed.items || [], done: {} };
+            }
+            if (srcData.e2eMusicForPeer || srcData.e2eMusicForMe) {
+                const plain = await decryptE2EField(srcData, myUid, 'e2eMusicForPeer', 'e2eMusicForMe');
+                const parsed = JSON.parse(plain);
+                payload.music = {
+                    url: parsed.url || '',
+                    title: parsed.title || 'Трек',
+                    duration: parsed.duration || 0,
+                    mime: parsed.mime || 'audio/*'
+                };
             }
             return payload;
         }
 
         function forwardPreviewText(payload) {
-            if (payload.imageUrl || payload.imageBlob) return '🖼 Картинка';
-            if (payload.voiceUrl || payload.voiceBlob) return '🎤 Голосовое';
-            if (payload.music?.url || payload.music?.blob) return '🎵 Музыка';
+            if (payload.imageUrl) return '🖼 Картинка';
+            if (payload.voiceUrl) return '🎤 Голосовое';
+            if (payload.music?.url) return '🎵 Музыка';
             if (payload.checklist) return '✅ Чек-лист';
             return payload.text || '↗️ Переслано';
         }
@@ -3877,52 +4107,64 @@ function dataUrlToFile(dataUrl, filename) {
                     };
 
                     if (target.type === 'group') {
-                        let imageUrl = payload.imageUrl;
-                        let voiceUrl = payload.voiceUrl;
-                        let musicUrl = payload.music?.url || '';
-                        if (payload.imageBlob) imageUrl = await uploadToBackend(payload.imageBlob);
-                        if (payload.voiceBlob) voiceUrl = await uploadToBackend(payload.voiceBlob);
-                        if (payload.music?.blob) musicUrl = await uploadToBackend(payload.music.blob);
                         const groupMsg = {
                             ...base,
                             text: payload.text || '',
-                            ...(imageUrl ? { imageUrl } : {}),
-                            ...(voiceUrl ? { voiceUrl, voiceDuration: payload.voiceDuration || 0, voiceMime: payload.voiceMime || 'audio/webm' } : {}),
-                            ...(musicUrl ? { musicUrl, musicTitle: payload.music?.title || 'Трек', musicDuration: Math.round(payload.music?.duration || 0), musicMime: payload.music?.mime || 'audio/*' } : {}),
+                            ...(payload.imageUrl ? { imageUrl: payload.imageUrl } : {}),
+                            ...(payload.voiceUrl ? { voiceUrl: payload.voiceUrl, voiceDuration: payload.voiceDuration || 0, voiceMime: payload.voiceMime || 'audio/webm' } : {}),
+                            ...(payload.music?.url ? { musicUrl: payload.music.url, musicTitle: payload.music.title, musicDuration: Math.round(payload.music.duration || 0), musicMime: payload.music.mime || 'audio/*' } : {}),
                             ...(payload.checklist ? { checklist: payload.checklist, text: (payload.checklist.title || 'Чек-лист') + ': ' + (payload.checklist.items || []).join(', ') } : {})
                         };
                         await addDoc(messagesCol, groupMsg);
                     } else {
                         const convId = dmConvId(u.uid, target.peerUid);
-                        await sendE2EDirectMessageTo({
-                            convId,
-                            peerUid: target.peerUid,
-                            authorName: displayNick(u),
-                            text: payload.text || '',
-                            imageFile: payload.imageBlob || null,
-                            voiceFile: payload.voiceBlob || null,
-                            voiceDuration: payload.voiceDuration || null,
-                            voiceMime: payload.voiceMime || null,
-                            musicFile: payload.music?.blob || null,
-                            musicDuration: payload.music?.duration || null,
-                            musicMime: payload.music?.mime || null,
-                            checklist: payload.checklist ? { title: payload.checklist.title || '', items: payload.checklist.items || [] } : null,
-                            forwarded: true,
-                        });
-                        await setDoc(doc(db, 'dmConvs', convId), {
-                            members:[u.uid,target.peerUid],
-                            names:{[u.uid]:displayNick(u),[target.peerUid]:target.name},
-                            lastText:'↗️ '+previewText,
-                            lastAt:serverTimestamp(),
-                            ...{['unread.' + target.peerUid]: increment(1)}
-                        }, { merge:true });
+                        const dmFwdMsg = { ...base, text: '' };
+
+                        if (payload.text) {
+                            const e2e = await encryptDM(payload.text, target.peerUid, u.uid);
+                            dmFwdMsg.e2eForPeer = e2e.forPeer;
+                            dmFwdMsg.e2eForMe = e2e.forMe;
+                        }
+                        if (payload.imageUrl) {
+                            const e2e = await encryptDM(payload.imageUrl, target.peerUid, u.uid);
+                            dmFwdMsg.e2eImgForPeer = e2e.forPeer;
+                            dmFwdMsg.e2eImgForMe = e2e.forMe;
+                        }
+                        if (payload.voiceUrl) {
+                            const e2e = await encryptDM(payload.voiceUrl, target.peerUid, u.uid);
+                            dmFwdMsg.e2eVoiceForPeer = e2e.forPeer;
+                            dmFwdMsg.e2eVoiceForMe = e2e.forMe;
+                            dmFwdMsg.voiceDuration = payload.voiceDuration || 0;
+                            dmFwdMsg.voiceMime = payload.voiceMime || 'audio/webm';
+                        }
+                        if (payload.music?.url) {
+                            const musicJson = JSON.stringify(payload.music);
+                            const e2e = await encryptDM(musicJson, target.peerUid, u.uid);
+                            dmFwdMsg.e2eMusicForPeer = e2e.forPeer;
+                            dmFwdMsg.e2eMusicForMe = e2e.forMe;
+                            dmFwdMsg.musicDuration = Math.round(payload.music.duration || 0);
+                            dmFwdMsg.musicMime = payload.music.mime || 'audio/*';
+                        }
+                        if (payload.checklist) {
+                            const checkJson = JSON.stringify({ title: payload.checklist.title || '', items: payload.checklist.items || [] });
+                            const e2e = await encryptDM(checkJson, target.peerUid, u.uid);
+                            dmFwdMsg.e2eChecklistForPeer = e2e.forPeer;
+                            dmFwdMsg.e2eChecklistForMe = e2e.forMe;
+                        }
+
+                        if (!dmFwdMsg.e2eForPeer && !dmFwdMsg.e2eImgForPeer && !dmFwdMsg.e2eVoiceForPeer && !dmFwdMsg.e2eMusicForPeer && !dmFwdMsg.e2eChecklistForPeer)
+                            throw new Error('Нет содержимого для пересылки');
+
+                        await addDoc(collection(db, 'dmConvs', convId, 'messages'), dmFwdMsg);
+                        const convRef = doc(db, 'dmConvs', convId);
+                        await setDoc(convRef, { members:[u.uid,target.peerUid], names:{[u.uid]:displayNick(u),[target.peerUid]:target.name}, lastText:'↗️ '+previewText, lastAt:serverTimestamp(), [`unread.${target.peerUid}`]:increment(1) }, { merge:true });
                     }
                 } catch(e) {
                     showToast('Ошибка пересылки: ' + e.message);
                     return;
                 }
             }
-            showToast('✅ Переслано ' + srcMessages.length + ' сообщ.');
+            showToast(`✅ Переслано ${srcMessages.length} сообщ.`);
         }
 
         /* ══════════════════════════════
@@ -3977,8 +4219,6 @@ function dataUrlToFile(dataUrl, filename) {
            WATCHDM / ONLINE
         ══════════════════════════════ */
         let _sidebarDebounceTimer = null;
-        let _lastSidebarUnread = {};
-        let _sidebarNotifReady = false;
         function watchDMBadge() {
             const u=auth.currentUser; if (!u) return;
             if (sidebarDMUnsub) sidebarDMUnsub();
@@ -3992,20 +4232,10 @@ function dataUrlToFile(dataUrl, filename) {
                         if (data.deleted&&data.deleted[u.uid]) return;
                         const peerUid=data.members.find(m=>m!==u.uid)||'';
                         const peerName=data.names?.[peerUid]||'???';
-                        const unreadForMe = (data.unread||{})[u.uid]||0;
-                        const itemId = 'dm_'+peerUid;
-                        const lastText = data.lastText || '🔒 Сообщение';
-                        items.push({id:itemId,type:'dm',name:peerName,peerUid,lastText,lastAt:data.lastAt||null,unread:unreadForMe});
-                        const wasUnread = _lastSidebarUnread[itemId] || 0;
-                        const isCurrent = currentChatMode === 'dm' && currentDMPeerUid === peerUid;
-                        if (_sidebarNotifReady && unreadForMe > wasUnread && !isCurrent && !isMuted(itemId)) {
-                            tryNotifyNewMessage({id:itemId+':' + unreadForMe, uid:peerUid, author:peerName, lastText, lastAt:data.lastAt}, peerName, true);
-                        }
+                        items.push({id:'dm_'+peerUid,type:'dm',name:peerName,peerUid,lastText:data.lastText||'',lastAt:data.lastAt||null,unread:(data.unread||{})[u.uid]||0});
                     });
                     items.sort((a,b)=>(b.lastAt?.toMillis?.()??0)-(a.lastAt?.toMillis?.()??0));
                     sidebarItems=items;
-                    _lastSidebarUnread = Object.fromEntries(items.map(x=>[x.id, x.unread||0]));
-                    _sidebarNotifReady = true;
                     clearTimeout(_sidebarDebounceTimer);
                     _sidebarDebounceTimer = setTimeout(()=>{
                         buildSidebarList(sidebarSearch.value);
@@ -4013,38 +4243,6 @@ function dataUrlToFile(dataUrl, filename) {
                     }, 300);
                 }
             );
-        }
-
-
-        function statusLabel(status) {
-            if (status === 'away') return 'отошёл';
-            if (status === 'dnd') return 'не беспокоить';
-            if (status === 'invisible') return 'не в сети';
-            return 'в сети';
-        }
-        function isUidOnline(uid) {
-            return !!onlineUsers[uid] && userStatuses[uid] !== 'invisible';
-        }
-        function renderOnlineSummary(active) {
-            const count = active.length;
-            onlineBar.innerHTML = '';
-            const label = document.createElement('span');
-            label.className = 'online-bar-label';
-            label.textContent = 'Онлайн';
-            const countEl = document.createElement('span');
-            countEl.className = 'online-count-pill';
-            countEl.textContent = `${count} ${count === 1 ? 'пользователь' : 'пользователей'}`;
-            const note = document.createElement('span');
-            note.className = 'online-status-note';
-            note.textContent = 'обновляется автоматически';
-            onlineBar.append(label, countEl, note);
-        }
-        function refreshDMHeaderPresence() {
-            if (currentChatMode !== 'dm' || !currentDMPeerUid) return;
-            const online = isUidOnline(currentDMPeerUid);
-            const st = userStatuses[currentDMPeerUid] || 'offline';
-            tgHeaderStatus.textContent = online ? statusLabel(st) : 'не в сети';
-            tgHeaderStatus.classList.toggle('online', online && st === 'online');
         }
 
         async function pingOnline() {
@@ -4061,26 +4259,45 @@ function dataUrlToFile(dataUrl, filename) {
         }
 
         function startOnlineBar() {
+            if (onlinePingTimer) { clearInterval(onlinePingTimer); onlinePingTimer = null; }
+            if (onlineUnsub) { onlineUnsub(); onlineUnsub = null; }
             pingOnline();
-            const pingTimer=setInterval(pingOnline,15000);
-            onlineUnsub=onSnapshot(presenceRef,snap=>{
-                const users=snap.exists() ? (snap.data().users||{}) : {};
-                const now=Date.now();
-                const active=Object.values(users).filter(v=>{
-                    if (!v||!v.t||v.status==='invisible') return false;
-                    const ms=typeof v.t.toMillis==='function'?v.t.toMillis():0;
-                    return (now-ms)<ONLINE_TTL_MS;
+            onlinePingTimer = setInterval(pingOnline, 15000);
+            onlineUnsub = onSnapshot(presenceRef, snap => {
+                const users = snap.exists() ? (snap.data().users || {}) : {};
+                const now = Date.now();
+                const active = Object.values(users).filter(v => {
+                    if (!v || !v.t || v.status === 'invisible') return false;
+                    const ms = typeof v.t.toMillis === 'function' ? v.t.toMillis() : 0;
+                    return ms > 0 && (now - ms) < ONLINE_TTL_MS;
                 });
-                onlineUsers={}; userStatuses={};
-                active.forEach(v=>{ if(v.uid){ onlineUsers[v.uid]=v.n; userStatuses[v.uid]=v.status||'online'; } });
-                renderOnlineSummary(active);
-                refreshDMHeaderPresence();
+                onlineUsers = {};
+                active.forEach(v => { if (v.uid) onlineUsers[v.uid] = v.n || 'Пользователь'; });
+                renderOnlineCounter(active);
                 clearTimeout(_sidebarDebounceTimer);
-                _sidebarDebounceTimer = setTimeout(()=>buildSidebarList(sidebarSearch.value), 120);
-            },()=>{
-                onlineUsers={}; userStatuses={}; renderOnlineSummary([]); refreshDMHeaderPresence();
+                _sidebarDebounceTimer = setTimeout(() => buildSidebarList(sidebarSearch.value), 150);
+                if (currentChatMode === 'dm' && currentDMPeerUid) {
+                    const online = !!onlineUsers[currentDMPeerUid];
+                    tgHeaderStatus.textContent = online ? 'в сети' : 'не в сети';
+                    tgHeaderStatus.classList.toggle('online', online);
+                }
             });
-            return ()=>{ clearInterval(pingTimer); if(onlineUnsub)onlineUnsub(); };
+            return () => { if (onlinePingTimer) clearInterval(onlinePingTimer); if (onlineUnsub) onlineUnsub(); };
+        }
+
+        function renderOnlineCounter(active) {
+            onlineBar.innerHTML = '';
+            const label = document.createElement('span');
+            label.className = 'online-bar-label';
+            label.textContent = 'Онлайн';
+            const count = document.createElement('span');
+            count.className = 'online-count-pill';
+            const n = active.length;
+            count.textContent = `${n} ${n === 1 ? 'человек' : (n >= 2 && n <= 4 ? 'человека' : 'человек')}`;
+            const note = document.createElement('span');
+            note.className = 'online-status-note';
+            note.textContent = 'за последние 3 минуты';
+            onlineBar.append(label, count, note);
         }
 
         /* ══════════════════════════════
@@ -4371,6 +4588,7 @@ function dataUrlToFile(dataUrl, filename) {
         /* ══════════════════════════════
            VOICE MESSAGES
         ══════════════════════════════ */
+        const btnVoice     = document.getElementById('btnVoice');
         const voiceRecBar  = document.getElementById('voiceRecBar');
         const voiceRecTime = document.getElementById('voiceRecTime');
         const voiceRecCancel=document.getElementById('voiceRecCancel');
@@ -4383,58 +4601,11 @@ function dataUrlToFile(dataUrl, filename) {
 
         function fmtVoiceTime(s) { return Math.floor(s/60)+':'+(String(s%60).padStart(2,'0')); }
 
-        function pickVoiceMimeType() {
-            const candidates = [
-                'audio/webm;codecs=opus',
-                'audio/webm',
-                'audio/ogg;codecs=opus',
-                'audio/ogg',
-                'audio/mp4'
-            ];
-            if (!window.MediaRecorder) throw new Error('MediaRecorder не поддерживается');
-            return candidates.find(t => MediaRecorder.isTypeSupported(t)) || '';
-        }
-        function normalizeMimeType(type) {
-            return String(type || 'application/octet-stream').split(';')[0].trim().toLowerCase();
-        }
-        function extForAudioMime(type) {
-            const base = normalizeMimeType(type);
-            if (base === 'audio/ogg') return 'ogg';
-            if (base === 'audio/mp4') return 'm4a';
-            if (base === 'audio/mpeg') return 'mp3';
-            if (base === 'audio/wav' || base === 'audio/x-wav') return 'wav';
-            return 'webm';
-        }
-        async function sendVoiceBlob(blob, mimeType) {
-            const u = auth.currentUser; if (!u) return;
-            const baseMime = normalizeMimeType(mimeType || blob.type || 'audio/webm');
-            const dur = voiceSeconds;
-            stickToBottom = true;
-            showToast(currentChatMode === 'dm' ? '🔐 Шифрую голосовое…' : '⏳ Загружаю голосовое…');
-            const voiceFile = new File([blob], 'voice_' + Date.now() + '.' + extForAudioMime(baseMime), {type: baseMime});
-
-            if (currentChatMode === 'group') {
-                const voiceUrl = await uploadToBackend(voiceFile, percent => showToast('⏳ Загружаю голосовое ' + percent + '%...'));
-                if (!voiceUrl || !voiceUrl.startsWith('https://')) throw new Error('Бэкенд не вернул ссылку на голосовое');
-                const baseMsg = { uid:u.uid, author:displayNick(u), text:'', createdAt:serverTimestamp(), edited:false, voiceUrl, voiceDuration:dur, voiceMime:baseMime };
-                await addDoc(messagesCol, baseMsg);
-            } else {
-                if (!currentDMConvId || !currentDMPeerUid) throw new Error('ЛС не выбрано');
-                await sendE2EDirectMessage({
-                    voiceFile,
-                    voiceDuration: dur,
-                    voiceMime: baseMime,
-                });
-            }
-            lastOutboundAt=Date.now();
-        }
-
         function stopVoiceRecording(send=true) {
             if (!isRecording) return;
             isRecording = false;
             clearInterval(voiceTimerInt);
-            const micBtn = document.getElementById('btnMicMain');
-            if (micBtn) micBtn.classList.remove('is-recording');
+            if (btnVoice) btnVoice.classList.remove('is-recording');
             voiceRecBar.classList.remove('is-visible');
             if (mediaRecorder && mediaRecorder.state !== 'inactive') {
                 mediaRecorder._sendOnStop = send;
@@ -4442,6 +4613,66 @@ function dataUrlToFile(dataUrl, filename) {
             }
         }
 
+        if (btnVoice) btnVoice.addEventListener('click', async () => {
+            if (isRecording) { stopVoiceRecording(true); return; }
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+                const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+                    ? 'audio/webm;codecs=opus' : 'audio/webm';
+                mediaRecorder = new MediaRecorder(stream, {mimeType});
+                voiceChunks = []; voiceSeconds = 0;
+                mediaRecorder.ondataavailable = e => { if(e.data.size>0) voiceChunks.push(e.data); };
+                mediaRecorder.onstop = async () => {
+                    stream.getTracks().forEach(t=>t.stop());
+                    if (!mediaRecorder._sendOnStop) return;
+                    const blob = new Blob(voiceChunks, { type: mimeType });
+                    if (!voiceChunks.length || blob.size < 1000) { showToast('❌ Голосовое пустое. Удержи запись чуть дольше.'); return; }
+                    if (blob.size > UPLOAD_MAX_AUDIO_BYTES) { showToast('❌ Голосовое больше 15 МБ'); return; }
+                    // Convert to base64
+                    // Загружаем голосовое на Cloudinary вместо base64 в Firestore
+                    (async () => {
+                        const u = auth.currentUser; if (!u) return;
+                        const dur = voiceSeconds;
+                        try {
+                            stickToBottom = true;
+                            showToast('⏳ Загружаю голосовое…');
+                            const voiceFile = new File([blob], `voice_${Date.now()}.webm`, {type: mimeType});
+                            const voiceUrl = await uploadToCloudinary(voiceFile, percent => {
+                                showToast(`⏳ Загружаю голосовое ${percent}%...`);
+                            });
+                            if (!voiceUrl || !voiceUrl.startsWith('https://')) throw new Error('Cloudinary не вернул ссылку на голосовое');
+                            const baseMsg = { uid:u.uid, author:displayNick(u), text:'',
+                                createdAt:serverTimestamp(), edited:false,
+                                voiceUrl, voiceDuration:dur, voiceMime:mimeType };
+                            if (currentChatMode==='group') {
+                                await addDoc(messagesCol, baseMsg);
+                            } else {
+                                const voiceE2e = await encryptDM(voiceUrl, currentDMPeerUid, u.uid);
+                                const dmMsg = { uid:u.uid, author:displayNick(u), text:'',
+                                    createdAt:serverTimestamp(), edited:false,
+                                    e2eVoiceForPeer: voiceE2e.forPeer, e2eVoiceForMe: voiceE2e.forMe,
+                                    voiceDuration:dur, voiceMime:mimeType };
+                                await addDoc(collection(db,'dmConvs',currentDMConvId,'messages'), dmMsg);
+                                await setDoc(doc(db,'dmConvs',currentDMConvId),{lastText:'🎤 Голосовое',lastAt:serverTimestamp(),[`unread.${currentDMPeerUid}`]:increment(1)},{merge:true});
+                            }
+                            lastOutboundAt=Date.now();
+                        } catch(e){ showToast('Ошибка: '+e.message); }
+                    })();
+                };
+                mediaRecorder.start(200);
+                isRecording = true;
+                if (btnVoice) btnVoice.classList.add('is-recording');
+                voiceRecBar.classList.add('is-visible');
+                voiceRecTime.textContent = '0:00';
+                voiceTimerInt = setInterval(()=>{
+                    voiceSeconds++;
+                    voiceRecTime.textContent = fmtVoiceTime(voiceSeconds);
+                    if (voiceSeconds >= 90) stopVoiceRecording(true); // auto-stop at 90s
+                }, 1000);
+            } catch(e) {
+                showToast('❌ Нет доступа к микрофону');
+            }
+        });
         voiceRecCancel.addEventListener('click', ()=>stopVoiceRecording(false));
 
         /* ══════════════════════════════
@@ -4626,39 +4857,20 @@ function dataUrlToFile(dataUrl, filename) {
             return sidebarItems.reduce((sum,item)=>sum+(item.unread||0),0);
         }
 
-        function compactMsgBody(msgData) {
-            let body = msgData.text || msgData.lastText || '';
-            if (msgData.imageBase64 || msgData.imageUrl || msgData.e2eImgForPeer || msgData.e2eImgForMe) body = '🖼 Картинка';
-            else if (msgData.voiceBase64 || msgData.voiceUrl || msgData.e2eVoiceForPeer || msgData.e2eVoiceForMe) body = '🎤 Голосовое';
-            else if (msgData.e2eForPeer || msgData.e2eForMe) body = '🔒 Сообщение';
-            return body || '…';
-        }
-
         // Called when a new message arrives that isn't ours
-        function tryNotifyNewMessage(msgData, chatName, forceToast=false) {
+        function tryNotifyNewMessage(msgData, chatName) {
             if (!msgData || msgData.uid === auth.currentUser?.uid) return;
-            const nid = msgData.id || `${chatName}:${msgData.lastAt?.seconds||''}:${msgData.lastText||''}`;
-            if (_lastNotifMsgId === nid) return;
-            _lastNotifMsgId = nid;
+            if (_lastNotifMsgId === msgData.id) return;
+            _lastNotifMsgId = msgData.id;
             const author = msgData.author || 'Кто-то';
-            const body = compactMsgBody(msgData);
-            if (forceToast || document.visibilityState === 'visible') showToast(`${author} — ${chatName}: ${body}`, 4200);
-            showBrowserNotif(`${author} — ${chatName}`, body);
+            let body = msgData.text || '';
+            if (msgData.imageBase64 || msgData.imageUrl) body = '🖼 Картинка';
+            else if (msgData.voiceBase64 || msgData.voiceUrl) body = '🎤 Голосовое';
+            showBrowserNotif(`${author} — ${chatName}`, body || '…');
         }
 
         // Request permission on first interaction
         document.addEventListener('click', ()=>requestNotifPermission(), {once:true});
-
-        // Compact message search: click SVG area to expand, empty blur collapses
-        const headerSearchWrap = document.querySelector('.header-search-wrap');
-        headerSearchWrap?.addEventListener('click', () => {
-            headerSearchWrap.classList.add('is-open');
-            msgSearchInput?.focus();
-        });
-        msgSearchInput?.addEventListener('focus', () => headerSearchWrap?.classList.add('is-open'));
-        msgSearchInput?.addEventListener('blur', () => {
-            if (!msgSearchInput.value.trim()) headerSearchWrap?.classList.remove('is-open');
-        });
         /* ══════════════════════════════
            COPY
         ══════════════════════════════ */
@@ -4736,6 +4948,8 @@ function dataUrlToFile(dataUrl, filename) {
         }
         scrollDownFab.addEventListener('click',()=>{unreadBelow=0;stickToBottom=true;chatMessages.scrollTo({top:chatMessages.scrollHeight,behavior:'smooth'});updateScrollFab();markDMRead();});
         chatMessages.addEventListener('scroll',()=>{const near=isNearBottom(chatMessages);stickToBottom=near;if(near){unreadBelow=0;markDMRead();}updateScrollFab();});
+        document.addEventListener('visibilitychange',()=>{ if(!document.hidden) markDMRead(); });
+        window.addEventListener('focus',()=>markDMRead());
 
         /* ══════════════════════════════
            RENDER MESSAGE ROW
@@ -4793,21 +5007,19 @@ function dataUrlToFile(dataUrl, filename) {
             const sameAuthor=prevUid&&String(prevUid)===String(d.uid||'');
             const isAdmin=ADMIN_UIDS.has(d.uid||'');
 
-            // Date separator — including first message, Telegram-style
+            // Date separator
             const rows=[];
-            const curDate=d.createdAt?.toDate?.();
-            let needDateSeparator = !!curDate && !prevDocSnap;
             if (prevDocSnap) {
                 const prevDate=prevDocSnap.data().createdAt?.toDate?.();
+                const curDate=d.createdAt?.toDate?.();
                 if (prevDate&&curDate) {
                     const pd=new Date(prevDate.getFullYear(),prevDate.getMonth(),prevDate.getDate());
                     const cd=new Date(curDate.getFullYear(),curDate.getMonth(),curDate.getDate());
-                    needDateSeparator = pd.getTime()!==cd.getTime();
+                    if (pd.getTime()!==cd.getTime()) {
+                        const sep=document.createElement('div'); sep.className='msg-date-sep';
+                        sep.innerHTML=`<span>${formatDate(d.createdAt)}</span>`; rows.push(sep);
+                    }
                 }
-            }
-            if (needDateSeparator) {
-                const sep=document.createElement('div'); sep.className='msg-date-sep';
-                sep.innerHTML=`<span>${formatDate(d.createdAt)}</span>`; rows.push(sep);
             }
 
             const row=document.createElement('div');
@@ -4815,15 +5027,8 @@ function dataUrlToFile(dataUrl, filename) {
             if (!sameAuthor&&prevDocSnap) row.classList.add('msg-row--gap');
 
             // E2E включается только в личных чатах. Основной чат хранится и читается как обычный plaintext.
-            const hasE2E = currentChatMode === 'dm' && !!(
-                d.e2eForPeer || d.e2eForMe || d.e2eImgForPeer || d.e2eImgForMe ||
-                d.e2eVoiceForPeer || d.e2eVoiceForMe || d.e2eMusicForPeer || d.e2eMusicForMe ||
-                d.e2eChecklistForPeer || d.e2eChecklistForMe
-            );
-            const e2eDecodedPromise = hasE2E && myPrivateKey
-                ? e2eDecryptMessage(d, myUid, id).catch(err => ({ text: '[🔒 Ошибка расшифровки]' }))
-                : null;
-            let decryptedText = (d.e2eForPeer || d.e2eForMe) ? '🔒' : safeDecrypt(d.text || '');
+            const hasE2E = currentChatMode === 'dm' && !!(d.e2eForPeer || d.e2eForMe);
+            let decryptedText = hasE2E ? '🔒' : safeDecrypt(d.text || '');
 
             row.dataset.msgId=id; row.dataset.id=id; row.dataset.plain=decryptedText;
             row.setAttribute('data-has-e2e', hasE2E ? '1' : '0');
@@ -4858,9 +5063,16 @@ function dataUrlToFile(dataUrl, filename) {
                 if (hasE2eReply) {
                     quoteTextSpan.textContent = '🔒';
                     if (myPrivateKey) {
-                        e2eDecryptReplyText(d.replyTo, d.uid, myUid)
-                            .then(plain => { quoteTextSpan.textContent = plain || '🔒'; })
-                            .catch(() => { quoteTextSpan.textContent = '🔒'; });
+                        // Пробуем свой ключ: если я отправитель цитаты — e2eForMe, иначе — e2eForPeer
+                        const myUidNow = auth.currentUser?.uid || '';
+                        const primaryCipher = d.replyTo.e2eForMe || d.replyTo.e2eForPeer;
+                        const fallbackCipher = d.replyTo.e2eForPeer || d.replyTo.e2eForMe;
+                        rsaDecrypt(myPrivateKey, primaryCipher).then(plain => {
+                            quoteTextSpan.textContent = plain;
+                        }).catch(() => {
+                            if (fallbackCipher && fallbackCipher !== primaryCipher)
+                                rsaDecrypt(myPrivateKey, fallbackCipher).then(p => { quoteTextSpan.textContent = p; }).catch(()=>{});
+                        });
                     }
                 } else {
                     quoteTextSpan.textContent = safeDecrypt(d.replyTo.text||'');
@@ -4876,21 +5088,27 @@ function dataUrlToFile(dataUrl, filename) {
             // Forwarded badge
             if (d.forwarded){const fw=document.createElement('div');fw.style.cssText='font-size:.72rem;color:var(--accent);margin-bottom:4px;font-weight:600';fw.textContent='↗️ Переслано';bubble.appendChild(fw);}
 
-            // Image (if any) — E2E: decryptMessage возвращает готовый Object URL
+            // Image (if any) — E2E: расшифровываем Cloudinary URL, затем показываем img
             if (currentChatMode === 'dm' && (d.e2eImgForPeer || d.e2eImgForMe)) {
                 const msgImg = document.createElement('img');
                 msgImg.className = 'msg-img'; msgImg.alt = '🖼 Загрузка…'; msgImg.loading = 'lazy';
                 msgImg.style.cssText = 'min-width:80px;min-height:60px;background:var(--surface-3)';
-                bubble.appendChild(msgImg);
-                if (e2eDecodedPromise) {
-                    e2eDecodedPromise.then(decoded => {
-                        if (!decoded.imageObjectUrl) { msgImg.alt = '🔒 Изображение'; return; }
-                        msgImg.src = decoded.imageObjectUrl;
+                if (myPrivateKey) {
+                    const imgCipher = pickE2ECipher(d, myUid, 'e2eImgForPeer', 'e2eImgForMe');
+                    const imgFallback = d.e2eImgForPeer || d.e2eImgForMe;
+                    const applyUrl = (url) => {
+                        msgImg.src = url;
                         msgImg.alt = '🖼';
                         msgImg.style.cssText = '';
-                        msgImg.addEventListener('click', e => { e.stopPropagation(); openLightbox(decoded.imageObjectUrl); });
-                    }).catch(() => { msgImg.alt = '🔒 Изображение'; });
+                        msgImg.addEventListener('click', e => { e.stopPropagation(); openLightbox(url); });
+                    };
+                    rsaDecrypt(myPrivateKey, imgCipher).then(applyUrl).catch(() => {
+                        if (imgFallback && imgFallback !== imgCipher)
+                            rsaDecrypt(myPrivateKey, imgFallback).then(applyUrl).catch(()=>{ msgImg.alt='🔒 Изображение'; });
+                        else msgImg.alt = '🔒 Изображение';
+                    });
                 } else { msgImg.alt = '🔒 Изображение'; }
+                bubble.appendChild(msgImg);
             } else if (d.imageBase64 || d.imageUrl) {
                 const imgSrc = d.imageUrl || d.imageBase64;
                 const msgImg = document.createElement('img');
@@ -4902,17 +5120,44 @@ function dataUrlToFile(dataUrl, filename) {
                 bubble.appendChild(msgImg);
             }
 
-            // Voice message (if any) — E2E decryptMessage возвращает Object URL
+            // Voice message (if any) — поддержка E2E зашифрованных голосовых в ЛС
             if (currentChatMode === 'dm' && (d.e2eVoiceForPeer || d.e2eVoiceForMe)) {
-                const voicePlaceholder = document.createElement('div');
-                voicePlaceholder.className = 'msg-voice';
-                voicePlaceholder.textContent = '🔒 Голосовое (расшифровка...)';
-                bubble.appendChild(voicePlaceholder);
-                if (e2eDecodedPromise) {
-                    e2eDecodedPromise.then(decoded => {
-                        if (!decoded.voiceObjectUrl) { voicePlaceholder.textContent = '🔒 Голосовое'; return; }
-                        voicePlaceholder.replaceWith(buildVoiceBubble(id, decoded.voiceObjectUrl, d.voiceDuration || 0));
-                    }).catch(() => { voicePlaceholder.textContent = '🔒 Голосовое'; });
+                // Показываем плейсхолдер, расшифровываем асинхронно
+                const voiceWrap = document.createElement('div');
+                voiceWrap.className = 'msg-voice';
+                const dur = d.voiceDuration||0;
+                const playBtn = document.createElement('button');
+                playBtn.className = 'voice-play-btn';
+                playBtn.innerHTML = '🔒'; playBtn.title = 'Расшифровка...'; playBtn.disabled = true;
+                const durEl = document.createElement('span'); durEl.className='voice-duration'; durEl.textContent=fmtVoiceTime(dur);
+                voiceWrap.appendChild(playBtn); voiceWrap.appendChild(durEl);
+                bubble.appendChild(voiceWrap);
+                if (myPrivateKey) {
+                    const vCipher = pickE2ECipher(d, myUid, 'e2eVoiceForPeer', 'e2eVoiceForMe');
+                    const vFallback = d.e2eVoiceForPeer || d.e2eVoiceForMe;
+                    rsaDecrypt(myPrivateKey, vCipher).then(plainUrl => { const plainB64 = plainUrl; // voiceUrl расшифрован
+                        // Заменяем плейсхолдер на полноценный плеер
+                        playBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
+                        playBtn.disabled = false; playBtn.title = 'Воспроизвести';
+                        const barCount=28; const waveEl=document.createElement('div'); waveEl.className='voice-waveform';
+                        const bars=[]; for(let i=0;i<barCount;i++){const bar=document.createElement('div');bar.className='voice-waveform-bar';const seed=(id.charCodeAt(i%id.length)||5);bar.style.height=(8+((seed*(i+7))%22))+'px';waveEl.appendChild(bar);bars.push(bar);}
+                        voiceWrap.insertBefore(waveEl, durEl);
+                        let audio=null, playTimer=null, isPlaying=false;
+                        function updateBars(p){const pl=Math.floor(p*barCount);bars.forEach((b,i)=>b.classList.toggle('played',i<pl));}
+                        function stopAudio(){if(audio){audio.pause();audio=null;}clearInterval(playTimer);isPlaying=false;playBtn.innerHTML='<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>';durEl.textContent=fmtVoiceTime(dur);updateBars(0);}
+                        playBtn.addEventListener('click',()=>{
+                            if(isPlaying){stopAudio();return;}
+                            audio=new Audio(plainB64); audio.onended=stopAudio;
+                            audio.play().catch(()=>showToast('Не удалось воспроизвести'));
+                            isPlaying=true; playBtn.innerHTML='<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
+                            playTimer=setInterval(()=>{if(!audio)return;const p=dur>0?audio.currentTime/dur:0;durEl.textContent=fmtVoiceTime(Math.floor(audio.currentTime));updateBars(p);},100);
+                        });
+                        waveEl.addEventListener('click',e=>{if(!audio||!dur)return;const rect=waveEl.getBoundingClientRect();audio.currentTime=((e.clientX-rect.left)/rect.width)*dur;});
+                    }).catch(() => {
+                        if (vFallback && vFallback !== vCipher)
+                            rsaDecrypt(myPrivateKey, vFallback).then(p => { playBtn.innerHTML='▶'; playBtn.disabled=false; playBtn.onclick=()=>{new Audio(p).play();}; }).catch(()=>{ playBtn.innerHTML='🔒'; });
+                        else playBtn.innerHTML = '🔒';
+                    });
                 }
             } else if (d.voiceBase64 || d.voiceUrl) {
                 const voiceWrap = document.createElement('div');
@@ -4994,17 +5239,25 @@ function dataUrlToFile(dataUrl, filename) {
                 musicPlaceholder.textContent = '🔒 Музыка (расшифровка...)';
                 musicPlaceholder.style.cssText = 'font-size:.85rem;color:var(--muted);padding:4px 0';
                 bubble.appendChild(musicPlaceholder);
-                if (e2eDecodedPromise) {
-                    e2eDecodedPromise.then(decoded => {
-                        if (!decoded.musicObjectUrl) { musicPlaceholder.textContent = '🔒 Музыка'; return; }
-                        musicPlaceholder.replaceWith(buildMusicBubble(id, {
-                            ...d,
-                            musicUrl: decoded.musicObjectUrl,
-                            musicTitle: d.musicTitle || 'Трек',
-                            musicDuration: Math.round(d.musicDuration || 0),
-                            musicMime: d.musicMime || 'audio/*'
-                        }));
-                    }).catch(() => { musicPlaceholder.textContent = '🔒 Музыка'; });
+                if (myPrivateKey) {
+                    const musicCipher = pickE2ECipher(d, myUid, 'e2eMusicForPeer', 'e2eMusicForMe');
+                    rsaDecrypt(myPrivateKey, musicCipher).then(plainJson => {
+                        try {
+                            const parsed = JSON.parse(plainJson);
+                            if (!parsed.url) throw new Error('empty url');
+                            musicPlaceholder.replaceWith(buildMusicBubble(id, {
+                                ...d,
+                                musicUrl: parsed.url,
+                                musicTitle: parsed.title || 'Трек',
+                                musicDuration: Math.round(parsed.duration || d.musicDuration || 0),
+                                musicMime: parsed.mime || d.musicMime || 'audio/*'
+                            }));
+                        } catch(e) {
+                            musicPlaceholder.textContent = '🔒 Музыка (ошибка данных)';
+                        }
+                    }).catch(() => {
+                        musicPlaceholder.textContent = '🔒 Музыка';
+                    });
                 }
             } else if (d.musicBase64 || d.musicUrl) {
                 bubble.appendChild(buildMusicBubble(id, d));
@@ -5016,45 +5269,51 @@ function dataUrlToFile(dataUrl, filename) {
                 clPlaceholder.textContent = '🔒 Чек-лист (расшифровка...)';
                 clPlaceholder.style.cssText = 'font-size:.85rem;color:var(--muted);padding:4px 0';
                 bubble.appendChild(clPlaceholder);
-                if (e2eDecodedPromise) {
-                    e2eDecodedPromise.then(decoded => {
-                        if (!decoded.checklist) { clPlaceholder.textContent = '🔒 Чек-лист'; return; }
-                        const parsed = Array.isArray(decoded.checklist)
-                            ? { title:'', items: decoded.checklist, done:{} }
-                            : { title: decoded.checklist.title || '', items: decoded.checklist.items || [], done: decoded.checklist.done || {} };
-                        clPlaceholder.replaceWith(buildChecklistBubble(id, parsed, isMe));
-                    }).catch(() => { clPlaceholder.textContent = '🔒 Чек-лист'; });
+                if (myPrivateKey) {
+                    const clCipher = pickE2ECipher(d, myUid, 'e2eChecklistForPeer', 'e2eChecklistForMe');
+                    const clFallback = d.e2eChecklistForPeer || d.e2eChecklistForMe;
+                    rsaDecrypt(myPrivateKey, clCipher).then(plainJson => {
+                        try {
+                            const parsed = JSON.parse(plainJson);
+                            const fakeChecklist = { title: parsed.title||'', items: parsed.items||[], done: {} };
+                            const clEl = buildChecklistBubble(id, fakeChecklist, isMe);
+                            clPlaceholder.replaceWith(clEl);
+                        } catch(e) { clPlaceholder.textContent = '🔒 Чек-лист (ошибка данных)'; }
+                    }).catch(() => {
+                        if (clFallback && clFallback !== clCipher)
+                            rsaDecrypt(myPrivateKey, clFallback).then(p => {
+                                try { const parsed=JSON.parse(p); clPlaceholder.replaceWith(buildChecklistBubble(id,{title:parsed.title||'',items:parsed.items||[],done:{}},isMe)); } catch(e){}
+                            }).catch(()=>{ clPlaceholder.textContent='🔒 Чек-лист'; });
+                        else clPlaceholder.textContent='🔒 Чек-лист';
+                    });
                 }
             } else if (d.checklist) {
                 bubble.appendChild(buildChecklistBubble(id, d.checklist, isMe));
             }
 
             // Text body (skip if empty / poll / music / checklist)
-            const hasTextPayload = !!(d.text || d.e2eForPeer || d.e2eForMe);
-            if (hasTextPayload && !d.pollId && !d.musicBase64 && !d.musicUrl && !d.checklist) {
+            if ((d.text || hasE2E) && !d.pollId && !d.musicBase64 && !d.musicUrl && !d.checklist) {
                 const bodyEl = renderMessageBody(decryptedText);
-                if (hasE2E) {
-                    bodyEl.setAttribute('data-e2e-text', '1');
-                    if (e2eDecodedPromise) {
-                        e2eDecodedPromise.then(decoded => {
-                            const plain = decoded.text || '';
-                            if (!plain) { bodyEl.remove(); return; }
-                            bodyEl.replaceWith(renderMessageBody(plain));
-                            row.dataset.plain = plain;
-                        }).catch(() => {});
-                    }
-                }
+                if (hasE2E) bodyEl.setAttribute('data-e2e-text', '1');
                 bubble.appendChild(bodyEl);
             }
 
-            // URL preview — только для незашифрованного группового текста
-            if ((d.text)&&!d.pollId&&!d.musicBase64&&!d.musicUrl&&!d.checklist&&!hasE2E&&!decryptedText.match(GIF_URL)) buildUrlPreview(decryptedText, bubble);
+            // URL preview (только для расшифрованных, не для плейсхолдера)
+            if ((d.text||hasE2E)&&!d.pollId&&!d.musicBase64&&!d.musicUrl&&!d.checklist&&!hasE2E&&!decryptedText.match(GIF_URL)) buildUrlPreview(decryptedText, bubble);
 
             // Footer
             const foot=document.createElement('div'); foot.className='msg-footer';
             const timeSpan=document.createElement('span'); timeSpan.textContent=formatTime2(d.createdAt); foot.appendChild(timeSpan);
             if (d.edited){const ed=document.createElement('span');ed.className='msg-edited';ed.textContent='(изм.)';foot.appendChild(ed);}
-            if (isMe&&currentChatMode==='dm'){const tick=document.createElement('span');tick.className='msg-read-tick';tick.textContent=peerHasRead?'✓✓':'✓';tick.style.color=peerHasRead?'var(--accent)':'';foot.appendChild(tick);}
+            if (isMe&&currentChatMode==='dm'){
+                const readBy = Array.isArray(d.readBy) ? d.readBy.map(String) : [];
+                const msgReadByPeer = currentDMPeerUid && readBy.includes(String(currentDMPeerUid));
+                const tick=document.createElement('span');
+                tick.className='msg-read-tick' + (msgReadByPeer ? ' is-read' : '');
+                tick.textContent=msgReadByPeer?'✓✓':'✓';
+                tick.title=msgReadByPeer?'Прочитано':'Отправлено';
+                foot.appendChild(tick);
+            }
             bubble.appendChild(foot);
             stack.appendChild(bubble);
 
@@ -5192,7 +5451,6 @@ function dataUrlToFile(dataUrl, filename) {
                         // also remove preceding date separator if it belongs to this row
                         const prev=el.previousSibling;
                         if (prev&&prev.classList&&prev.classList.contains('msg-date-sep')) prev.remove();
-                        revokeMessageObjectUrls(id);
                         el.remove();
                     }
                 });
@@ -5214,10 +5472,6 @@ function dataUrlToFile(dataUrl, filename) {
                     // Only replace rows whose text/edited content changed (skip image rows to avoid flicker)
                     fragRows.forEach((newRow,i)=>{
                         const oldRow=existingOrdered[i];
-                        if (oldRow.dataset.hasE2e === '1' || newRow.dataset.hasE2e === '1') {
-                            oldRow.replaceWith(newRow);
-                            return;
-                        }
                         const newBubble=newRow.querySelector('.msg-bubble');
                         const oldBubble=oldRow.querySelector('.msg-bubble');
                         if (newBubble&&oldBubble) {
@@ -5257,11 +5511,41 @@ function dataUrlToFile(dataUrl, filename) {
                 updateScrollFab(); applyMessageSearch();
             });
 
-            // E2E-расшифровка теперь выполняется внутри renderMessageRow через window.E2E.decryptMessage.
-        }
+            // E2E: асинхронно расшифруем ЛС-сообщения после рендера
+            if (currentChatMode==='dm' && myPrivateKey) {
+                const myUid = auth.currentUser?.uid || '';
+                const e2eRows = chatMessages.querySelectorAll('.msg-row[data-has-e2e="1"]');
+                e2eRows.forEach(async (rowEl) => {
+                    const msgId = rowEl.dataset.id;
+                    const bodyEl = rowEl.querySelector('[data-e2e-text]');
+                    if (!bodyEl) return;
 
-        /* ══════════════════════════════
-           TYPING        }
+                    // Уже есть в кеше — сразу применяем
+                    if (_e2eDecryptedCache.has(msgId)) {
+                        const plain = _e2eDecryptedCache.get(msgId);
+                        rowEl.dataset.plain = plain;
+                        bodyEl.innerHTML = '';
+                        appendPlainText(bodyEl, plain);
+                        return;
+                    }
+
+                    // Расшифровываем и кешируем
+                    const snap = snapshot.docs.find(d => d.id === msgId);
+                    if (!snap) return;
+                    const plain = await decryptDM(snap.data(), myUid);
+                    _e2eDecryptedCache.set(msgId, plain);
+                    rowEl.dataset.plain = plain;
+                    bodyEl.innerHTML = '';
+                    appendPlainText(bodyEl, plain);
+                    // URL preview
+                    const bubble = rowEl.querySelector('.msg-bubble');
+                    if (bubble && !bubble.querySelector('.msg-url-preview')) {
+                        URL_RE.lastIndex = 0;
+                        if (URL_RE.test(plain)) buildUrlPreview(plain, bubble);
+                    }
+                });
+            }
+        }
 
         /* ══════════════════════════════
            TYPING
@@ -5410,37 +5694,6 @@ function dataUrlToFile(dataUrl, filename) {
                 return !!(this._audio && !this._audio.paused);
             }
         };
-
-        function buildVoiceBubble(msgId, src, dur) {
-            const voiceWrap = document.createElement('div');
-            voiceWrap.className = 'msg-voice';
-            const barCount = 28;
-            const playBtn = document.createElement('button');
-            playBtn.className = 'voice-play-btn';
-            playBtn.innerHTML = ChatPlayer._PLAY;
-            playBtn.title = 'Воспроизвести';
-            const waveEl = document.createElement('div');
-            waveEl.className = 'voice-waveform';
-            for (let i=0;i<barCount;i++){
-                const bar=document.createElement('div'); bar.className='voice-waveform-bar';
-                const seed=(msgId.charCodeAt(i%msgId.length)||5);
-                bar.style.height=(8+((seed*(i+7))%22))+'px';
-                waveEl.appendChild(bar);
-            }
-            const durEl = document.createElement('span');
-            durEl.className = 'voice-duration';
-            durEl.textContent = fmtVoiceTime(dur || 0);
-            voiceWrap.appendChild(playBtn);
-            voiceWrap.appendChild(waveEl);
-            voiceWrap.appendChild(durEl);
-            playBtn.addEventListener('click', () => ChatPlayer.play(src, playBtn, null, durEl, dur || 0));
-            waveEl.addEventListener('click', e => {
-                if (ChatPlayer._url !== src) return;
-                const rect=waveEl.getBoundingClientRect();
-                ChatPlayer.seek((e.clientX-rect.left)/rect.width);
-            });
-            return voiceWrap;
-        }
 
         /* ══════════════════════════════════════════
            MUSIC BUBBLE RENDERER
@@ -5940,27 +6193,32 @@ function dataUrlToFile(dataUrl, filename) {
             let sentCount = 0;
             for (const file of selected) {
                 try {
-                    showToast(currentChatMode === 'dm'
-                        ? '🔐 Шифрую фото ' + (sentCount+1) + '/' + selected.length + '…'
-                        : '⏳ Загружаю фото ' + (sentCount+1) + '/' + selected.length + '…');
+                    showToast(`⏳ Загружаю фото ${sentCount+1}/${selected.length}…`);
+                    // Загружаем оригинал на Cloudinary — без сжатия и потери качества
+                    const imageUrl = await uploadToCloudinary(file);
+                    if (!imageUrl) { showToast('❌ Ошибка загрузки фото'); continue; }
+                    const baseMsg = { uid: u.uid, author: displayNick(u), text: '', createdAt: serverTimestamp(), edited: false };
                     if (currentChatMode === 'group') {
-                        const imageUrl = await uploadToBackend(file);
-                        if (!imageUrl) { showToast('❌ Ошибка загрузки фото'); continue; }
-                        await addDoc(messagesCol, { uid: u.uid, author: displayNick(u), text: '', imageUrl, createdAt: serverTimestamp(), edited: false });
+                        await addDoc(messagesCol, { ...baseMsg, imageUrl });
                     } else {
-                        await sendE2EDirectMessage({ imageFile: file });
+                        const cid = currentDMConvId;
+                        const imgE2e = await encryptDM(imageUrl, currentDMPeerUid, u.uid);
+                        const dmImgMsg = { ...baseMsg, e2eImgForPeer: imgE2e.forPeer, e2eImgForMe: imgE2e.forMe };
+                        await addDoc(collection(db, 'dmConvs', cid, 'messages'), dmImgMsg);
+                        await setDoc(doc(db,'dmConvs',cid), {lastText:'🖼 Фото', lastAt: serverTimestamp(), [`unread.${currentDMPeerUid}`]: increment(1)}, {merge:true});
                     }
                     sentCount++;
                 } catch(e) { showToast('Ошибка: '+e.message); }
             }
-            if (sentCount > 0) showToast('✅ Отправлено ' + sentCount + ' фото');
+            if (sentCount > 0) showToast(`✅ Отправлено ${sentCount} фото`);
+            // reset
             galleryGrid.innerHTML = '';
             _galleryFiles = []; _gallerySelected.clear();
             gallerySendBar.classList.remove('is-visible');
             galleryMultiInput.value = '';
         });
 
-        // ─── Music tab ───        // ─── Music tab ───
+        // ─── Music tab ───
         const musicUploadBtn     = document.getElementById('musicUploadBtn');
         const musicFileInput     = document.getElementById('musicFileInput');
         const musicPreviewCard   = document.getElementById('musicPreviewCard');
@@ -6011,36 +6269,52 @@ musicSendBtn.addEventListener('click', async () => {
     if (_pendingMusicFile.size > UPLOAD_MAX_AUDIO_BYTES) { showToast('Аудио больше 15 МБ'); return; }
 
     musicSendBtn.disabled = true;
-    musicSendBtn.textContent = currentChatMode === 'dm' ? '🔐 Шифрую...' : '⏳ Загружаю 0%...';
+    musicSendBtn.textContent = '⏳ Загружаю 0%...';
     try {
-        const msgMeta = {
-            title: _pendingMusicTitle || _pendingMusicFile.name.replace(/\.[^.]+$/, ''),
-            duration: Math.round(_pendingMusicDur || 0),
-            mime: _pendingMusicFile.type || 'audio/*',
+        const url = await uploadToCloudinary(_pendingMusicFile, percent => {
+            musicSendBtn.textContent = `⏳ Загружаю ${percent}%...`;
+        });
+        if (!url || !url.startsWith('https://')) throw new Error('Cloudinary не вернул ссылку на музыку');
+
+        const msg = {
+            uid: u.uid,
+            author: displayNick(u),
+            text: '',
+            musicUrl: url,
+            musicTitle: _pendingMusicTitle || _pendingMusicFile.name.replace(/\.[^.]+$/, ''),
+            musicDuration: Math.round(_pendingMusicDur || 0),
+            musicMime: _pendingMusicFile.type,
+            createdAt: serverTimestamp(),
+            edited: false,
         };
 
         if (currentChatMode === 'group') {
-            const url = await uploadToBackend(_pendingMusicFile, percent => {
-                musicSendBtn.textContent = '⏳ Загружаю ' + percent + '%...';
-            });
-            if (!url || !url.startsWith('https://')) throw new Error('Бэкенд не вернул ссылку на музыку');
-            await addDoc(messagesCol, {
+            await addDoc(messagesCol, msg);
+        } else {
+            const cid = currentDMConvId;
+            const musicPayload = {
+                url,
+                title: msg.musicTitle,
+                duration: msg.musicDuration,
+                mime: msg.musicMime
+            };
+            const musicE2e = await encryptDM(JSON.stringify(musicPayload), currentDMPeerUid, u.uid);
+            await addDoc(collection(db, 'dmConvs', cid, 'messages'), {
                 uid: u.uid,
                 author: displayNick(u),
                 text: '',
-                musicUrl: url,
-                musicTitle: msgMeta.title,
-                musicDuration: msgMeta.duration,
-                musicMime: msgMeta.mime,
+                e2eMusicForPeer: musicE2e.forPeer,
+                e2eMusicForMe: musicE2e.forMe,
+                musicDuration: msg.musicDuration,
+                musicMime: msg.musicMime,
                 createdAt: serverTimestamp(),
                 edited: false,
             });
-        } else {
-            await sendE2EDirectMessage({
-                musicFile: _pendingMusicFile,
-                musicDuration: msgMeta.duration,
-                musicMime: msgMeta.mime,
-            });
+            await setDoc(doc(db, 'dmConvs', cid), {
+                lastText: '🎵 Музыка',
+                lastAt: serverTimestamp(),
+                [`unread.${currentDMPeerUid}`]: increment(1)
+            }, { merge: true });
         }
 
         _pendingMusicFile = null;
@@ -6059,8 +6333,6 @@ musicSendBtn.addEventListener('click', async () => {
         musicSendBtn.textContent = 'Отправить музыку';
     }
 });
-
-        // ─── Checklist tab ───});
 
         // ─── Checklist tab ───
         const checklistTitle    = document.getElementById('checklistTitle');
@@ -6112,13 +6384,22 @@ musicSendBtn.addEventListener('click', async () => {
             };
             try {
                 if (currentChatMode === 'group') await addDoc(messagesCol, msg);
-                else await sendE2EDirectMessage({ checklist: { title, items } });
+                else {
+                    const cid = currentDMConvId;
+                    // E2E: шифруем содержимое чек-листа как JSON-строку
+                    const checkJson = JSON.stringify({ title, items });
+                    const checkE2e = await encryptDM(checkJson, currentDMPeerUid, u.uid);
+                    const dmCheckMsg = { uid: u.uid, author: displayNick(u), text: '', createdAt: serverTimestamp(), edited: false,
+                        e2eChecklistForPeer: checkE2e.forPeer, e2eChecklistForMe: checkE2e.forMe };
+                    await addDoc(collection(db,'dmConvs',cid,'messages'), dmCheckMsg);
+                    await setDoc(doc(db,'dmConvs',cid), {lastText:'✅ '+(title||'Чек-лист'), lastAt:serverTimestamp(), [`unread.${currentDMPeerUid}`]:increment(1)},{merge:true});
+                }
                 initChecklistRows();
                 showToast('✅ Чек-лист отправлен!');
             } catch(e) { showToast('Ошибка: '+e.message); }
         });
 
-        // Poll button in sheet → open poll modal        // Poll button in sheet → open poll modal
+        // Poll button in sheet → open poll modal
         document.getElementById('attachPollOpenBtn').addEventListener('click', () => {
             closeAttachSheet();
             setTimeout(() => openPollModal(), 200);
@@ -6135,8 +6416,9 @@ musicSendBtn.addEventListener('click', async () => {
             if (isRecording) { stopVoiceRecording(true); return; }
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({audio: true});
-                const mimeType = pickVoiceMimeType();
-                mediaRecorder = mimeType ? new MediaRecorder(stream, {mimeType}) : new MediaRecorder(stream);
+                const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+                    ? 'audio/webm;codecs=opus' : 'audio/webm';
+                mediaRecorder = new MediaRecorder(stream, {mimeType});
                 voiceChunks = []; voiceSeconds = 0;
                 mediaRecorder.ondataavailable = e => { if (e.data.size > 0) voiceChunks.push(e.data); };
                 mediaRecorder.onstop = async () => {
@@ -6145,9 +6427,33 @@ musicSendBtn.addEventListener('click', async () => {
                     const blob = new Blob(voiceChunks, { type: mimeType });
                     if (!voiceChunks.length || blob.size < 1000) { showToast('❌ Голосовое пустое. Удержи запись чуть дольше.'); return; }
                     if (blob.size > UPLOAD_MAX_AUDIO_BYTES) { showToast('❌ Голосовое больше 15 МБ'); return; }
+                    // Загружаем голосовое на Cloudinary
                     (async () => {
-                        try { await sendVoiceBlob(blob, mimeType || mediaRecorder.mimeType || blob.type); }
-                        catch(e){ showToast('Ошибка: '+e.message); }
+                        const u = auth.currentUser; if (!u) return;
+                        const dur = voiceSeconds;
+                        try {
+                            stickToBottom = true;
+                            showToast('⏳ Загружаю голосовое…');
+                            const voiceFile = new File([blob], `voice_${Date.now()}.webm`, {type: mimeType});
+                            const voiceUrl = await uploadToCloudinary(voiceFile, percent => {
+                                showToast(`⏳ Загружаю голосовое ${percent}%...`);
+                            });
+                            if (!voiceUrl || !voiceUrl.startsWith('https://')) throw new Error('Cloudinary не вернул ссылку на голосовое');
+                            const baseMsg = { uid:u.uid, author:displayNick(u), text:'',
+                                createdAt:serverTimestamp(), edited:false,
+                                voiceUrl, voiceDuration:dur, voiceMime:mimeType };
+                            if (currentChatMode === 'group') {
+                                await addDoc(messagesCol, baseMsg);
+                            } else {
+                                const voiceE2e = await encryptDM(voiceUrl, currentDMPeerUid, u.uid);
+                                const dmMsg = { uid:u.uid, author:displayNick(u), text:'',
+                                    createdAt:serverTimestamp(), edited:false,
+                                    e2eVoiceForPeer: voiceE2e.forPeer, e2eVoiceForMe: voiceE2e.forMe,
+                                    voiceDuration:dur, voiceMime:mimeType };
+                                await addDoc(collection(db, 'dmConvs', currentDMConvId, 'messages'), dmMsg);
+                                await setDoc(doc(db, 'dmConvs', currentDMConvId), {lastText: '🎤 Голосовое', lastAt: serverTimestamp(), [`unread.${currentDMPeerUid}`]: increment(1)}, {merge: true});
+                            }
+                        } catch(e) { showToast('Ошибка: ' + e.message); }
                     })();
                 };
                 mediaRecorder.start(200);
@@ -6263,12 +6569,12 @@ musicSendBtn.addEventListener('click', async () => {
             let text=cleanContent(chatInput.value).trim();
             const hasImg = !!(pendingImageFile || pendingImageUrl);
             if (!text && !hasImg){globalStatus.textContent='Введите текст или выберите картинку';globalStatus.classList.add('is-error');return;}
-
-            if (currentChatMode === 'group' && pendingImageFile && !pendingImageUrl) {
+            // Если есть файл но ещё не загружен на Cloudinary — загружаем сейчас
+            if (pendingImageFile && !pendingImageUrl) {
                 globalStatus.textContent = '⏳ Загружаю фото…';
                 try {
-                    pendingImageUrl = await uploadToBackend(pendingImageFile, pct => {
-                        globalStatus.textContent = '⏳ Загружаю фото… ' + pct + '%';
+                    pendingImageUrl = await uploadToCloudinary(pendingImageFile, pct => {
+                        globalStatus.textContent = `⏳ Загружаю фото… ${pct}%`;
                     });
                     if (!pendingImageUrl) throw new Error('Не удалось загрузить фото');
                     globalStatus.textContent = '';
@@ -6286,37 +6592,42 @@ musicSendBtn.addEventListener('click', async () => {
             globalStatus.textContent=''; globalStatus.classList.remove('is-error');
             try {
                 if (editingMessageId){
+                    // Editing — text only, no image change
                     if (currentChatMode==='group') await updateDoc(doc(db,'messages',editingMessageId),{text:text,edited:true});
                     else {
-                        const e2e = await e2eEncryptText(text, currentDMPeerUid, u.uid);
+                        // E2E: шифруем отредактированный текст для обоих участников
+                        const e2e = await encryptDM(text, currentDMPeerUid, u.uid);
                         await updateDoc(doc(db,'dmConvs',currentDMConvId,'messages',editingMessageId),{
                             text: '', e2eForPeer: e2e.forPeer, e2eForMe: e2e.forMe, edited:true
                         });
                     }
                     cancelEditMessage();
                 } else {
+                    let msgData;
                     if (currentChatMode==='group'){
+                        // ── Модерация: проверяем токсичность для обычных пользователей ──
                         if (!userIsAdmin && text) {
                             globalStatus.textContent = '🔍 Проверка…';
                             const toxic = await checkToxicity(text);
                             if (toxic) {
+                                // Блокируем отправку, выдаём варн
                                 globalStatus.textContent = '';
                                 showToast('⛔ Сообщение слишком токсично и не отправлено');
                                 try {
                                     const newWarns = await warnUser(u.uid);
                                     const remaining = MAX_WARNS - newWarns;
                                     if (newWarns >= MAX_WARNS) {
-                                        showToast('🚫 Вы получили ' + newWarns + '/' + MAX_WARNS + ' варнов — отправка сообщений заблокирована');
+                                        showToast(`🚫 Вы получили ${newWarns}/${MAX_WARNS} варнов — отправка сообщений заблокирована`);
                                         applyWarnsBan(newWarns);
                                     } else {
-                                        showToast('⚠️ Предупреждение ' + newWarns + '/' + MAX_WARNS + '. Ещё ' + remaining + ' — и бан');
+                                        showToast(`⚠️ Предупреждение ${newWarns}/${MAX_WARNS}. Ещё ${remaining} — и бан`);
                                     }
                                 } catch(warnErr) { console.warn('[moderation] warnUser error:', warnErr); }
-                                return;
+                                return; // не отправляем
                             }
                             globalStatus.textContent = '';
                         }
-                        const msgData={
+                        msgData={
                             uid:u.uid, author:displayNick(u),
                             text: text || '',
                             createdAt:serverTimestamp(), edited:false,
@@ -6325,11 +6636,41 @@ musicSendBtn.addEventListener('click', async () => {
                         };
                         await addDoc(messagesCol,msgData);
                     } else {
-                        await sendE2EDirectMessage({
-                            text,
-                            imageFile: pendingImageFile || null,
-                            replyTo: replyingTo ? { id: replyingTo.id, author: replyingTo.author, text: replyingTo.text || '' } : null,
-                        });
+                        // ЛС — E2E шифрование
+                        const e2e = await encryptDM(text, currentDMPeerUid, u.uid);
+                        // Шифруем цитату (replyTo.text) тоже — иначе она хранится открытым текстом
+                        let encryptedReplyTo = undefined;
+                        if (replyingTo) {
+                            const replySnippet = replyingTo.text.slice(0, 100);
+                            const replyE2e = await encryptDM(replySnippet, currentDMPeerUid, u.uid);
+                            encryptedReplyTo = {
+                                id: replyingTo.id,
+                                author: replyingTo.author,
+                                text: '',
+                                e2eForPeer: replyE2e.forPeer,
+                                e2eForMe:   replyE2e.forMe,
+                            };
+                        }
+                        // Шифруем URL изображения если оно есть (сам файл на Cloudinary)
+                        let encryptedImg = undefined;
+                        if (hasImg && pendingImageUrl) {
+                            // Шифруем только URL (короткая строка) — файл на Cloudinary
+                            const imgE2e = await encryptDM(pendingImageUrl, currentDMPeerUid, u.uid);
+                            encryptedImg = { e2eImgForPeer: imgE2e.forPeer, e2eImgForMe: imgE2e.forMe };
+                        }
+                        msgData={
+                            uid:u.uid, author:displayNick(u),
+                            text: '', // не храним plaintext
+                            e2eForPeer: e2e.forPeer,
+                            e2eForMe:   e2e.forMe,
+                            createdAt:serverTimestamp(), edited:false,
+                            ...(encryptedImg || {}),
+                            ...(encryptedReplyTo ? {replyTo: encryptedReplyTo} : {})
+                        };
+                        await addDoc(collection(db,'dmConvs',currentDMConvId,'messages'),msgData);
+                        const convRef=doc(db,'dmConvs',currentDMConvId);
+                        const previewText = hasImg ? (text ? text : '🖼 Картинка') : '🔒 Сообщение';
+                        await setDoc(convRef,{lastText:previewText,lastAt:serverTimestamp(),[`unread.${currentDMPeerUid}`]:increment(1)},{merge:true});
                     }
                     cancelReply(); lastOutboundAt=Date.now();
                     chatInput.value=''; chatInput.style.height='auto';
@@ -6337,9 +6678,9 @@ musicSendBtn.addEventListener('click', async () => {
                     chatSend.disabled=true;
                 }
             } catch(e){globalStatus.textContent=e.message||String(e);globalStatus.classList.add('is-error');}
-            finally{chatSend.disabled=!chatInput.value.trim()&&!pendingImageFile; updateSendMicState();}
+            finally{chatSend.disabled=!chatInput.value.trim()&&!pendingImageFile;}
         }
-        chatSend.addEventListener('click',submitComposer);        chatSend.addEventListener('click',submitComposer);
+        chatSend.addEventListener('click',submitComposer);
         chatInput.addEventListener('keydown',e=>{
             if (e.key==='Enter'&&!e.shiftKey){e.preventDefault();if(!chatSend.disabled)submitComposer();}
             // ↑ arrow key — edit last own message (TG style)
@@ -6470,7 +6811,6 @@ musicSendBtn.addEventListener('click', async () => {
             overlay.addEventListener('click',e=>{
                 if(e.target===overlay){
                     overlay.classList.remove('is-open');
-                    ChatPlayer.stop();
                 }
             });
         });
@@ -6486,7 +6826,6 @@ musicSendBtn.addEventListener('click', async () => {
             if (_pinnedUnsub){_pinnedUnsub();_pinnedUnsub=null;}
             if (pollsUnsub){pollsUnsub();pollsUnsub=null;}
             peerHasRead=false;
-            revokeAllE2EObjectUrls();
             _e2eDecryptedCache.clear(); // сбрасываем кеш расшифровки при смене чата
             pinnedMsgId=null; _pinnedBannerLastText=''; _pinnedBannerDismissed=null;
             pinnedBanner.classList.remove('is-on');
@@ -6506,6 +6845,7 @@ musicSendBtn.addEventListener('click', async () => {
             tearDownChat();
             globalStatus.textContent=''; globalStatus.classList.remove('is-error');
             renderSidebarUser();
+            refreshMiniProfilePlayer();
             currentChatMode='group';
             tgHeaderAv.style.background='linear-gradient(135deg,#5ec8ff,#a78bfa)';
             tgHeaderAv.textContent='💬'; tgHeaderName.textContent='Основной чат'; tgHeaderStatus.textContent='Чат класса 6А'; tgHeaderStatus.classList.remove('online');
