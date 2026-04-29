@@ -88,6 +88,10 @@ def get_client_ip(request: Request) -> str:
         return forwarded.split(",")[0].strip()
     return request.client.host if request.client else "unknown"
 
+def normalize_content_type(value: str) -> str:
+    """Return MIME without parameters, e.g. audio/webm from audio/webm;codecs=opus."""
+    return (value or "application/octet-stream").split(";", 1)[0].strip().lower()
+
 # ── FastAPI приложение ───────────────────────────────────────────
 app = FastAPI(
     title="Чат 6А — Бэкенд-прокси",
@@ -221,6 +225,7 @@ MAGIC_SIGNATURES = {
     "audio/wav":  [b"RIFF"],
     "audio/x-wav": [b"RIFF"],
     "video/webm": [b"\x1a\x45\xdf\xa3"],
+    "audio/webm": [b"\x1a\x45\xdf\xa3"],
 }
 
 def validate_upload_content(filename: str, content_type: str, content: bytes, upload_type: str) -> None:
@@ -280,7 +285,7 @@ async def upload(
         )
 
     # Проверка MIME (только для незашифрованных файлов, raw пропускаем)
-    content_type = file.content_type or "application/octet-stream"
+    content_type = normalize_content_type(file.content_type or "application/octet-stream")
     if type != "raw" and content_type not in ALLOWED_MIME_TYPES:
         raise HTTPException(status_code=415, detail=f"Недопустимый MIME-тип: {content_type}")
 

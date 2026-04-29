@@ -389,7 +389,7 @@ async function decryptBuffer(encryptedBuffer, rawAesKey) {
  * @param {'url'|'file'} mode          — 'url' для старой схемы, 'file' для новой
  * @returns {Promise<string>}  Object URL или data URL
  */
-async function decryptMediaUrl(myPrivateKey, encryptedAesB64, cloudinaryRawUrl) {
+async function decryptMediaUrl(myPrivateKey, encryptedAesB64, cloudinaryRawUrl, mimeType = "") {
   // 1. RSA-расшифровываем AES-ключ (hex → ArrayBuffer)
   const aesHex    = await rsaDecrypt(myPrivateKey, encryptedAesB64);
   const rawAesKey = hexToBuffer(aesHex);
@@ -403,7 +403,7 @@ async function decryptMediaUrl(myPrivateKey, encryptedAesB64, cloudinaryRawUrl) 
   const plainBuf = await decryptBuffer(encBuf, rawAesKey);
 
   // 4. Возвращаем Object URL — не забудь вызвать revokeObjectURL после использования
-  return URL.createObjectURL(new Blob([plainBuf]));
+  return URL.createObjectURL(new Blob([plainBuf], mimeType ? { type: mimeType } : undefined));
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -783,12 +783,6 @@ async function sendDirectMessage(params) {
     const urlE2e = await enc(cloudUrl);
     msgData.e2eImgForPeer = JSON.stringify({ aes: encAesForPeer, url: urlE2e.forPeer });
     msgData.e2eImgForMe   = JSON.stringify({ aes: encAesForMe,   url: urlE2e.forMe  });
-    // Если нет текста — Rules требуют хоть одно e2e-поле с непустой строкой
-    if (!msgData.e2eForPeer) {
-      const placeholder = await enc(''); // пустой текст — Rules допускают
-      msgData.e2eForPeer = msgData.e2eForPeer || encAesForPeer;
-      msgData.e2eForMe   = msgData.e2eForMe   || encAesForMe;
-    }
   }
 
   // Голосовое сообщение
@@ -799,10 +793,6 @@ async function sendDirectMessage(params) {
     msgData.e2eVoiceForMe   = JSON.stringify({ aes: encAesForMe,   url: urlE2e.forMe  });
     if (voiceDuration != null) msgData.voiceDuration = voiceDuration;
     if (voiceMime)             msgData.voiceMime     = voiceMime;
-    if (!msgData.e2eForPeer) {
-      msgData.e2eForPeer = encAesForPeer;
-      msgData.e2eForMe   = encAesForMe;
-    }
   }
 
   // Музыка
@@ -813,22 +803,17 @@ async function sendDirectMessage(params) {
     msgData.e2eMusicForMe   = JSON.stringify({ aes: encAesForMe,   url: urlE2e.forMe  });
     if (musicDuration != null) msgData.musicDuration = musicDuration;
     if (musicMime)             msgData.musicMime     = musicMime;
-    if (!msgData.e2eForPeer) {
-      msgData.e2eForPeer = encAesForPeer;
-      msgData.e2eForMe   = encAesForMe;
-    }
   }
 
   // Чеклист
-  if (checklist && Array.isArray(checklist)) {
-    const serialized = JSON.stringify(checklist);
+  if (checklist) {
+    const normalizedChecklist = Array.isArray(checklist)
+      ? { title: '', items: checklist }
+      : { title: checklist.title || '', items: checklist.items || [] };
+    const serialized = JSON.stringify(normalizedChecklist);
     const e2e = await enc(serialized);
     msgData.e2eChecklistForPeer = e2e.forPeer;
     msgData.e2eChecklistForMe   = e2e.forMe;
-    if (!msgData.e2eForPeer) {
-      msgData.e2eForPeer = e2e.forPeer;
-      msgData.e2eForMe   = e2e.forMe;
-    }
   }
 
   // Цитата — шифруем текст цитаты
@@ -858,6 +843,8 @@ async function sendDirectMessage(params) {
   const previewText = imageFile ? '🖼 Изображение'
                     : voiceFile ? '🎙 Голосовое'
                     : musicFile ? '🎵 Музыка'
+                    : checklist ? '✅ Чек-лист'
+                    : text ? text.trim().slice(0, 80)
                     : '🔒 Сообщение';
   await fsSetDoc(
     fsDoc(firestoreDb, 'dmConvs', convId),
@@ -919,7 +906,7 @@ async function decryptMessage(msgData, myUid, myPrivateKey) {
       // Расшифровываем AES-ключ
       const aesHex     = await rsaDecrypt(myPrivateKey, aes);
       // Загружаем и расшифровываем файл
-      result.imageObjectUrl = await decryptMediaUrl(myPrivateKey, aes, cloudUrl);
+      result.imageObjectUrl = await decryptMediaUrl(myPrivateKey, aes, cloudUrl, "image/jpeg");
     } catch {
       result.imageObjectUrl = null; // отображать заглушку
     }
@@ -931,7 +918,7 @@ async function decryptMessage(msgData, myUid, myPrivateKey) {
     try {
       const { aes, url: encUrl } = JSON.parse(voiceRaw);
       const cloudUrl = await rsaDecrypt(myPrivateKey, encUrl);
-      result.voiceObjectUrl = await decryptMediaUrl(myPrivateKey, aes, cloudUrl);
+      result.voiceObjectUrl = await decryptMediaUrl(myPrivateKey, aes, cloudUrl, msgData.voiceMime || "audio/webm");
     } catch {
       result.voiceObjectUrl = null;
     }
@@ -943,7 +930,7 @@ async function decryptMessage(msgData, myUid, myPrivateKey) {
     try {
       const { aes, url: encUrl } = JSON.parse(musicRaw);
       const cloudUrl = await rsaDecrypt(myPrivateKey, encUrl);
-      result.musicObjectUrl = await decryptMediaUrl(myPrivateKey, aes, cloudUrl);
+      result.musicObjectUrl = await decryptMediaUrl(myPrivateKey, aes, cloudUrl, msgData.musicMime || "audio/mpeg");
     } catch {
       result.musicObjectUrl = null;
     }
