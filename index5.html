@@ -1457,6 +1457,56 @@
             .mini-profile-player { left:10px; right:10px; width:auto; bottom:max(10px, env(safe-area-inset-bottom)); }
         }
 
+
+        /* ═══════════════════════════════════════
+           FINAL HOTFIX: cleaner profile modal, no online strip, wallpapers
+        ═══════════════════════════════════════ */
+        #onlineBar.online-bar { display: none !important; }
+        .settings-tab-row { align-items:center; padding-bottom:2px; }
+        .settings-tab-btn {
+            min-height:42px; display:inline-flex; align-items:center; justify-content:center;
+            line-height:1; padding:0 18px; vertical-align:middle;
+        }
+        .settings-tab-btn.is-active { transform:none; }
+        .profile-status-row {
+            display:grid !important; grid-template-columns:repeat(auto-fit, minmax(152px, 1fr));
+            gap:10px !important;
+        }
+        .status-chip {
+            width:100%; min-height:46px; display:inline-flex; align-items:center; justify-content:center;
+            line-height:1.15; padding:0 12px !important;
+        }
+        @media (min-width:1024px) {
+            #profileModal { place-items:center !important; padding:28px !important; }
+            #profileModal .settings-drawer {
+                width:min(780px, calc(100vw - 96px)) !important;
+                max-height:min(720px, calc(100dvh - 80px)) !important;
+                border-radius:30px !important;
+                display:flex !important; flex-direction:column !important;
+            }
+            #profileModal .settings-hero { padding:22px 28px 18px; }
+            #profileModal .settings-content { max-height:none !important; flex:1 1 auto; overflow:auto; }
+            #profileModal .settings-actions { flex-shrink:0; }
+        }
+        .wallpaper-grid {
+            display:grid; grid-template-columns:repeat(auto-fit, minmax(130px, 1fr));
+            gap:10px; margin-top:8px;
+        }
+        .wallpaper-preset {
+            min-height:76px; border-radius:18px; border:1.5px solid var(--border-strong);
+            cursor:pointer; color:#fff; font-family:inherit; font-weight:900; font-size:.82rem;
+            display:flex; align-items:flex-end; justify-content:flex-start; padding:10px 12px;
+            box-shadow:inset 0 0 0 1px rgba(255,255,255,.05); transition:transform .15s, border-color .18s, box-shadow .18s;
+            text-shadow:0 1px 8px rgba(0,0,0,.4);
+        }
+        .wallpaper-preset:hover { transform:translateY(-2px); border-color:var(--accent); }
+        .wallpaper-preset.is-active { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-dim); }
+        .wallpaper-row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+        .wallpaper-row input[type="color"] {
+            width:58px; height:44px; padding:0; border-radius:14px; border:1.5px solid var(--border-strong);
+            background:transparent; cursor:pointer;
+        }
+
     </style>
 </head>
 <body>
@@ -1706,16 +1756,38 @@
                 <section class="settings-panel" data-settings-panel="appearance">
                     <h3>Внешний вид</h3>
                     <div class="modal-field">
-                        <label for="profileTheme">Тема оформления</label>
+                        <label for="profileTheme">Тема интерфейса</label>
                         <select id="profileTheme">
                             <option value="dark">🌙 Тёмная</option>
                             <option value="light">☀️ Светлая</option>
                             <option value="system">💻 Системная</option>
                         </select>
                     </div>
+                    <div class="modal-field">
+                        <label>Фон чата</label>
+                        <div class="wallpaper-grid" id="wallpaperPresetGrid">
+                            <button type="button" class="wallpaper-preset" data-wallpaper="default" style="background:#080c15">Стандарт</button>
+                            <button type="button" class="wallpaper-preset" data-wallpaper="aurora" style="background:linear-gradient(135deg,#0f172a,#1e3a8a,#7c3aed)">Аврора</button>
+                            <button type="button" class="wallpaper-preset" data-wallpaper="ocean" style="background:linear-gradient(135deg,#082f49,#0369a1,#67e8f9)">Океан</button>
+                            <button type="button" class="wallpaper-preset" data-wallpaper="sunset" style="background:linear-gradient(135deg,#451a03,#c2410c,#f97316)">Закат</button>
+                            <button type="button" class="wallpaper-preset" data-wallpaper="forest" style="background:linear-gradient(135deg,#052e16,#15803d,#84cc16)">Лес</button>
+                            <button type="button" class="wallpaper-preset" data-wallpaper="purple" style="background:linear-gradient(135deg,#2e1065,#7e22ce,#f0abfc)">Фиолет</button>
+                        </div>
+                    </div>
+                    <div class="modal-field">
+                        <label>Свой фон</label>
+                        <div class="wallpaper-row">
+                            <input type="color" id="chatWallpaperColor" value="#080c15" title="Цвет фона">
+                            <button type="button" class="btn btn-ghost" id="chatWallpaperColorBtn" style="font-size:.82rem;padding:9px 13px">Применить цвет</button>
+                            <button type="button" class="btn btn-ghost" id="chatWallpaperImageBtn" style="font-size:.82rem;padding:9px 13px">🖼 Своя картинка</button>
+                            <button type="button" class="btn btn-ghost" id="chatWallpaperResetBtn" style="font-size:.82rem;padding:9px 13px;color:var(--danger)">Сбросить</button>
+                            <input type="file" id="chatWallpaperImageInput" accept="image/*" style="display:none">
+                        </div>
+                        <div class="settings-help">Фон сохраняется только на этом устройстве через localStorage.</div>
+                    </div>
                 </section>
 
-                <section class="settings-panel" data-settings-panel="music">
+                                <section class="settings-panel" data-settings-panel="music">
                     <h3>Музыка</h3>
                     <div class="modal-field">
                         <label for="profileMusicUrl">Ссылка на аудио</label>
@@ -2617,7 +2689,7 @@ function dataUrlToFile(dataUrl, filename) {
         const TYPING_MAX_MS     = 4500;
         const SCROLL_THRESHOLD  = 120;
         const SPAM_INTERVAL_MS  = 1500;
-        const ONLINE_TTL_MS     = 25000;
+        const ONLINE_TTL_MS     = 180000; // 3 минуты
         const PINNED_KEY        = 'index6a_pinned_chats';
         const MUTED_KEY         = 'index6a_muted_chats';
         const ARCHIVED_KEY      = 'index6a_archived_chats';
@@ -3317,8 +3389,9 @@ function dataUrlToFile(dataUrl, filename) {
         ══════════════════════════════ */
         const messagesCol   = collection(db, 'messages');
         const messagesQuery = query(messagesCol, orderBy('createdAt','asc'));
-        const typingRef     = doc(db, 'presence', 'typing');
-        const presenceRef   = doc(db, 'presence', 'online');
+        const typingRef     = doc(db, 'presence', 'typing_dm_group');
+        const presenceCol   = collection(db, 'presence');
+        function ownPresenceRef(uid){ return doc(db, 'presence', uid); }
 
         function openGroupChat() {
             if (currentChatMode==='group') return;
@@ -3825,14 +3898,16 @@ function dataUrlToFile(dataUrl, filename) {
             if (!_miniTrack) {
                 miniProfilePlayer.classList.remove('is-visible');
                 _miniAudio.pause();
+                _miniAudio.removeAttribute('src');
                 _miniPlayIcon(false);
+                if (miniProfileSub) miniProfileSub.textContent = 'нет трека';
                 return;
             }
             if (miniProfileTitle) miniProfileTitle.textContent = _miniTrack.title || 'Музыка профиля';
-            if (miniProfileSub) miniProfileSub.textContent = 'мини-плеер';
-            miniProfilePlayer.classList.add('is-visible');
+            if (miniProfileSub) miniProfileSub.textContent = 'нажми ▶ чтобы включить';
+            if (_miniAudio.paused) miniProfilePlayer.classList.remove('is-visible');
         }
-        function startMiniProfilePlayer(url, title) {
+                function startMiniProfilePlayer(url, title) {
             if (!url) return;
             if (_miniAudio.src !== url) {
                 _miniAudio.src = url;
@@ -3873,6 +3948,67 @@ function dataUrlToFile(dataUrl, filename) {
                 updateMiniProfilePlayer(d.musicUrl ? { url: d.musicUrl, title: d.musicTitle || 'Музыка профиля' } : null);
             } catch(_) {}
         }
+
+
+
+        /* ── Фоны чата: пресеты / цвет / своя картинка ── */
+        const WALLPAPER_KEY = 'index6a_chat_wallpaper_v2';
+        const WALLPAPERS = {
+            default: { type:'preset', value:'default' },
+            aurora:  { type:'gradient', value:'linear-gradient(135deg,#020617 0%,#0f172a 38%,#1e3a8a 68%,#7c3aed 100%)' },
+            ocean:   { type:'gradient', value:'linear-gradient(135deg,#031520 0%,#082f49 42%,#0369a1 78%,#67e8f9 100%)' },
+            sunset:  { type:'gradient', value:'linear-gradient(135deg,#1c0802 0%,#451a03 38%,#c2410c 74%,#f97316 100%)' },
+            forest:  { type:'gradient', value:'linear-gradient(135deg,#02110a 0%,#052e16 48%,#15803d 82%,#84cc16 100%)' },
+            purple:  { type:'gradient', value:'linear-gradient(135deg,#120024 0%,#2e1065 44%,#7e22ce 78%,#f0abfc 100%)' }
+        };
+        function getSavedWallpaper(){
+            try { return JSON.parse(localStorage.getItem(WALLPAPER_KEY) || 'null') || WALLPAPERS.default; }
+            catch(_) { return WALLPAPERS.default; }
+        }
+        function saveWallpaper(w){ localStorage.setItem(WALLPAPER_KEY, JSON.stringify(w || WALLPAPERS.default)); }
+        function applyChatWallpaper(w = getSavedWallpaper()){
+            if (!tgMain) return;
+            if (!w || w.value === 'default') {
+                tgMain.style.background = 'var(--bg-chat)';
+                tgMain.style.backgroundImage = 'radial-gradient(var(--dot-color) 1px, transparent 1px)';
+                tgMain.style.backgroundSize = '24px 24px';
+            } else if (w.type === 'image') {
+                tgMain.style.background = `linear-gradient(rgba(5,7,15,.42), rgba(5,7,15,.42)), url("${w.value}") center / cover fixed`;
+                tgMain.style.backgroundSize = 'cover';
+            } else {
+                tgMain.style.background = w.value;
+                tgMain.style.backgroundImage = 'radial-gradient(rgba(255,255,255,.035) 1px, transparent 1px)';
+                tgMain.style.backgroundSize = '24px 24px';
+            }
+            document.querySelectorAll('.wallpaper-preset').forEach(btn => btn.classList.toggle('is-active', btn.dataset.wallpaper === w.value));
+        }
+        function initWallpaperControls(){
+            applyChatWallpaper();
+            document.querySelectorAll('.wallpaper-preset').forEach(btn => btn.addEventListener('click', () => {
+                const key = btn.dataset.wallpaper || 'default';
+                const w = WALLPAPERS[key] || WALLPAPERS.default;
+                saveWallpaper(w); applyChatWallpaper(w);
+            }));
+            const colorInp = document.getElementById('chatWallpaperColor');
+            document.getElementById('chatWallpaperColorBtn')?.addEventListener('click', () => {
+                const c = colorInp?.value || '#080c15';
+                const w = { type:'color', value:c };
+                saveWallpaper(w); applyChatWallpaper(w);
+            });
+            const imgInp = document.getElementById('chatWallpaperImageInput');
+            document.getElementById('chatWallpaperImageBtn')?.addEventListener('click', () => { imgInp.value=''; imgInp.click(); });
+            imgInp?.addEventListener('change', () => {
+                const f = imgInp.files && imgInp.files[0];
+                if (!f) return;
+                if (!f.type.startsWith('image/')) return showToast('Это не картинка');
+                if (f.size > 2.5 * 1024 * 1024) return showToast('Картинка слишком большая, максимум 2.5 МБ');
+                const r = new FileReader();
+                r.onload = () => { const w = { type:'image', value:String(r.result) }; saveWallpaper(w); applyChatWallpaper(w); };
+                r.readAsDataURL(f);
+            });
+            document.getElementById('chatWallpaperResetBtn')?.addEventListener('click', () => { saveWallpaper(WALLPAPERS.default); applyChatWallpaper(WALLPAPERS.default); });
+        }
+        initWallpaperControls();
 
         /* ── Ник: валидация ── */
         const NICK_FORBIDDEN = /[<>&"'\/\\]/;
@@ -4246,16 +4382,19 @@ function dataUrlToFile(dataUrl, filename) {
         }
 
         async function pingOnline() {
-            const u=auth.currentUser; if (!u) return;
-            const customStatus = userProfile.status||'online';
-            if (customStatus==='invisible') {
-                // Remove from presence if exists
-                try { await setDoc(presenceRef,{users:{[u.uid]:deleteField()}},{merge:true}); } catch(_){}
-                return;
-            }
+            const u = auth.currentUser; if (!u) return;
+            const customStatus = userProfile.status || 'online';
             try {
-                await setDoc(presenceRef,{users:{[u.uid]:{n:displayNick(u),t:serverTimestamp(),uid:u.uid,status:customStatus}}},{merge:true});
-            } catch(_){}
+                await setDoc(ownPresenceRef(u.uid), {
+                    uid: u.uid,
+                    n: displayNick(u),
+                    t: serverTimestamp(),
+                    status: customStatus,
+                    activeChatId: currentChatMode === 'dm' ? currentDMConvId : 'group'
+                }, { merge:true });
+            } catch(e) {
+                console.warn('[presence] ping failed:', e?.message || e);
+            }
         }
 
         function startOnlineBar() {
@@ -4263,41 +4402,34 @@ function dataUrlToFile(dataUrl, filename) {
             if (onlineUnsub) { onlineUnsub(); onlineUnsub = null; }
             pingOnline();
             onlinePingTimer = setInterval(pingOnline, 15000);
-            onlineUnsub = onSnapshot(presenceRef, snap => {
-                const users = snap.exists() ? (snap.data().users || {}) : {};
+            onlineUnsub = onSnapshot(presenceCol, snap => {
                 const now = Date.now();
-                const active = Object.values(users).filter(v => {
-                    if (!v || !v.t || v.status === 'invisible') return false;
-                    const ms = typeof v.t.toMillis === 'function' ? v.t.toMillis() : 0;
-                    return ms > 0 && (now - ms) < ONLINE_TTL_MS;
-                });
                 onlineUsers = {};
-                active.forEach(v => { if (v.uid) onlineUsers[v.uid] = v.n || 'Пользователь'; });
-                renderOnlineCounter(active);
+                snap.forEach(ds => {
+                    const id = ds.id || '';
+                    if (id === 'typing' || id.startsWith('typing_dm_')) return;
+                    const v = ds.data() || {};
+                    if (!v.uid || !v.t || v.status === 'invisible') return;
+                    const ms = typeof v.t.toMillis === 'function' ? v.t.toMillis() : 0;
+                    if (ms > 0 && (now - ms) < ONLINE_TTL_MS) onlineUsers[String(v.uid)] = v.n || 'Пользователь';
+                });
+                renderOnlineCounter([]);
                 clearTimeout(_sidebarDebounceTimer);
-                _sidebarDebounceTimer = setTimeout(() => buildSidebarList(sidebarSearch.value), 150);
-                if (currentChatMode === 'dm' && currentDMPeerUid) {
-                    const online = !!onlineUsers[currentDMPeerUid];
-                    tgHeaderStatus.textContent = online ? 'в сети' : 'не в сети';
-                    tgHeaderStatus.classList.toggle('online', online);
-                }
+                _sidebarDebounceTimer = setTimeout(() => buildSidebarList(sidebarSearch.value), 120);
+                updateCurrentDMHeaderStatus();
             });
             return () => { if (onlinePingTimer) clearInterval(onlinePingTimer); if (onlineUnsub) onlineUnsub(); };
         }
 
-        function renderOnlineCounter(active) {
-            onlineBar.innerHTML = '';
-            const label = document.createElement('span');
-            label.className = 'online-bar-label';
-            label.textContent = 'Онлайн';
-            const count = document.createElement('span');
-            count.className = 'online-count-pill';
-            const n = active.length;
-            count.textContent = `${n} ${n === 1 ? 'человек' : (n >= 2 && n <= 4 ? 'человека' : 'человек')}`;
-            const note = document.createElement('span');
-            note.className = 'online-status-note';
-            note.textContent = 'за последние 3 минуты';
-            onlineBar.append(label, count, note);
+        function updateCurrentDMHeaderStatus(){
+            if (currentChatMode !== 'dm' || !currentDMPeerUid) return;
+            const online = !!onlineUsers[String(currentDMPeerUid)];
+            tgHeaderStatus.textContent = online ? 'в сети' : 'не в сети';
+            tgHeaderStatus.classList.toggle('online', online);
+        }
+
+        function renderOnlineCounter(_active) {
+            if (onlineBar) onlineBar.innerHTML = '';
         }
 
         /* ══════════════════════════════
@@ -5239,31 +5371,29 @@ function dataUrlToFile(dataUrl, filename) {
                 musicPlaceholder.textContent = '🔒 Музыка (расшифровка...)';
                 musicPlaceholder.style.cssText = 'font-size:.85rem;color:var(--muted);padding:4px 0';
                 bubble.appendChild(musicPlaceholder);
-                if (myPrivateKey) {
-                    const musicCipher = pickE2ECipher(d, myUid, 'e2eMusicForPeer', 'e2eMusicForMe');
-                    rsaDecrypt(myPrivateKey, musicCipher).then(plainJson => {
-                        try {
-                            const parsed = JSON.parse(plainJson);
-                            if (!parsed.url) throw new Error('empty url');
-                            musicPlaceholder.replaceWith(buildMusicBubble(id, {
-                                ...d,
-                                musicUrl: parsed.url,
-                                musicTitle: parsed.title || 'Трек',
-                                musicDuration: Math.round(parsed.duration || d.musicDuration || 0),
-                                musicMime: parsed.mime || d.musicMime || 'audio/*'
-                            }));
-                        } catch(e) {
-                            musicPlaceholder.textContent = '🔒 Музыка (ошибка данных)';
+                if (myPrivateKey && window.E2E && typeof window.E2E.decryptMessage === 'function') {
+                    window.E2E.decryptMessage(d, myUid, myPrivateKey).then(res => {
+                        if (!res || !res.musicObjectUrl) {
+                            musicPlaceholder.textContent = '🔒 Музыка не расшифрована';
+                            return;
                         }
-                    }).catch(() => {
-                        musicPlaceholder.textContent = '🔒 Музыка';
-                    });
+                        const el = buildMusicBubble(id, {
+                            ...d,
+                            musicUrl: res.musicObjectUrl,
+                            musicTitle: 'Музыка',
+                            musicDuration: Math.round(d.musicDuration || 0),
+                            musicMime: d.musicMime || 'audio/*'
+                        });
+                        musicPlaceholder.replaceWith(el);
+                    }).catch(() => { musicPlaceholder.textContent = '🔒 Музыка'; });
+                } else {
+                    musicPlaceholder.textContent = '🔒 Музыка';
                 }
             } else if (d.musicBase64 || d.musicUrl) {
                 bubble.appendChild(buildMusicBubble(id, d));
             }
 
-            // Checklist message — поддержка E2E зашифрованных чек-листов
+                        // Checklist message — поддержка E2E зашифрованных чек-листов
             if (currentChatMode === 'dm' && (d.e2eChecklistForPeer || d.e2eChecklistForMe)) {
                 const clPlaceholder = document.createElement('div');
                 clPlaceholder.textContent = '🔒 Чек-лист (расшифровка...)';
@@ -6291,33 +6421,34 @@ musicSendBtn.addEventListener('click', async () => {
         if (currentChatMode === 'group') {
             await addDoc(messagesCol, msg);
         } else {
-            const cid = currentDMConvId;
-            const musicPayload = {
-                url,
-                title: msg.musicTitle,
-                duration: msg.musicDuration,
-                mime: msg.musicMime
-            };
-            const musicE2e = await encryptDM(JSON.stringify(musicPayload), currentDMPeerUid, u.uid);
-            await addDoc(collection(db, 'dmConvs', cid, 'messages'), {
-                uid: u.uid,
-                author: displayNick(u),
+            if (!currentDMConvId || !currentDMPeerUid) throw new Error('ЛС не выбрано');
+            const ok = await ensureDME2EUnlocked(u.uid);
+            if (!ok || !myPrivateKey) throw new Error('ЛС не разблокированы мастер-кодом');
+            const e2e = window.E2E;
+            if (!e2e || typeof e2e.sendDirectMessage !== 'function') throw new Error('E2E-модуль не загружен');
+            await e2e.sendDirectMessage({
+                convId: currentDMConvId,
+                peerUid: currentDMPeerUid,
+                myUid: u.uid,
+                authorName: displayNick(u),
+                myPrivateKey,
                 text: '',
-                e2eMusicForPeer: musicE2e.forPeer,
-                e2eMusicForMe: musicE2e.forMe,
-                musicDuration: msg.musicDuration,
-                musicMime: msg.musicMime,
-                createdAt: serverTimestamp(),
-                edited: false,
+                musicFile: _pendingMusicFile,
+                musicDuration: Math.round(_pendingMusicDur || 0),
+                musicMime: _pendingMusicFile.type || 'audio/webm',
+                firestoreDb: db,
+                fsCollection: collection,
+                fsAddDoc: addDoc,
+                fsSetDoc: setDoc,
+                fsDoc: doc,
+                fsGetDoc: getDoc,
+                fsServerTimestamp: serverTimestamp,
+                fsIncrement: increment,
+                uploadToCloudinary: e2e.uploadViaBackend
             });
-            await setDoc(doc(db, 'dmConvs', cid), {
-                lastText: '🎵 Музыка',
-                lastAt: serverTimestamp(),
-                [`unread.${currentDMPeerUid}`]: increment(1)
-            }, { merge: true });
         }
 
-        _pendingMusicFile = null;
+                _pendingMusicFile = null;
         _pendingMusicB64 = null;
         _pendingMusicTitle = '';
         _pendingMusicDur = 0;
@@ -6944,6 +7075,7 @@ musicSendBtn.addEventListener('click', async () => {
             resetDME2ESession();
             authFormBlock.classList.add('hidden'); authGate.classList.add('hidden'); appRoot.classList.remove('hidden');
             try { startChatForUser(); } catch(e){ _dbgLog('startChat:error',e.message); }
+            try { applyChatWallpaper(); } catch(_) {}
             try { buildSidebarList(); } catch(e){ _dbgLog('buildSidebar:error',e.message); }
         });
     </script>
