@@ -12,8 +12,8 @@
           content="
             default-src 'self';
             script-src  'self' 'unsafe-inline' https://www.gstatic.com https://apis.google.com https://fonts.googleapis.com https://cdnjs.cloudflare.com;
-            style-src   'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com;
-            font-src    'self' https://fonts.gstatic.com;
+            style-src   'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com https://cdn.jsdelivr.net;
+            font-src    'self' https://fonts.gstatic.com https://cdn.jsdelivr.net;
             img-src     'self' data: blob: https:;
             media-src   'self' blob: https:;
             connect-src 'self' https://sixaclass.onrender.com https://*.firebaseio.com https://*.googleapis.com wss://*.firebaseio.com;
@@ -34,6 +34,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=Outfit:wght@500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.2/src/regular/style.css">
 
     <!-- Apply theme before render to avoid flash -->
     <script>
@@ -1507,6 +1508,38 @@
             background:transparent; cursor:pointer;
         }
 
+
+        /* HOTFIX: Phosphor icons + working wallpapers + light profile polish */
+        .ph { display:inline-flex; align-items:center; justify-content:center; line-height:1; vertical-align:-0.12em; }
+        .icon-btn .ph, .burger-btn .ph, .btn-send .ph, .btn-mic-main .ph, .btn-attach .ph { font-size:19px; }
+        .btn .ph { font-size:1.05em; margin-right:2px; }
+        .sidebar-search-icon.ph, .header-search-icon.ph { position:absolute; top:50%; transform:translateY(-50%); color:var(--muted-soft); pointer-events:none; width:auto; height:auto; font-size:15px; }
+        .sidebar-search-icon.ph { left:13px; }
+        .header-search-icon.ph { left:12px; }
+        .attach-tab-icon .ph { font-size:22px; }
+        .tg-main { background-color:var(--chat-wallpaper-bg, var(--bg-chat)) !important; background-image:var(--chat-wallpaper-image, radial-gradient(var(--dot-color) 1px, transparent 1px)) !important; background-size:var(--chat-wallpaper-size, 24px 24px) !important; background-position:var(--chat-wallpaper-position, center) !important; background-repeat:var(--chat-wallpaper-repeat, repeat) !important; background-attachment:var(--chat-wallpaper-attachment, scroll) !important; }
+        .wallpaper-preset { position:relative; overflow:hidden; }
+        .wallpaper-preset.is-active::after { content:'✓'; position:absolute; top:8px; right:9px; width:22px; height:22px; border-radius:50%; display:grid; place-items:center; background:rgba(255,255,255,.92); color:#1d4ed8; font-weight:900; text-shadow:none; box-shadow:0 4px 12px rgba(0,0,0,.25); }
+        .wallpaper-row .btn { min-height:42px; }
+        [data-theme="light"] #profileModal { background:rgba(15,23,42,.34) !important; backdrop-filter:blur(18px) saturate(135%); -webkit-backdrop-filter:blur(18px) saturate(135%); }
+        [data-theme="light"] #profileModal .settings-drawer { background:#f8fafc !important; border:1px solid rgba(15,23,42,.10) !important; box-shadow:0 28px 90px rgba(15,23,42,.24), 0 4px 18px rgba(15,23,42,.08) !important; }
+        [data-theme="light"] .settings-hero { background:linear-gradient(135deg,#ffffff 0%,#eef5ff 100%) !important; border-bottom:1px solid rgba(15,23,42,.08) !important; }
+        [data-theme="light"] .settings-content { background:#f8fafc; }
+        [data-theme="light"] .settings-actions { background:linear-gradient(180deg,rgba(248,250,252,.78),#f8fafc 42%) !important; border-top:1px solid rgba(15,23,42,.08) !important; }
+        [data-theme="light"] .settings-tab-btn { background:rgba(255,255,255,.75) !important; color:#64748b !important; border-color:rgba(15,23,42,.13) !important; }
+        [data-theme="light"] .settings-tab-btn:hover { color:#0f172a !important; background:#ffffff !important; }
+        [data-theme="light"] .settings-tab-btn.is-active { background:#dbeafe !important; color:#2563eb !important; border-color:#3b82f6 !important; box-shadow:0 0 0 3px rgba(59,130,246,.14) !important; }
+        [data-theme="light"] .modal-field input, [data-theme="light"] .modal-field textarea, [data-theme="light"] .modal-field select { background:#ffffff !important; color:#0f172a !important; border-color:rgba(15,23,42,.14) !important; box-shadow:inset 0 1px 0 rgba(255,255,255,.75); }
+        [data-theme="light"] .status-chip { background:#ffffff !important; color:#64748b !important; border-color:rgba(15,23,42,.13) !important; }
+        [data-theme="light"] .status-chip.is-active { background:#dbeafe !important; color:#2563eb !important; border-color:#3b82f6 !important; }
+        [data-theme="light"] .settings-help, [data-theme="light"] .settings-hero-sub { color:#64748b !important; }
+        [data-theme="light"] .mini-profile-player { background:rgba(255,255,255,.94) !important; border-color:rgba(15,23,42,.10) !important; box-shadow:0 18px 55px rgba(15,23,42,.18) !important; }
+        .settings-tab-row { scrollbar-width:none; }
+        .settings-tab-row::-webkit-scrollbar { display:none; }
+        .settings-tab-btn { transform:none !important; box-sizing:border-box; }
+        .settings-tab-btn:hover { transform:none !important; }
+        @media (min-width:1024px) { #profileModal .settings-drawer { height:min(720px, calc(100dvh - 80px)) !important; } #profileModal .settings-content { min-height:0 !important; } }
+
     </style>
 </head>
 <body>
@@ -1561,14 +1594,14 @@
                 <div class="sidebar-logo">Чат <span>6А</span></div>
                 <div class="sidebar-header-btns">
                     <a href="index.html" id="homeLink" title="На главную" style="display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;color:var(--muted);text-decoration:none;transition:background var(--transition),color var(--transition)">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                        <i class="ph ph-house" aria-hidden="true"></i>
                     </a>
                 </div>
             </div>
 
             <div class="sidebar-search-wrap">
                 <div class="sidebar-search-inner">
-                    <svg class="sidebar-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L20 20"/></svg>
+                    <i class="ph ph-magnifying-glass sidebar-search-icon" aria-hidden="true"></i>
                     <input type="search" id="sidebarSearch" class="sidebar-search-input" placeholder="Поиск чатов и людей…" autocomplete="off">
                 </div>
             </div>
@@ -1587,10 +1620,10 @@
                 <div class="sidebar-user-av" id="sidebarUserAv" title="Профиль"></div>
                 <span class="sidebar-user-name" id="sidebarUserName" title="Профиль"></span>
                 <button type="button" class="icon-btn" id="btnAvatarPicker" title="Аккаунт" style="width:30px;height:30px">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+                    <i class="ph ph-user-circle" aria-hidden="true"></i>
                 </button>
                 <button type="button" class="icon-btn" id="btnLogout" title="Выйти" style="width:30px;height:30px">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+                    <i class="ph ph-sign-out" aria-hidden="true"></i>
                 </button>
             </div>
         </aside>
@@ -1599,7 +1632,7 @@
         <div class="tg-main" id="tgMain">
             <div class="tg-chat-header" id="tgChatHeader">
                 <button type="button" class="burger-btn" id="burgerBtn">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+                    <i class="ph ph-list" aria-hidden="true"></i>
                 </button>
                 <div class="tg-header-av" id="tgHeaderAv" style="background:linear-gradient(135deg,#5ec8ff,#a78bfa)">💬</div>
                 <div class="tg-header-info">
@@ -1608,12 +1641,12 @@
                 </div>
                 <div class="tg-header-actions">
                     <div class="header-search-wrap">
-                        <svg class="header-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L20 20"/></svg>
+                        <i class="ph ph-magnifying-glass header-search-icon" aria-hidden="true"></i>
                         <label class="visually-hidden" for="msgSearchInput">Поиск</label>
                         <input type="search" id="msgSearchInput" class="header-search" placeholder="Поиск…" autocomplete="off">
                     </div>
                     <button type="button" class="icon-btn" id="btnChatInfo" title="Информация о чате" style="position:relative">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                        <i class="ph ph-info" aria-hidden="true"></i>
                     </button>
                 </div>
             </div>
@@ -1637,7 +1670,7 @@
                     <div class="chat-empty" id="chatEmpty"><span class="chat-empty-icon">💬</span>Напишите первое сообщение!</div>
                 </div>
                 <button type="button" class="scroll-down-fab hidden" id="scrollDownFab">
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+                    <i class="ph ph-arrow-down" aria-hidden="true"></i>
                     <span class="fab-badge hidden" id="scrollDownBadge">0</span>
                 </button>
             </div>
@@ -1672,7 +1705,7 @@
                     <textarea id="chatInput" class="chat-input" rows="1" placeholder="Сообщение…" maxlength="4000"></textarea>
                     <!-- Attach button → opens bottom sheet -->
                     <button type="button" class="btn-attach" id="btnAttach" title="Вложение" style="display:flex;align-items:center;justify-content:center;">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="17" height="17"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                        <i class="ph ph-paperclip" aria-hidden="true"></i>
                     </button>
                     <!-- Hidden file inputs -->
                     <input type="file" id="imgFileInput" accept="image/*" style="display:none">
@@ -1682,10 +1715,10 @@
                     <!-- Send / Mic swap button -->
                     <div class="btn-send-wrap" id="btnSendWrap">
                         <button type="button" class="btn-send" id="chatSend" disabled>
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z"/></svg>
+                            <i class="ph ph-paper-plane-tilt" aria-hidden="true"></i>
                         </button>
                         <button type="button" class="btn-mic-main" id="btnMicMain" title="Голосовое сообщение">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+                            <i class="ph ph-microphone" aria-hidden="true"></i>
                         </button>
                     </div>
                 </div>
@@ -1716,7 +1749,7 @@
                 <div class="settings-hero-info">
                     <div class="settings-hero-title" id="settingsHeroName">Профиль</div>
                     <div class="settings-hero-sub">Аватар, ник, статус, оформление и музыка профиля.</div>
-                    <button type="button" class="btn btn-ghost" id="btnChangeAvatarInProfile" style="margin-top:10px;padding:7px 12px;font-size:.8rem;width:fit-content">🖼 Сменить аватарку</button>
+                    <button type="button" class="btn btn-ghost" id="btnChangeAvatarInProfile" style="margin-top:10px;padding:7px 12px;font-size:.8rem;width:fit-content"><i class="ph ph-image-square" aria-hidden="true"></i> Сменить аватарку</button>
                 </div>
             </div>
 
@@ -1779,7 +1812,7 @@
                         <div class="wallpaper-row">
                             <input type="color" id="chatWallpaperColor" value="#080c15" title="Цвет фона">
                             <button type="button" class="btn btn-ghost" id="chatWallpaperColorBtn" style="font-size:.82rem;padding:9px 13px">Применить цвет</button>
-                            <button type="button" class="btn btn-ghost" id="chatWallpaperImageBtn" style="font-size:.82rem;padding:9px 13px">🖼 Своя картинка</button>
+                            <button type="button" class="btn btn-ghost" id="chatWallpaperImageBtn" style="font-size:.82rem;padding:9px 13px"><i class="ph ph-image-square" aria-hidden="true"></i> Своя картинка</button>
                             <button type="button" class="btn btn-ghost" id="chatWallpaperResetBtn" style="font-size:.82rem;padding:9px 13px;color:var(--danger)">Сбросить</button>
                             <input type="file" id="chatWallpaperImageInput" accept="image/*" style="display:none">
                         </div>
@@ -1811,8 +1844,8 @@
                         <input type="text" id="profileMusicCustomTitle" maxlength="60" placeholder="Например: мой трек" autocomplete="off">
                     </div>
                     <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
-                        <button type="button" class="btn btn-ghost" id="profileMusicBtn" style="flex:1;font-size:.82rem;padding:8px 12px">📁 Загрузить файл</button>
-                        <button type="button" class="btn btn-ghost" id="profileMusicClearBtn" style="font-size:.82rem;padding:8px 12px;color:var(--danger);display:none">🗑 Удалить</button>
+                        <button type="button" class="btn btn-ghost" id="profileMusicBtn" style="flex:1;font-size:.82rem;padding:8px 12px"><i class="ph ph-upload-simple" aria-hidden="true"></i> Загрузить файл</button>
+                        <button type="button" class="btn btn-ghost" id="profileMusicClearBtn" style="font-size:.82rem;padding:8px 12px;color:var(--danger);display:none"><i class="ph ph-trash" aria-hidden="true"></i> Удалить</button>
                     </div>
                 </section>
             </div>
@@ -1903,7 +1936,7 @@
             <div class="attach-tab-pane is-active" data-pane="gallery">
                 <div class="attach-tab-header">
                     <div class="attach-tab-icon ati-gallery">
-                        <svg viewBox="0 0 24 24"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>
+                        <i class="ph ph-image-square" aria-hidden="true"></i>
                     </div>
                     <span class="attach-tab-label">Галерея</span>
                 </div>
@@ -1922,7 +1955,7 @@
             <div class="attach-tab-pane" data-pane="checklist">
                 <div class="attach-tab-header">
                     <div class="attach-tab-icon ati-checklist">
-                        <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-9 14l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+                        <i class="ph ph-check-square" aria-hidden="true"></i>
                     </div>
                     <span class="attach-tab-label">Чек-лист</span>
                 </div>
@@ -1938,7 +1971,7 @@
             <div class="attach-tab-pane" data-pane="music">
                 <div class="attach-tab-header">
                     <div class="attach-tab-icon ati-music">
-                        <svg viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
+                        <i class="ph ph-music-notes" aria-hidden="true"></i>
                     </div>
                     <span class="attach-tab-label">Музыка</span>
                 </div>
@@ -1964,7 +1997,7 @@
             <div class="attach-tab-pane" data-pane="poll">
                 <div class="attach-tab-header">
                     <div class="attach-tab-icon ati-poll">
-                        <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/></svg>
+                        <i class="ph ph-chart-bar" aria-hidden="true"></i>
                     </div>
                     <span class="attach-tab-label">Опрос</span>
                 </div>
@@ -2001,7 +2034,7 @@
                 <div style="display:flex;flex-direction:column;gap:8px">
                     <div style="font-size:.85rem;color:var(--muted);line-height:1.5">Текущая аватарка.<br>Выбери из набора или загрузи своё фото.</div>
                     <label style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:var(--radius-sm);border:1px dashed var(--accent);color:var(--accent);font-size:.78rem;font-weight:600;cursor:pointer;transition:background var(--transition);width:fit-content" id="avatarUploadLabel">
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                        <i class="ph ph-upload-simple" aria-hidden="true"></i>
                         Загрузить фото
                         <input type="file" id="avatarFileInput" accept="image/*" style="display:none">
                     </label>
@@ -2059,7 +2092,7 @@
 
     <div class="mini-profile-player" id="miniProfilePlayer" aria-live="polite">
         <button type="button" class="mini-player-btn" id="miniProfilePlay" title="Играть / пауза">
-            <svg viewBox="0 0 24 24" fill="currentColor" width="15" height="15"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            <i class="ph ph-play" aria-hidden="true"></i>
         </button>
         <div class="mini-player-info">
             <div class="mini-player-title" id="miniProfileTitle">Музыка профиля</div>
@@ -2811,6 +2844,16 @@ function dataUrlToFile(dataUrl, filename) {
             const at = em.indexOf('@');
             return at > 0 ? em.slice(0, at) : (em || '?');
         }
+        async function getAuthorNameForRules(u) {
+            if (!u) return '?';
+            try {
+                const snap = await getDoc(doc(db, 'users', u.uid));
+                const name = snap.exists() ? String(snap.data().displayName || '').trim() : '';
+                if (name) { _userNickCache[u.uid] = name; return name; }
+            } catch (_) {}
+            return displayNick(u);
+        }
+
         function cleanContent(text) {
             let t = String(text);
             t = t.replace(/\b(?:f+u+c+k+|s+h+i+t+|d+a+m+n+)\b/gi, '❤');
@@ -3889,8 +3932,8 @@ function dataUrlToFile(dataUrl, filename) {
         function _miniPlayIcon(isPlaying) {
             if (!miniProfilePlay) return;
             miniProfilePlay.innerHTML = isPlaying
-                ? '<svg viewBox="0 0 24 24" fill="currentColor" width="15" height="15"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>'
-                : '<svg viewBox="0 0 24 24" fill="currentColor" width="15" height="15"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
+                ? '<i class="ph ph-pause" aria-hidden="true"></i>'
+                : '<i class="ph ph-play" aria-hidden="true"></i>';
         }
         function updateMiniProfilePlayer(track) {
             _miniTrack = track && track.url ? track : null;
@@ -3952,61 +3995,70 @@ function dataUrlToFile(dataUrl, filename) {
 
 
         /* ── Фоны чата: пресеты / цвет / своя картинка ── */
-        const WALLPAPER_KEY = 'index6a_chat_wallpaper_v2';
+        const WALLPAPER_KEY = 'index6a_chat_wallpaper_v3';
         const WALLPAPERS = {
-            default: { type:'preset', value:'default' },
-            aurora:  { type:'gradient', value:'linear-gradient(135deg,#020617 0%,#0f172a 38%,#1e3a8a 68%,#7c3aed 100%)' },
-            ocean:   { type:'gradient', value:'linear-gradient(135deg,#031520 0%,#082f49 42%,#0369a1 78%,#67e8f9 100%)' },
-            sunset:  { type:'gradient', value:'linear-gradient(135deg,#1c0802 0%,#451a03 38%,#c2410c 74%,#f97316 100%)' },
-            forest:  { type:'gradient', value:'linear-gradient(135deg,#02110a 0%,#052e16 48%,#15803d 82%,#84cc16 100%)' },
-            purple:  { type:'gradient', value:'linear-gradient(135deg,#120024 0%,#2e1065 44%,#7e22ce 78%,#f0abfc 100%)' }
+            default: { key:'default', type:'preset', value:'default' },
+            aurora:  { key:'aurora',  type:'gradient', value:'linear-gradient(135deg,#020617 0%,#0f172a 38%,#1e3a8a 68%,#7c3aed 100%)' },
+            ocean:   { key:'ocean',   type:'gradient', value:'linear-gradient(135deg,#031520 0%,#082f49 42%,#0369a1 78%,#67e8f9 100%)' },
+            sunset:  { key:'sunset',  type:'gradient', value:'linear-gradient(135deg,#1c0802 0%,#451a03 38%,#c2410c 74%,#f97316 100%)' },
+            forest:  { key:'forest',  type:'gradient', value:'linear-gradient(135deg,#02110a 0%,#052e16 48%,#15803d 82%,#84cc16 100%)' },
+            purple:  { key:'purple',  type:'gradient', value:'linear-gradient(135deg,#120024 0%,#2e1065 44%,#7e22ce 78%,#f0abfc 100%)' }
         };
+        function normalizeWallpaper(w){
+            if (!w || typeof w !== 'object') return WALLPAPERS.default;
+            if (w.key && WALLPAPERS[w.key]) return WALLPAPERS[w.key];
+            if (w.value === 'default') return WALLPAPERS.default;
+            const hit = Object.values(WALLPAPERS).find(x => x.value === w.value);
+            return hit || w;
+        }
         function getSavedWallpaper(){
-            try { return JSON.parse(localStorage.getItem(WALLPAPER_KEY) || 'null') || WALLPAPERS.default; }
+            try { return normalizeWallpaper(JSON.parse(localStorage.getItem(WALLPAPER_KEY) || localStorage.getItem('index6a_chat_wallpaper_v2') || 'null')); }
             catch(_) { return WALLPAPERS.default; }
         }
-        function saveWallpaper(w){ localStorage.setItem(WALLPAPER_KEY, JSON.stringify(w || WALLPAPERS.default)); }
-        function applyChatWallpaper(w = getSavedWallpaper()){
+        function saveWallpaper(w){ localStorage.setItem(WALLPAPER_KEY, JSON.stringify(normalizeWallpaper(w))); }
+        function setWallpaperVars(bg, image, size='24px 24px', position='center', repeat='repeat', attachment='scroll'){
             if (!tgMain) return;
-            if (!w || w.value === 'default') {
-                tgMain.style.background = 'var(--bg-chat)';
-                tgMain.style.backgroundImage = 'radial-gradient(var(--dot-color) 1px, transparent 1px)';
-                tgMain.style.backgroundSize = '24px 24px';
-            } else if (w.type === 'image') {
-                tgMain.style.background = `linear-gradient(rgba(5,7,15,.42), rgba(5,7,15,.42)), url("${w.value}") center / cover fixed`;
-                tgMain.style.backgroundSize = 'cover';
-            } else {
-                tgMain.style.background = w.value;
-                tgMain.style.backgroundImage = 'radial-gradient(rgba(255,255,255,.035) 1px, transparent 1px)';
-                tgMain.style.backgroundSize = '24px 24px';
-            }
-            document.querySelectorAll('.wallpaper-preset').forEach(btn => btn.classList.toggle('is-active', btn.dataset.wallpaper === w.value));
+            tgMain.style.setProperty('--chat-wallpaper-bg', bg);
+            tgMain.style.setProperty('--chat-wallpaper-image', image);
+            tgMain.style.setProperty('--chat-wallpaper-size', size);
+            tgMain.style.setProperty('--chat-wallpaper-position', position);
+            tgMain.style.setProperty('--chat-wallpaper-repeat', repeat);
+            tgMain.style.setProperty('--chat-wallpaper-attachment', attachment);
+        }
+        function applyChatWallpaper(raw = getSavedWallpaper()){
+            if (!tgMain) return;
+            const w = normalizeWallpaper(raw);
+            if (!w || w.value === 'default') setWallpaperVars('var(--bg-chat)', 'radial-gradient(var(--dot-color) 1px, transparent 1px)');
+            else if (w.type === 'image') setWallpaperVars('var(--bg-chat)', `linear-gradient(rgba(5,7,15,.38), rgba(5,7,15,.38)), url("${w.value}")`, 'cover', 'center', 'no-repeat', 'fixed');
+            else if (w.type === 'color') setWallpaperVars(w.value, 'radial-gradient(rgba(255,255,255,.035) 1px, transparent 1px)');
+            else setWallpaperVars('var(--bg-chat)', `${w.value}, radial-gradient(rgba(255,255,255,.035) 1px, transparent 1px)`, 'auto, 24px 24px');
+            const activeKey = w.key || '';
+            document.querySelectorAll('.wallpaper-preset').forEach(btn => btn.classList.toggle('is-active', btn.dataset.wallpaper === activeKey));
         }
         function initWallpaperControls(){
             applyChatWallpaper();
             document.querySelectorAll('.wallpaper-preset').forEach(btn => btn.addEventListener('click', () => {
                 const key = btn.dataset.wallpaper || 'default';
                 const w = WALLPAPERS[key] || WALLPAPERS.default;
-                saveWallpaper(w); applyChatWallpaper(w);
+                saveWallpaper(w); applyChatWallpaper(w); showToast('Фон применён');
             }));
             const colorInp = document.getElementById('chatWallpaperColor');
             document.getElementById('chatWallpaperColorBtn')?.addEventListener('click', () => {
                 const c = colorInp?.value || '#080c15';
-                const w = { type:'color', value:c };
-                saveWallpaper(w); applyChatWallpaper(w);
+                const w = { key:'custom-color', type:'color', value:c };
+                saveWallpaper(w); applyChatWallpaper(w); showToast('Цвет фона применён');
             });
             const imgInp = document.getElementById('chatWallpaperImageInput');
-            document.getElementById('chatWallpaperImageBtn')?.addEventListener('click', () => { imgInp.value=''; imgInp.click(); });
+            document.getElementById('chatWallpaperImageBtn')?.addEventListener('click', () => { if (imgInp) { imgInp.value=''; imgInp.click(); } });
             imgInp?.addEventListener('change', () => {
-                const f = imgInp.files && imgInp.files[0];
-                if (!f) return;
+                const f = imgInp.files && imgInp.files[0]; if (!f) return;
                 if (!f.type.startsWith('image/')) return showToast('Это не картинка');
                 if (f.size > 2.5 * 1024 * 1024) return showToast('Картинка слишком большая, максимум 2.5 МБ');
                 const r = new FileReader();
-                r.onload = () => { const w = { type:'image', value:String(r.result) }; saveWallpaper(w); applyChatWallpaper(w); };
+                r.onload = () => { const w = { key:'custom-image', type:'image', value:String(r.result) }; saveWallpaper(w); applyChatWallpaper(w); showToast('Картинка фона применена'); };
                 r.readAsDataURL(f);
             });
-            document.getElementById('chatWallpaperResetBtn')?.addEventListener('click', () => { saveWallpaper(WALLPAPERS.default); applyChatWallpaper(WALLPAPERS.default); });
+            document.getElementById('chatWallpaperResetBtn')?.addEventListener('click', () => { saveWallpaper(WALLPAPERS.default); applyChatWallpaper(WALLPAPERS.default); showToast('Фон сброшен'); });
         }
         initWallpaperControls();
 
@@ -4608,7 +4660,7 @@ function dataUrlToFile(dataUrl, filename) {
                         display:flex;align-items:center;justify-content:center;
                         cursor:pointer;transition:transform .15s,filter .15s;
                         box-shadow:0 4px 16px rgba(99,179,255,.35)">
-                        <svg viewBox="0 0 24 24" fill="currentColor" width="15" height="15"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                        <i class="ph ph-play" aria-hidden="true"></i>
                     </button>
                     <div style="flex:1;min-width:0;">
                         <div style="
@@ -5057,14 +5109,14 @@ function dataUrlToFile(dataUrl, filename) {
             editingMessageId=msgId; chatInput.value=text||'';
             chatInput.style.height='auto'; chatInput.style.height=Math.min(chatInput.scrollHeight,140)+'px';
             editBanner.classList.add('is-on');
-            chatSend.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="17" height="17"><polyline points="20 6 9 17 4 12"/></svg>';
+            chatSend.innerHTML='<i class="ph ph-check" aria-hidden="true"></i>';
             chatSend.disabled=!chatInput.value.trim(); chatInput.focus();
             updateSendMicState();
         }
         function cancelEditMessage(){
             editingMessageId=null; chatInput.value=''; chatInput.style.height='auto';
             editBanner.classList.remove('is-on');
-            chatSend.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="17" height="17"><path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z"/></svg>';
+            chatSend.innerHTML='<i class="ph ph-paper-plane-tilt" aria-hidden="true"></i>';
             chatSend.disabled=true;
             updateSendMicState();
         }
@@ -5269,19 +5321,19 @@ function dataUrlToFile(dataUrl, filename) {
                     const vFallback = d.e2eVoiceForPeer || d.e2eVoiceForMe;
                     rsaDecrypt(myPrivateKey, vCipher).then(plainUrl => { const plainB64 = plainUrl; // voiceUrl расшифрован
                         // Заменяем плейсхолдер на полноценный плеер
-                        playBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
+                        playBtn.innerHTML = '<i class="ph ph-play" aria-hidden="true"></i>';
                         playBtn.disabled = false; playBtn.title = 'Воспроизвести';
                         const barCount=28; const waveEl=document.createElement('div'); waveEl.className='voice-waveform';
                         const bars=[]; for(let i=0;i<barCount;i++){const bar=document.createElement('div');bar.className='voice-waveform-bar';const seed=(id.charCodeAt(i%id.length)||5);bar.style.height=(8+((seed*(i+7))%22))+'px';waveEl.appendChild(bar);bars.push(bar);}
                         voiceWrap.insertBefore(waveEl, durEl);
                         let audio=null, playTimer=null, isPlaying=false;
                         function updateBars(p){const pl=Math.floor(p*barCount);bars.forEach((b,i)=>b.classList.toggle('played',i<pl));}
-                        function stopAudio(){if(audio){audio.pause();audio=null;}clearInterval(playTimer);isPlaying=false;playBtn.innerHTML='<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>';durEl.textContent=fmtVoiceTime(dur);updateBars(0);}
+                        function stopAudio(){if(audio){audio.pause();audio=null;}clearInterval(playTimer);isPlaying=false;playBtn.innerHTML='<i class="ph ph-play" aria-hidden="true"></i>';durEl.textContent=fmtVoiceTime(dur);updateBars(0);}
                         playBtn.addEventListener('click',()=>{
                             if(isPlaying){stopAudio();return;}
                             audio=new Audio(plainB64); audio.onended=stopAudio;
                             audio.play().catch(()=>showToast('Не удалось воспроизвести'));
-                            isPlaying=true; playBtn.innerHTML='<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
+                            isPlaying=true; playBtn.innerHTML='<i class="ph ph-pause" aria-hidden="true"></i>';
                             playTimer=setInterval(()=>{if(!audio)return;const p=dur>0?audio.currentTime/dur:0;durEl.textContent=fmtVoiceTime(Math.floor(audio.currentTime));updateBars(p);},100);
                         });
                         waveEl.addEventListener('click',e=>{if(!audio||!dur)return;const rect=waveEl.getBoundingClientRect();audio.currentTime=((e.clientX-rect.left)/rect.width)*dur;});
@@ -5299,7 +5351,7 @@ function dataUrlToFile(dataUrl, filename) {
                 const barCount = 28;
                 const playBtn = document.createElement('button');
                 playBtn.className = 'voice-play-btn';
-                playBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
+                playBtn.innerHTML = '<i class="ph ph-play" aria-hidden="true"></i>';
                 playBtn.title = 'Воспроизвести';
                 const waveEl = document.createElement('div');
                 waveEl.className = 'voice-waveform';
@@ -5329,7 +5381,7 @@ function dataUrlToFile(dataUrl, filename) {
                     if (audio) { audio.pause(); audio=null; }
                     clearInterval(playTimer);
                     isPlaying=false;
-                    playBtn.innerHTML='<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
+                    playBtn.innerHTML='<i class="ph ph-play" aria-hidden="true"></i>';
                     durEl.textContent=fmtVoiceTime(dur);
                     updateBars(0);
                 }
@@ -5339,7 +5391,7 @@ function dataUrlToFile(dataUrl, filename) {
                     audio.onended = stopAudio;
                     audio.play().catch(()=>showToast('Не удалось воспроизвести'));
                     isPlaying=true;
-                    playBtn.innerHTML='<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
+                    playBtn.innerHTML='<i class="ph ph-pause" aria-hidden="true"></i>';
                     playTimer = setInterval(()=>{
                         if (!audio) return;
                         const progress = dur>0 ? audio.currentTime/dur : 0;
@@ -5733,8 +5785,8 @@ function dataUrlToFile(dataUrl, filename) {
             _bar:      null,
             _durEl:    null,
             _totalDur: 0,
-            _PLAY:  '<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>',
-            _PAUSE: '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>',
+            _PLAY:  '<i class="ph ph-play" aria-hidden="true"></i>',
+            _PAUSE: '<i class="ph ph-pause" aria-hidden="true"></i>',
 
             _reset() {
                 if (this._audio) {
@@ -5901,7 +5953,7 @@ function dataUrlToFile(dataUrl, filename) {
                         const isDone = !!remoteDone[i];
                         row.classList.toggle('done', isDone);
                         row.querySelector('.msg-checklist-checkbox').innerHTML = isDone
-                            ? '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>'
+                            ? '<i class="ph ph-check" aria-hidden="true"></i>'
                             : '';
                     });
                     const doneCount = Object.keys(remoteDone).filter(k=>remoteDone[k]).length;
@@ -5916,7 +5968,7 @@ function dataUrlToFile(dataUrl, filename) {
 
                 const box = document.createElement('div');
                 box.className = 'msg-checklist-checkbox';
-                box.innerHTML = done[i] ? '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>' : '';
+                box.innerHTML = done[i] ? '<i class="ph ph-check" aria-hidden="true"></i>' : '';
 
                 const label = document.createElement('span');
                 label.className = 'msg-checklist-label';
@@ -5933,7 +5985,7 @@ function dataUrlToFile(dataUrl, filename) {
                     else newDone[i] = u.uid;
                     done[i] = newDone[i]; // optimistic local update
                     // Toggle visual immediately
-                    if (newDone[i]) { row.classList.add('done'); box.innerHTML = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>'; }
+                    if (newDone[i]) { row.classList.add('done'); box.innerHTML = '<i class="ph ph-check" aria-hidden="true"></i>'; }
                     else { row.classList.remove('done'); box.innerHTML = ''; }
                     const doneCount2 = Object.keys(done).filter(k=>done[k]).length;
                     footer.textContent = doneCount2 + ' / ' + cl.items.length + ' выполнено';
@@ -6401,6 +6453,7 @@ musicSendBtn.addEventListener('click', async () => {
     musicSendBtn.disabled = true;
     musicSendBtn.textContent = '⏳ Загружаю 0%...';
     try {
+        const authorNameForRules = await getAuthorNameForRules(u);
         const url = await uploadToCloudinary(_pendingMusicFile, percent => {
             musicSendBtn.textContent = `⏳ Загружаю ${percent}%...`;
         });
@@ -6408,7 +6461,7 @@ musicSendBtn.addEventListener('click', async () => {
 
         const msg = {
             uid: u.uid,
-            author: displayNick(u),
+            author: authorNameForRules,
             text: '',
             musicUrl: url,
             musicTitle: _pendingMusicTitle || _pendingMusicFile.name.replace(/\.[^.]+$/, ''),
@@ -6430,7 +6483,7 @@ musicSendBtn.addEventListener('click', async () => {
                 convId: currentDMConvId,
                 peerUid: currentDMPeerUid,
                 myUid: u.uid,
-                authorName: displayNick(u),
+                authorName: authorNameForRules,
                 myPrivateKey,
                 text: '',
                 musicFile: _pendingMusicFile,
