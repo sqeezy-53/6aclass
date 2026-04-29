@@ -1591,307 +1591,6 @@
         html[data-chat-ui-theme="on"] .btn-mic-main { background: linear-gradient(135deg, var(--accent-strong), var(--accent)) !important; color: var(--accent-text) !important; }
         html[data-chat-ui-theme="on"] .btn-ghost { background: var(--surface-2) !important; color: var(--accent) !important; border-color: var(--border-strong) !important; }
 
-
-
-        /* ═══════════════════════════════════════
-           WISP-LIKE GLASS DESKTOP REDESIGN ADD-ON
-           Keeps original names / logic, adds home hub + quick actions.
-        ═══════════════════════════════════════ */
-        [data-theme="dark"] {
-            --bg-base:#030815;
-            --bg-chat:#050a18;
-            --sidebar-bg:rgba(7,12,28,.94);
-            --surface:rgba(14,21,43,.86);
-            --surface-2:rgba(19,27,53,.82);
-            --surface-3:rgba(28,38,71,.78);
-            --surface-hover:rgba(37,52,94,.55);
-            --surface-active:rgba(59,82,155,.34);
-            --nav-bg:rgba(6,11,27,.82);
-            --border:rgba(130,162,255,.12);
-            --border-strong:rgba(146,176,255,.2);
-            --accent:#5b8cff;
-            --accent-2:#7c4dff;
-            --accent-3:#4ade80;
-            --accent-strong:#4078ff;
-            --accent-dim:rgba(91,140,255,.16);
-            --glass-bg:rgba(12,18,38,.72);
-            --glass-border:rgba(142,171,255,.16);
-            --shadow-card:0 24px 80px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.03) inset;
-            --shadow-glow:0 0 64px rgba(79,112,255,.14);
-            --dot-color:rgba(133,165,255,.045);
-        }
-        body {
-            background:
-                radial-gradient(circle at 82% -8%, rgba(55,91,255,.32), transparent 34%),
-                radial-gradient(circle at 72% 8%, rgba(129,75,255,.18), transparent 32%),
-                radial-gradient(circle at 8% 100%, rgba(59,130,246,.13), transparent 35%),
-                var(--bg-base);
-        }
-        @media (min-width: 920px) {
-            body { padding:10px; }
-            #appRoot {
-                height:calc(100dvh - 20px);
-                border:1px solid rgba(134,164,255,.18);
-                border-radius:18px;
-                overflow:hidden;
-                background:rgba(4,8,20,.65);
-                box-shadow:0 24px 80px rgba(0,0,0,.45), 0 0 0 1px rgba(255,255,255,.04) inset;
-            }
-            .tg-sidebar { border-radius:18px 0 0 18px; }
-            .tg-main { border-radius:0 18px 18px 0; }
-        }
-        .tg-sidebar {
-            background:
-                linear-gradient(180deg, rgba(9,15,34,.96), rgba(5,9,21,.98)),
-                var(--sidebar-bg);
-            border-right:1px solid rgba(137,165,255,.13);
-        }
-        .tg-main {
-            background-image:
-                radial-gradient(circle at 78% 12%, rgba(52,79,255,.15), transparent 34%),
-                radial-gradient(circle at 88% 2%, rgba(112,70,255,.13), transparent 28%),
-                radial-gradient(var(--dot-color) 1px, transparent 1px) !important;
-            background-size:auto, auto, 26px 26px !important;
-        }
-        .sidebar-header,
-        .tg-chat-header,
-        .sidebar-footer {
-            background:linear-gradient(180deg, rgba(13,20,43,.86), rgba(7,12,27,.84));
-            backdrop-filter:blur(24px) saturate(160%);
-            -webkit-backdrop-filter:blur(24px) saturate(160%);
-        }
-        .sidebar-header { padding:16px 16px 14px; min-height:64px; }
-        .sidebar-logo {
-            display:flex; align-items:center; gap:10px;
-            font-size:1.25rem;
-        }
-        .brand-mark {
-            width:36px; height:36px; border-radius:13px;
-            display:grid; place-items:center; flex-shrink:0;
-            background:
-                radial-gradient(circle at 68% 32%, rgba(255,255,255,.95) 0 0, transparent 3px),
-                radial-gradient(circle at 40% 52%, #121a3f 0 3px, transparent 3.5px),
-                linear-gradient(135deg, #75ddff 0%, #8d7cff 58%, #cf74ff 100%);
-            color:#071029; font-family:var(--font-display); font-weight:900;
-            box-shadow:0 0 28px rgba(103,130,255,.34), inset 0 1px 0 rgba(255,255,255,.38);
-            position:relative; overflow:hidden;
-        }
-        .brand-mark::after {
-            content:''; position:absolute; width:18px; height:9px; right:-2px; top:6px;
-            border-radius:999px; background:rgba(255,255,255,.4);
-            transform:rotate(-22deg);
-            box-shadow:-9px 13px 0 rgba(255,255,255,.16);
-        }
-        .brand-mark--sm { width:34px; height:34px; border-radius:12px; }
-        .sidebar-search-wrap { padding:14px 16px 8px; }
-        .sidebar-search-inner { filter:drop-shadow(0 12px 26px rgba(0,0,0,.16)); }
-        .sidebar-search-input {
-            min-height:44px;
-            border-radius:12px;
-            background:rgba(17,25,50,.72);
-            border-color:rgba(136,160,255,.12);
-            padding-right:52px;
-        }
-        .sidebar-search-shortcut {
-            position:absolute; right:12px; top:50%; transform:translateY(-50%);
-            font-size:.72rem; color:var(--muted-soft); border:1px solid var(--border);
-            border-radius:7px; padding:2px 6px; pointer-events:none;
-        }
-        .new-chat-btn {
-            width:calc(100% - 32px); margin:0 16px 14px; min-height:42px;
-            border:1px solid rgba(255,255,255,.18); border-radius:12px;
-            background:linear-gradient(135deg, #2f7bff, #7b49ff);
-            color:#fff; font-family:inherit; font-size:.88rem; font-weight:800;
-            display:flex; align-items:center; justify-content:center; gap:8px;
-            cursor:pointer; box-shadow:0 14px 34px rgba(79,104,255,.28);
-            transition:transform .18s ease, filter .18s ease, box-shadow .18s ease;
-        }
-        .new-chat-btn:hover { transform:translateY(-1px); filter:brightness(1.06); box-shadow:0 18px 42px rgba(79,104,255,.36); }
-        .new-chat-btn:active { transform:translateY(0) scale(.98); }
-        .folder-bar { padding:0 16px 12px; border-bottom:0; gap:8px; }
-        .folder-tab {
-            border-radius:11px; padding:7px 12px;
-            background:rgba(16,24,48,.42); border-color:rgba(136,160,255,.1);
-            font-size:.72rem;
-        }
-        .folder-tab.is-active { background:rgba(91,140,255,.16); box-shadow:none; }
-        .sidebar-section-label {
-            padding:16px 18px 6px; color:#8ea2c8; text-transform:none;
-            letter-spacing:0; font-size:.78rem;
-        }
-        .chat-list-item { margin:2px 12px; padding:11px 12px; border-radius:15px; }
-        .chat-list-item:hover { background:rgba(40,55,101,.34); }
-        .chat-list-item.is-active {
-            background:linear-gradient(135deg, rgba(60,103,255,.24), rgba(124,77,255,.2));
-            box-shadow:inset 0 0 0 1px rgba(135,164,255,.12);
-        }
-        .chat-list-item.is-active::before { display:none; }
-        .cli-avatar-inner { box-shadow:0 10px 24px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.25); }
-        .cli-badge { box-shadow:0 7px 17px rgba(64,120,255,.35); }
-        .tg-chat-header { min-height:62px; padding:12px 18px 12px 22px; }
-        .tg-header-av { box-shadow:0 0 28px rgba(91,140,255,.22); }
-        .tg-header-actions { gap:8px; }
-        .top-presence-wrap { position:relative; flex-shrink:0; }
-        .top-presence,
-        .top-icon-btn,
-        .top-profile-pill {
-            height:38px; border-radius:13px; border:1px solid rgba(132,162,255,.13);
-            background:rgba(16,24,48,.58); color:var(--text); cursor:pointer;
-            display:inline-flex; align-items:center; justify-content:center; gap:8px;
-            font:inherit; font-size:.82rem; font-weight:700;
-            transition:background .18s ease, border-color .18s ease, transform .18s ease;
-        }
-        .top-presence { padding:0 12px; color:var(--muted); }
-        .top-presence:hover,
-        .top-icon-btn:hover,
-        .top-profile-pill:hover { background:rgba(35,48,90,.7); border-color:rgba(132,162,255,.24); transform:translateY(-1px); }
-        .top-presence-dot { width:7px; height:7px; border-radius:50%; background:var(--online-color); box-shadow:0 0 0 4px rgba(34,197,94,.1); }
-        .top-presence[data-status="away"] .top-presence-dot { background:#fbbf24; box-shadow:0 0 0 4px rgba(251,191,36,.1); }
-        .top-presence[data-status="dnd"] .top-presence-dot { background:#fb7185; box-shadow:0 0 0 4px rgba(251,113,133,.1); }
-        .top-presence[data-status="invisible"] .top-presence-dot { background:#64748b; box-shadow:0 0 0 4px rgba(100,116,139,.12); }
-        .top-presence-menu {
-            position:absolute; right:0; top:calc(100% + 10px); z-index:80;
-            width:210px; padding:8px; display:none;
-            background:rgba(12,18,38,.94); border:1px solid rgba(132,162,255,.16);
-            border-radius:16px; box-shadow:0 22px 60px rgba(0,0,0,.45);
-            backdrop-filter:blur(20px) saturate(150%);
-        }
-        .top-presence-menu.is-open { display:block; animation:sheetPop .18s ease both; }
-        .top-presence-option {
-            width:100%; border:0; background:transparent; color:var(--text);
-            border-radius:11px; padding:10px 12px; display:flex; align-items:center; gap:9px;
-            font:inherit; font-size:.84rem; font-weight:700; cursor:pointer; text-align:left;
-        }
-        .top-presence-option:hover { background:rgba(91,140,255,.13); }
-        .top-presence-option.is-active { background:rgba(91,140,255,.18); color:var(--accent); }
-        .top-icon-btn { width:38px; position:relative; }
-        .top-notify-badge {
-            position:absolute; top:-4px; right:-5px; min-width:18px; height:18px; padding:0 5px;
-            border-radius:999px; background:linear-gradient(135deg,#4078ff,#7c4dff); color:#fff;
-            display:none; place-items:center; font-size:.62rem; font-weight:900;
-            box-shadow:0 8px 18px rgba(64,120,255,.34);
-        }
-        .top-notify-badge.is-visible { display:grid; }
-        .top-profile-pill { padding:0 11px 0 6px; min-width:126px; justify-content:flex-start; }
-        .top-profile-av { width:28px; height:28px; border-radius:50%; display:grid; place-items:center; overflow:hidden; flex-shrink:0; color:#fff; font-size:.75rem; font-weight:900; }
-        .top-profile-name { max-width:82px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-        .header-search-wrap { max-width:220px; }
-        .header-search { height:38px; background:rgba(16,24,48,.58); border-color:rgba(132,162,255,.13); }
-        .home-hero,
-        .continue-strip {
-            width:min(980px, 100%);
-            align-self:center;
-            flex-shrink:0;
-        }
-        .home-hero {
-            position:relative; overflow:hidden;
-            margin:2px auto 18px; padding:42px 44px 28px;
-            min-height:266px; border-radius:26px;
-            background:
-                radial-gradient(circle at 82% 34%, rgba(121,178,255,.7), transparent 13%),
-                radial-gradient(circle at 83% 35%, rgba(82,107,255,.42), transparent 24%),
-                radial-gradient(circle at 90% 12%, rgba(103,232,249,.18), transparent 23%),
-                linear-gradient(135deg, rgba(13,23,63,.92), rgba(11,16,42,.9) 45%, rgba(20,24,69,.82));
-            border:1px solid rgba(125,156,255,.22);
-            box-shadow:0 22px 70px rgba(0,0,0,.34), inset 0 1px 0 rgba(255,255,255,.07);
-        }
-        .home-hero::before {
-            content:''; position:absolute; inset:0;
-            background-image:radial-gradient(rgba(255,255,255,.26) .7px, transparent .7px);
-            background-size:70px 70px; opacity:.22; mask-image:linear-gradient(90deg,#000 20%,transparent 90%);
-        }
-        .home-hero::after {
-            content:''; position:absolute; right:96px; top:52px; width:178px; height:124px;
-            border-radius:60% 48% 54% 58%;
-            background:
-                radial-gradient(circle at 43% 53%, #0b1432 0 8px, transparent 9px),
-                radial-gradient(circle at 62% 53%, #0b1432 0 8px, transparent 9px),
-                linear-gradient(135deg,#eef7ff 0%,#a1c7ff 45%,#b96dff 100%);
-            box-shadow:0 0 56px rgba(113,143,255,.7), 0 0 130px rgba(107,70,255,.34);
-            transform:rotate(-9deg);
-            opacity:.96;
-        }
-        .home-hero-tail {
-            position:absolute; right:70px; top:34px; width:120px; height:72px; opacity:.92;
-            background:linear-gradient(135deg,rgba(225,244,255,.95),rgba(91,140,255,.55));
-            clip-path:polygon(12% 18%, 100% 0, 72% 26%, 100% 30%, 63% 57%, 100% 70%, 0 100%);
-            filter:drop-shadow(0 0 32px rgba(91,140,255,.55));
-            transform:rotate(-11deg);
-        }
-        .home-hero-content { position:relative; z-index:2; max-width:560px; }
-        .home-eyebrow { color:#8ea2c8; font-weight:800; font-size:.78rem; letter-spacing:.06em; text-transform:uppercase; margin-bottom:12px; }
-        .home-title { font-family:var(--font-display); font-size:clamp(2rem,4vw,3rem); line-height:1.02; font-weight:900; letter-spacing:-.055em; margin-bottom:12px; }
-        .home-title span { background:linear-gradient(100deg,#9ab9ff,#8365ff,#d18aff); -webkit-background-clip:text; background-clip:text; color:transparent; }
-        .home-subtitle { color:#a9b6d2; font-size:1.02rem; line-height:1.55; max-width:440px; }
-        .home-feature-row { position:relative; z-index:2; display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin-top:34px; max-width:640px; }
-        .home-feature {
-            min-height:58px; border-radius:14px; padding:10px 12px;
-            display:flex; gap:9px; align-items:center;
-            background:rgba(10,15,34,.54); border:1px solid rgba(132,162,255,.14);
-            backdrop-filter:blur(12px); color:#dbe5ff;
-        }
-        .home-feature i { font-size:1.35rem; color:#7ea1ff; flex-shrink:0; }
-        .home-feature strong { display:block; font-size:.78rem; line-height:1.1; }
-        .home-feature span { display:block; font-size:.64rem; color:#8794b2; line-height:1.25; margin-top:3px; }
-        .continue-strip { margin:0 auto 16px; }
-        .home-section-head { display:flex; align-items:center; justify-content:space-between; margin:0 0 10px; }
-        .home-section-title { font-size:.88rem; font-weight:900; color:#dbe5ff; }
-        .home-section-more { border:0; background:transparent; color:var(--accent); font:inherit; font-size:.78rem; font-weight:800; cursor:pointer; }
-        .continue-cards { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
-        .continue-card {
-            min-height:66px; border-radius:17px; padding:11px 12px;
-            display:flex; align-items:center; gap:12px; cursor:pointer;
-            background:rgba(16,24,48,.68); border:1px solid rgba(132,162,255,.13);
-            box-shadow:0 12px 30px rgba(0,0,0,.16);
-            transition:transform .18s ease, background .18s ease, border-color .18s ease;
-        }
-        .continue-card:hover { transform:translateY(-2px); background:rgba(31,43,82,.75); border-color:rgba(132,162,255,.24); }
-        .continue-card-av { width:42px; height:42px; border-radius:14px; display:grid; place-items:center; flex-shrink:0; overflow:hidden; color:#fff; font-weight:900; }
-        .continue-card-body { min-width:0; flex:1; }
-        .continue-card-name { font-size:.86rem; font-weight:900; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-        .continue-card-text { font-size:.74rem; color:#8997b4; margin-top:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-        .continue-card-time { font-size:.7rem; color:#6f7e9d; margin-left:auto; align-self:flex-start; }
-        .continue-card-badge { min-width:20px; height:20px; border-radius:999px; display:grid; place-items:center; background:linear-gradient(135deg,#4078ff,#7c4dff); color:#fff; font-size:.64rem; font-weight:900; margin-left:4px; }
-        .continue-placeholder {
-            grid-column:1/-1; border:1px dashed rgba(132,162,255,.18); color:#8794b2;
-            border-radius:17px; min-height:68px; display:flex; align-items:center; justify-content:center;
-            background:rgba(16,24,48,.35); font-size:.86rem;
-        }
-        .new-chat-list { display:flex; flex-direction:column; gap:8px; max-height:min(420px,52vh); overflow:auto; padding-right:3px; }
-        .new-chat-item {
-            display:flex; align-items:center; gap:12px; padding:11px 12px; border-radius:15px;
-            background:var(--surface-2); border:1px solid var(--border); cursor:pointer;
-            transition:background .18s ease, transform .18s ease, border-color .18s ease;
-        }
-        .new-chat-item:hover { background:var(--surface-3); transform:translateY(-1px); border-color:var(--accent); }
-        .new-chat-item-av { width:42px; height:42px; border-radius:50%; display:grid; place-items:center; color:#fff; font-weight:900; overflow:hidden; flex-shrink:0; }
-        .new-chat-item-title { font-weight:900; font-size:.9rem; }
-        .new-chat-item-sub { color:var(--muted); font-size:.76rem; margin-top:2px; }
-        .new-chat-empty { padding:22px 10px; color:var(--muted); text-align:center; font-size:.9rem; line-height:1.5; }
-        .chat-empty { border:1px dashed rgba(132,162,255,.15); border-radius:18px; background:rgba(16,24,48,.24); }
-        @media (max-width: 1080px) {
-            .top-profile-pill { min-width:42px; padding-right:7px; }
-            .top-profile-name, .top-profile-pill .ph-caret-down { display:none; }
-            .header-search-wrap { max-width:160px; }
-            .home-feature-row { grid-template-columns:repeat(2,minmax(0,1fr)); max-width:440px; }
-            .home-hero::after { right:44px; opacity:.35; }
-            .home-hero-tail { right:28px; opacity:.25; }
-        }
-        @media (max-width: 820px) {
-            .top-presence-wrap, .top-icon-btn, .top-profile-pill { display:none; }
-            .home-hero { padding:28px 22px 22px; min-height:auto; }
-            .home-hero::after, .home-hero-tail { display:none; }
-            .home-title { font-size:2rem; }
-            .continue-cards { grid-template-columns:1fr; }
-            .home-feature-row { grid-template-columns:1fr 1fr; margin-top:22px; }
-            .chat-messages { padding-top:14px; }
-        }
-        @media (max-width: 520px) {
-            .home-feature-row { grid-template-columns:1fr; }
-            .home-hero { border-radius:20px; }
-            .folder-tab { padding:7px 10px; }
-        }
-
     </style>
 </head>
 <body>
@@ -1943,7 +1642,7 @@
         <!-- ═══ SIDEBAR ═══ -->
         <aside class="tg-sidebar" id="tgSidebar">
             <div class="sidebar-header">
-                <div class="sidebar-logo"><span class="brand-mark brand-mark--sm" aria-hidden="true"></span><span>Чат <span>6А</span></span></div>
+                <div class="sidebar-logo">Чат <span>6А</span></div>
                 <div class="sidebar-header-btns">
                     <a href="index.html" id="homeLink" title="На главную" style="display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;color:var(--muted);text-decoration:none;transition:background var(--transition),color var(--transition)">
                         <i class="ph ph-house" aria-hidden="true"></i>
@@ -1954,11 +1653,9 @@
             <div class="sidebar-search-wrap">
                 <div class="sidebar-search-inner">
                     <i class="ph ph-magnifying-glass sidebar-search-icon" aria-hidden="true"></i>
-                    <input type="search" id="sidebarSearch" class="sidebar-search-input" placeholder="Поиск" autocomplete="off"><span class="sidebar-search-shortcut">⌘K</span>
+                    <input type="search" id="sidebarSearch" class="sidebar-search-input" placeholder="Поиск чатов и людей…" autocomplete="off">
                 </div>
             </div>
-
-            <button type="button" class="new-chat-btn" id="btnNewChat"><i class="ph ph-plus-square" aria-hidden="true"></i> Новый чат</button>
 
             <!-- Folder tabs -->
             <div class="folder-bar" id="folderBar">
@@ -1994,23 +1691,6 @@
                     <div class="tg-header-status" id="tgHeaderStatus">Чат класса 6А</div>
                 </div>
                 <div class="tg-header-actions">
-                    <div class="top-presence-wrap">
-                        <button type="button" class="top-presence" id="topPresenceBtn" data-status="online" title="Статус">
-                            <span class="top-presence-dot"></span><span id="topPresenceText">Онлайн</span><i class="ph ph-caret-down" aria-hidden="true"></i>
-                        </button>
-                        <div class="top-presence-menu" id="topPresenceMenu" role="menu" aria-label="Выбор статуса">
-                            <button type="button" class="top-presence-option" data-status="online">🟢 В сети</button>
-                            <button type="button" class="top-presence-option" data-status="away">🟡 Отошёл</button>
-                            <button type="button" class="top-presence-option" data-status="dnd">🔴 Не беспокоить</button>
-                            <button type="button" class="top-presence-option" data-status="invisible">⚫ Невидимка</button>
-                        </div>
-                    </div>
-                    <button type="button" class="top-icon-btn" id="topNotifyBtn" title="Уведомления">
-                        <i class="ph ph-bell" aria-hidden="true"></i><span class="top-notify-badge" id="topNotifyBadge">0</span>
-                    </button>
-                    <button type="button" class="top-profile-pill" id="topProfileBtn" title="Профиль">
-                        <span class="top-profile-av" id="topProfileAv"></span><span class="top-profile-name" id="topProfileName"></span><i class="ph ph-caret-down" aria-hidden="true"></i>
-                    </button>
                     <div class="header-search-wrap">
                         <i class="ph ph-magnifying-glass header-search-icon" aria-hidden="true"></i>
                         <label class="visually-hidden" for="msgSearchInput">Поиск</label>
@@ -2038,27 +1718,6 @@
                 <p class="global-status" id="globalStatus"></p>
                 <div class="typing-bar" id="typingBar" aria-live="polite"></div>
                 <div class="chat-messages" id="chatMessages">
-                    <section class="home-hero" id="homeHeroPanel" aria-label="Главный экран чата">
-                        <span class="home-hero-tail" aria-hidden="true"></span>
-                        <div class="home-hero-content">
-                            <div class="home-eyebrow">Чат класса</div>
-                            <h1 class="home-title">Добро пожаловать в <span>Чат 6А</span></h1>
-                            <p class="home-subtitle">Лёгкое пространство для общения, файлов, голосовых сообщений, реакций и быстрых диалогов без лишнего шума.</p>
-                        </div>
-                        <div class="home-feature-row" aria-label="Возможности">
-                            <div class="home-feature"><i class="ph ph-lightning" aria-hidden="true"></i><div><strong>Быстрый</strong><span>Мгновенная доставка</span></div></div>
-                            <div class="home-feature"><i class="ph ph-shield-check" aria-hidden="true"></i><div><strong>Безопасный</strong><span>Защита и модерация</span></div></div>
-                            <div class="home-feature"><i class="ph ph-feather" aria-hidden="true"></i><div><strong>Лёгкий</strong><span>Минималистичный UI</span></div></div>
-                            <div class="home-feature"><i class="ph ph-smiley" aria-hidden="true"></i><div><strong>Красивый</strong><span>Неоновый акцент</span></div></div>
-                        </div>
-                    </section>
-                    <section class="continue-strip" id="continueStrip" aria-label="Продолжить общение">
-                        <div class="home-section-head">
-                            <div class="home-section-title">Продолжить общение</div>
-                            <button type="button" class="home-section-more" id="continueMoreBtn">Все чаты</button>
-                        </div>
-                        <div class="continue-cards" id="continueCards"></div>
-                    </section>
                     <div class="chat-empty" id="chatEmpty"><span class="chat-empty-icon">💬</span>Напишите первое сообщение!</div>
                 </div>
                 <button type="button" class="scroll-down-fab hidden" id="scrollDownFab">
@@ -2129,18 +1788,6 @@
             <div class="modal-actions">
                 <button type="button" class="btn btn-ghost" id="confirmModalCancel">Отмена</button>
                 <button type="button" class="btn btn-danger" id="confirmModalOk">Удалить</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- New chat modal -->
-    <div class="modal-overlay" id="newChatModal">
-        <div class="modal-box">
-            <h3>Новый чат</h3>
-            <p class="modal-sub">Выбери человека из уже открытых диалогов или тех, кто сейчас онлайн.</p>
-            <div class="new-chat-list" id="newChatList"></div>
-            <div class="modal-actions">
-                <button type="button" class="btn btn-ghost" id="newChatClose">Закрыть</button>
             </div>
         </div>
     </div>
@@ -3477,193 +3124,6 @@ function dataUrlToFile(dataUrl, filename) {
         const imgPreviewCancel=document.getElementById('imgPreviewCancel');
         const imgLightbox    = document.getElementById('imgLightbox');
         const imgLightboxImg = document.getElementById('imgLightboxImg');
-        const btnNewChat     = document.getElementById('btnNewChat');
-        const newChatModal   = document.getElementById('newChatModal');
-        const newChatList    = document.getElementById('newChatList');
-        const newChatClose   = document.getElementById('newChatClose');
-        const homeHeroPanel  = document.getElementById('homeHeroPanel');
-        const continueStrip  = document.getElementById('continueStrip');
-        const continueCards  = document.getElementById('continueCards');
-        const continueMoreBtn= document.getElementById('continueMoreBtn');
-        const topPresenceBtn = document.getElementById('topPresenceBtn');
-        const topPresenceText= document.getElementById('topPresenceText');
-        const topPresenceMenu= document.getElementById('topPresenceMenu');
-        const topNotifyBtn   = document.getElementById('topNotifyBtn');
-        const topNotifyBadge = document.getElementById('topNotifyBadge');
-        const topProfileBtn  = document.getElementById('topProfileBtn');
-        const topProfileAv   = document.getElementById('topProfileAv');
-        const topProfileName = document.getElementById('topProfileName');
-
-
-        /* ══════════════════════════════
-           WISP-LIKE HOME HUB / QUICK ACTIONS
-        ══════════════════════════════ */
-        const STATUS_META = {
-            online:    { text:'Онлайн',       toast:'🟢 Статус: в сети' },
-            away:      { text:'Отошёл',       toast:'🟡 Статус: отошёл' },
-            dnd:       { text:'Не беспокоить',toast:'🔴 Статус: не беспокоить' },
-            invisible: { text:'Невидимка',    toast:'⚫ Статус: невидимка' }
-        };
-
-        function syncTopStatusUI() {
-            const status = userProfile.status || 'online';
-            const meta = STATUS_META[status] || STATUS_META.online;
-            if (topPresenceBtn) topPresenceBtn.dataset.status = status;
-            if (topPresenceText) topPresenceText.textContent = meta.text;
-            document.querySelectorAll('.top-presence-option').forEach(btn => {
-                btn.classList.toggle('is-active', btn.dataset.status === status);
-            });
-        }
-
-        function syncTopNotifyBadge(count) {
-            if (!topNotifyBadge) return;
-            const n = Number(count || 0);
-            topNotifyBadge.textContent = n > 99 ? '99+' : String(n);
-            topNotifyBadge.classList.toggle('is-visible', n > 0);
-        }
-
-        function setQuickStatus(status) {
-            if (!STATUS_META[status]) status = 'online';
-            userProfile.status = status;
-            lsSet(PROFILE_KEY, userProfile);
-            document.querySelectorAll('.status-chip').forEach(c => c.classList.toggle('is-active', c.dataset.status === status));
-            syncTopStatusUI();
-            const u = auth.currentUser;
-            if (u) {
-                setDoc(doc(db,'users',u.uid), { status }, { merge:true }).catch(()=>{});
-                try { pingOnline(); } catch(_) {}
-            }
-            showToast(STATUS_META[status].toast);
-        }
-
-        function setHubVisible() {
-            const show = currentChatMode === 'group';
-            if (homeHeroPanel) homeHeroPanel.style.display = show ? '' : 'none';
-            if (continueStrip) continueStrip.style.display = show ? '' : 'none';
-        }
-
-        function createMiniAvatar(uid, name, type='dm') {
-            const av = document.createElement('div');
-            av.className = 'continue-card-av';
-            if (type === 'group') {
-                av.style.background = 'linear-gradient(135deg,#5ec8ff,#a78bfa)';
-                av.textContent = '💬';
-            } else {
-                av.style.background = avatarGradient(uid);
-                av.textContent = firstLetter(name, name);
-                if (avatarCache[uid]) applyAvatarToEl(av, uid, name, name, avatarCache[uid]);
-                else if (uid) renderAvatarCircle(av, uid, name, name);
-            }
-            return av;
-        }
-
-        function refreshWelcomeCards() {
-            if (!continueCards) return;
-            continueCards.innerHTML = '';
-            const candidates = [
-                { id:'group', type:'group', name:'Основной чат', lastText:'Чат класса 6А', unread:0, lastAt:null },
-                ...sidebarItems.filter(x => x.type === 'dm' && !isArchived(x.id))
-            ].slice(0, 3);
-
-            if (!candidates.length) {
-                const empty = document.createElement('div');
-                empty.className = 'continue-placeholder';
-                empty.textContent = 'Пока нет диалогов. Нажми «Новый чат», чтобы начать.';
-                continueCards.appendChild(empty);
-                return;
-            }
-
-            candidates.forEach(item => {
-                const card = document.createElement('button');
-                card.type = 'button';
-                card.className = 'continue-card';
-                card.appendChild(createMiniAvatar(item.peerUid, item.name, item.type));
-                const body = document.createElement('div'); body.className = 'continue-card-body';
-                const name = document.createElement('div'); name.className = 'continue-card-name'; name.textContent = item.name;
-                const text = document.createElement('div'); text.className = 'continue-card-text'; text.textContent = item.lastText || (item.type === 'group' ? 'Общий чат класса' : 'Открыть переписку');
-                body.appendChild(name); body.appendChild(text); card.appendChild(body);
-                const time = document.createElement('span'); time.className = 'continue-card-time'; time.textContent = item.lastAt ? formatTimeShort(item.lastAt) : '';
-                card.appendChild(time);
-                if (item.unread > 0) {
-                    const badge = document.createElement('span'); badge.className = 'continue-card-badge'; badge.textContent = item.unread > 99 ? '99+' : item.unread;
-                    card.appendChild(badge);
-                }
-                card.addEventListener('click', () => {
-                    if (item.type === 'group') openGroupChat();
-                    else openDMWith(item.peerUid, item.name);
-                });
-                continueCards.appendChild(card);
-            });
-        }
-
-        function openNewChatModal() {
-            if (!newChatModal || !newChatList) return;
-            newChatList.innerHTML = '';
-            const me = auth.currentUser;
-            const map = new Map();
-            sidebarItems.filter(x => x.type === 'dm').forEach(x => map.set(x.peerUid, { uid:x.peerUid, name:x.name, sub:x.lastText || 'Последний диалог' }));
-            Object.entries(onlineUsers).forEach(([uid, name]) => {
-                if (me && uid === me.uid) return;
-                if (!map.has(uid)) map.set(uid, { uid, name, sub:'Сейчас онлайн' });
-            });
-            const users = [...map.values()].sort((a,b) => a.name.localeCompare(b.name, 'ru'));
-            if (!users.length) {
-                const empty = document.createElement('div');
-                empty.className = 'new-chat-empty';
-                empty.innerHTML = 'Пока некого показать.<br>Когда одноклассники появятся онлайн или у тебя будут ЛС, они появятся здесь.';
-                newChatList.appendChild(empty);
-            } else {
-                users.forEach(item => {
-                    const row = document.createElement('button');
-                    row.type = 'button'; row.className = 'new-chat-item';
-                    const av = document.createElement('div'); av.className = 'new-chat-item-av';
-                    av.style.background = avatarGradient(item.uid);
-                    av.textContent = firstLetter(item.name, item.name);
-                    if (avatarCache[item.uid]) applyAvatarToEl(av, item.uid, item.name, item.name, avatarCache[item.uid]);
-                    else renderAvatarCircle(av, item.uid, item.name, item.name);
-                    const body = document.createElement('div'); body.style.cssText = 'min-width:0;flex:1;text-align:left';
-                    body.innerHTML = `<div class="new-chat-item-title">${escapeHtml(item.name)}</div><div class="new-chat-item-sub">${escapeHtml(item.sub)}</div>`;
-                    row.appendChild(av); row.appendChild(body);
-                    row.addEventListener('click', () => { newChatModal.classList.remove('is-open'); openDMWith(item.uid, item.name); });
-                    newChatList.appendChild(row);
-                });
-            }
-            newChatModal.classList.add('is-open');
-        }
-
-        btnNewChat?.addEventListener('click', openNewChatModal);
-        newChatClose?.addEventListener('click', () => newChatModal?.classList.remove('is-open'));
-        newChatModal?.addEventListener('click', e => { if (e.target === newChatModal) newChatModal.classList.remove('is-open'); });
-        continueMoreBtn?.addEventListener('click', () => {
-            currentFolder = 'dm';
-            folderBar.querySelectorAll('.folder-tab').forEach(b => b.classList.toggle('is-active', b.dataset.folder === 'dm'));
-            buildSidebarList(sidebarSearch.value);
-            sidebarSearch.focus();
-        });
-        topProfileBtn?.addEventListener('click', openProfileModal);
-        topNotifyBtn?.addEventListener('click', () => {
-            const n = getTotalUnread();
-            if (n > 0) showToast(`Непрочитанных: ${n}`);
-            else showToast('Новых уведомлений нет');
-        });
-        topPresenceBtn?.addEventListener('click', e => {
-            e.stopPropagation();
-            topPresenceMenu?.classList.toggle('is-open');
-        });
-        topPresenceMenu?.addEventListener('click', e => {
-            const btn = e.target.closest('.top-presence-option');
-            if (!btn) return;
-            setQuickStatus(btn.dataset.status);
-            topPresenceMenu.classList.remove('is-open');
-        });
-        document.addEventListener('click', e => {
-            if (topPresenceMenu && !e.target.closest('.top-presence-wrap')) topPresenceMenu.classList.remove('is-open');
-        });
-        document.addEventListener('keydown', e => {
-            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
-                e.preventDefault(); sidebarSearch?.focus();
-            }
-        });
 
         /* ══════════════════════════════
            IMAGE COMPRESS + PREVIEW
@@ -3954,7 +3414,6 @@ function dataUrlToFile(dataUrl, filename) {
                 empty.textContent = q ? 'Ничего не найдено' : (currentFolder==='archived' ? 'Архив пуст' : 'Нет чатов');
                 sidebarList.appendChild(empty);
             }
-            try { refreshWelcomeCards(); } catch(_) {}
         }
 
         function createChatListItem(item, idx) {
@@ -4029,7 +3488,7 @@ function dataUrlToFile(dataUrl, filename) {
         function ownPresenceRef(uid){ return doc(db, 'presence', uid); }
 
         function openGroupChat() {
-            if (currentChatMode==='group') { setHubVisible(); refreshWelcomeCards(); return; }
+            if (currentChatMode==='group') return;
             currentChatMode='group'; currentDMPeerUid=null; currentDMPeerName=null; currentDMConvId=null;
             _unbindDMHeaderProfile();
             startTypingListeners(); // back to group typing doc
@@ -4185,7 +3644,6 @@ function dataUrlToFile(dataUrl, filename) {
 
             currentChatMode='dm'; currentDMPeerUid=peerUid; currentDMPeerName=peerName;
             currentDMConvId=dmConvId(u.uid, peerUid);
-            setHubVisible();
 
             // Update header
             tgHeaderAv.style.background=avatarGradient(peerUid);
@@ -4304,7 +3762,6 @@ function dataUrlToFile(dataUrl, filename) {
             document.getElementById('profileAvBig').style.background = cur?'':avatarGradient(u.uid);
             // Status chips
             document.querySelectorAll('.status-chip').forEach(c=>c.classList.toggle('is-active',c.dataset.status===(userProfile.status||'online')));
-            syncTopStatusUI();
             // Theme select
             document.getElementById('profileTheme').value = localStorage.getItem(THEME_KEY)||'dark';
             // Header + reset tabs
@@ -4780,7 +4237,6 @@ function dataUrlToFile(dataUrl, filename) {
                 if (firestoreUpdate.musicUrl && typeof firestoreUpdate.musicUrl === 'string') updateMiniProfilePlayer({ url: firestoreUpdate.musicUrl, title: firestoreUpdate.musicTitle || 'Музыка профиля' });
                 else if (_profileMusicAction === 'clear' || !((_pmUrlInput?.value || '').trim())) updateMiniProfilePlayer(null);
                 setTheme(theme);
-                syncTopStatusUI();
                 renderSidebarUser();
                 try { pingOnline(); } catch(_){}
                 document.getElementById('profileModal').classList.remove('is-open');
@@ -5089,7 +4545,7 @@ function dataUrlToFile(dataUrl, filename) {
                 });
                 renderOnlineCounter([]);
                 clearTimeout(_sidebarDebounceTimer);
-                _sidebarDebounceTimer = setTimeout(() => { buildSidebarList(sidebarSearch.value); refreshWelcomeCards(); }, 120);
+                _sidebarDebounceTimer = setTimeout(() => buildSidebarList(sidebarSearch.value), 120);
                 updateCurrentDMHeaderStatus();
             });
             return () => { if (onlinePingTimer) clearInterval(onlinePingTimer); if (onlineUnsub) onlineUnsub(); };
@@ -5119,10 +4575,6 @@ function dataUrlToFile(dataUrl, filename) {
             const name=displayNick(u);
             renderAvatarCircle(sidebarUserAv,u.uid,u.displayName,name);
             sidebarUserName.textContent=name;
-            if (topProfileName) topProfileName.textContent = name;
-            if (topProfileAv) renderAvatarCircle(topProfileAv,u.uid,u.displayName,name);
-            syncTopStatusUI();
-            syncTopNotifyBadge(getTotalUnread());
         }
 
         /* ══════════════════════════════
@@ -5657,7 +5109,6 @@ function dataUrlToFile(dataUrl, filename) {
                 if (count>0) navigator.setAppBadge(Math.min(count,99)).catch(()=>{});
                 else navigator.clearAppBadge().catch(()=>{});
             }
-            syncTopNotifyBadge(count);
             // Update page title
             const base = 'Чат 6А · 6aclass.online';
             document.title = count>0 ? `(${count}) ${base}` : base;
@@ -6240,7 +5691,7 @@ function dataUrlToFile(dataUrl, filename) {
 
             if (snapshot.empty) {
                 chatMessages.querySelectorAll('.msg-row,.msg-date-sep').forEach(n=>n.remove());
-                chatEmpty.style.display = currentChatMode==='group' ? 'none' : '';
+                chatEmpty.style.display='';
             } else {
                 chatEmpty.style.display='none';
                 const docs=snapshot.docs;
@@ -7645,8 +7096,7 @@ musicSendBtn.addEventListener('click', async () => {
             Object.values(autodelTimers).forEach(t=>clearTimeout(t));
             Object.keys(autodelTimers).forEach(k=>delete autodelTimers[k]);
             chatMessages.querySelectorAll('.msg-row,.msg-date-sep').forEach(n=>n.remove());
-            chatEmpty.style.display = currentChatMode==='group' ? 'none' : ''; typingBar.innerHTML='';
-            setHubVisible();
+            chatEmpty.style.display=''; typingBar.innerHTML='';
             lastKnownLastMessageId=null; unreadBelow=0;
             cancelEditMessage(); cancelReply();
             scrollDownFab.classList.add('hidden');
@@ -7661,15 +7111,10 @@ musicSendBtn.addEventListener('click', async () => {
             currentChatMode='group';
             tgHeaderAv.style.background='linear-gradient(135deg,#5ec8ff,#a78bfa)';
             tgHeaderAv.textContent='💬'; tgHeaderName.textContent='Основной чат'; tgHeaderStatus.textContent='Чат класса 6А'; tgHeaderStatus.classList.remove('online');
-            setHubVisible();
-            refreshWelcomeCards();
             startGroupListeners();
             startOnlineBar();
             watchDMBadge();
             updateAutodelBanner('group');
-            setHubVisible();
-            syncTopStatusUI();
-            refreshWelcomeCards();
         }
 
         /* ══════════════════════════════
