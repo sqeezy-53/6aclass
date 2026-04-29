@@ -1540,6 +1540,57 @@
         .settings-tab-btn:hover { transform:none !important; }
         @media (min-width:1024px) { #profileModal .settings-drawer { height:min(720px, calc(100dvh - 80px)) !important; } #profileModal .settings-content { min-height:0 !important; } }
 
+
+        /* ADAPTIVE UI THEME: wallpapers recolor the whole interface, not only chat canvas */
+        html[data-chat-ui-theme="on"] body,
+        html[data-chat-ui-theme="on"] #appRoot { background: var(--bg-base) !important; }
+        html[data-chat-ui-theme="on"] .tg-sidebar,
+        html[data-chat-ui-theme="on"] .sidebar-list,
+        html[data-chat-ui-theme="on"] .sidebar-footer { background: var(--sidebar-bg) !important; }
+        html[data-chat-ui-theme="on"] .sidebar-header,
+        html[data-chat-ui-theme="on"] .tg-chat-header,
+        html[data-chat-ui-theme="on"] .sidebar-footer { background: var(--nav-bg) !important; border-color: var(--border) !important; }
+        html[data-chat-ui-theme="on"] .input-footer { background: linear-gradient(180deg, rgba(0,0,0,0), var(--bg-chat) 34%) !important; }
+        html[data-chat-ui-theme="on"] .compose-shell,
+        html[data-chat-ui-theme="on"] .chat-list-item,
+        html[data-chat-ui-theme="on"] .folder-tab,
+        html[data-chat-ui-theme="on"] .sidebar-search-input,
+        html[data-chat-ui-theme="on"] .header-search,
+        html[data-chat-ui-theme="on"] .emoji-popover,
+        html[data-chat-ui-theme="on"] .attach-sheet,
+        html[data-chat-ui-theme="on"] .ctx-menu,
+        html[data-chat-ui-theme="on"] .modal-box { background-color: var(--surface) !important; color: var(--text) !important; border-color: var(--border-strong) !important; }
+        html[data-chat-ui-theme="on"] .chat-list-item:hover,
+        html[data-chat-ui-theme="on"] .folder-tab:hover,
+        html[data-chat-ui-theme="on"] .icon-btn:hover { background: var(--surface-hover) !important; }
+        html[data-chat-ui-theme="on"] .chat-list-item.is-active,
+        html[data-chat-ui-theme="on"] .folder-tab.is-active { background: var(--surface-active) !important; color: var(--accent) !important; border-color: var(--accent) !important; }
+        html[data-chat-ui-theme="on"] .msg-bubble--other { background: var(--bubble-other-bg) !important; border-color: var(--bubble-other-border) !important; color: var(--bubble-other-text) !important; }
+        html[data-chat-ui-theme="on"] .msg-bubble--me { background: var(--bubble-me-bg) !important; box-shadow: 0 4px 20px var(--bubble-me-glow), var(--shadow-bubble) !important; }
+        html[data-chat-ui-theme="on"] #profileModal { background: var(--ui-modal-backdrop, rgba(0,0,0,.62)) !important; backdrop-filter: blur(18px) saturate(145%) !important; -webkit-backdrop-filter: blur(18px) saturate(145%) !important; }
+        html[data-chat-ui-theme="on"] #profileModal .settings-drawer { background: var(--surface) !important; color: var(--text) !important; border: 1px solid var(--border-strong) !important; box-shadow: 0 30px 100px rgba(0,0,0,.42), 0 0 70px var(--accent-dim) !important; }
+        html[data-chat-ui-theme="on"] .settings-hero { background: linear-gradient(135deg, var(--surface-2) 0%, var(--surface) 100%) !important; border-bottom: 1px solid var(--border) !important; }
+        html[data-chat-ui-theme="on"] .settings-content { background: var(--surface) !important; }
+        html[data-chat-ui-theme="on"] .settings-actions { background: linear-gradient(180deg, rgba(0,0,0,0), var(--surface) 34%) !important; border-top: 1px solid var(--border) !important; }
+        html[data-chat-ui-theme="on"] .settings-tab-btn,
+        html[data-chat-ui-theme="on"] .status-chip,
+        html[data-chat-ui-theme="on"] .modal-field input,
+        html[data-chat-ui-theme="on"] .modal-field textarea,
+        html[data-chat-ui-theme="on"] .modal-field select { background: var(--surface-2) !important; color: var(--text) !important; border-color: var(--border-strong) !important; }
+        html[data-chat-ui-theme="on"] .settings-tab-btn.is-active,
+        html[data-chat-ui-theme="on"] .status-chip.is-active { background: var(--accent-dim) !important; color: var(--accent) !important; border-color: var(--accent) !important; box-shadow: 0 0 0 3px var(--accent-dim) !important; }
+        html[data-chat-ui-theme="on"] .settings-help,
+        html[data-chat-ui-theme="on"] .settings-hero-sub,
+        html[data-chat-ui-theme="on"] .cli-preview,
+        html[data-chat-ui-theme="on"] .cli-time,
+        html[data-chat-ui-theme="on"] .tg-header-status,
+        html[data-chat-ui-theme="on"] .sidebar-section-label { color: var(--muted) !important; }
+        html[data-chat-ui-theme="on"] .mini-profile-player { background: var(--surface-glass) !important; border-color: var(--border-strong) !important; color: var(--text) !important; box-shadow: 0 18px 55px rgba(0,0,0,.32), 0 0 32px var(--accent-dim) !important; }
+        html[data-chat-ui-theme="on"] .btn-primary,
+        html[data-chat-ui-theme="on"] .btn-send,
+        html[data-chat-ui-theme="on"] .btn-mic-main { background: linear-gradient(135deg, var(--accent-strong), var(--accent)) !important; color: var(--accent-text) !important; }
+        html[data-chat-ui-theme="on"] .btn-ghost { background: var(--surface-2) !important; color: var(--accent) !important; border-color: var(--border-strong) !important; }
+
     </style>
 </head>
 <body>
@@ -3998,11 +4049,11 @@ function dataUrlToFile(dataUrl, filename) {
         const WALLPAPER_KEY = 'index6a_chat_wallpaper_v3';
         const WALLPAPERS = {
             default: { key:'default', type:'preset', value:'default' },
-            aurora:  { key:'aurora',  type:'gradient', value:'linear-gradient(135deg,#020617 0%,#0f172a 38%,#1e3a8a 68%,#7c3aed 100%)' },
-            ocean:   { key:'ocean',   type:'gradient', value:'linear-gradient(135deg,#031520 0%,#082f49 42%,#0369a1 78%,#67e8f9 100%)' },
-            sunset:  { key:'sunset',  type:'gradient', value:'linear-gradient(135deg,#1c0802 0%,#451a03 38%,#c2410c 74%,#f97316 100%)' },
-            forest:  { key:'forest',  type:'gradient', value:'linear-gradient(135deg,#02110a 0%,#052e16 48%,#15803d 82%,#84cc16 100%)' },
-            purple:  { key:'purple',  type:'gradient', value:'linear-gradient(135deg,#120024 0%,#2e1065 44%,#7e22ce 78%,#f0abfc 100%)' }
+            aurora:  { key:'aurora',  type:'gradient', value:'linear-gradient(135deg,#020617 0%,#0f172a 38%,#1e3a8a 68%,#7c3aed 100%)', palette:{'--bg-base':'#020617','--bg-chat':'#07101f','--sidebar-bg':'#050b18','--nav-bg':'rgba(5,11,24,.94)','--surface':'#0b1324','--surface-2':'#111a31','--surface-3':'#17223d','--surface-hover':'#16213a','--surface-active':'#1a2b54','--surface-glass':'rgba(11,19,36,.82)','--text':'#eef5ff','--muted':'#9badca','--muted-soft':'#64748b','--border':'rgba(191,219,254,.08)','--border-strong':'rgba(191,219,254,.16)','--accent':'#a78bfa','--accent-strong':'#6366f1','--accent-dim':'rgba(167,139,250,.16)','--accent-text':'#ffffff','--bubble-me-bg':'linear-gradient(145deg,#2563eb 0%,#7c3aed 100%)','--bubble-me-glow':'rgba(124,58,237,.32)','--bubble-other-bg':'rgba(15,23,42,.88)','--bubble-other-border':'rgba(191,219,254,.12)','--bubble-other-text':'#e2e8f0','--dot-color':'rgba(167,139,250,.055)','--ui-modal-backdrop':'rgba(2,6,23,.68)'} },
+            ocean:   { key:'ocean',   type:'gradient', value:'linear-gradient(135deg,#031520 0%,#082f49 42%,#0369a1 78%,#67e8f9 100%)', palette:{'--bg-base':'#02131d','--bg-chat':'#062336','--sidebar-bg':'#061521','--nav-bg':'rgba(3,20,31,.94)','--surface':'#0a2230','--surface-2':'#0d2c3e','--surface-3':'#113a50','--surface-hover':'#0f3449','--surface-active':'#124d69','--surface-glass':'rgba(10,34,48,.82)','--text':'#e7faff','--muted':'#98bfd0','--muted-soft':'#5e8798','--border':'rgba(125,211,252,.10)','--border-strong':'rgba(125,211,252,.20)','--accent':'#67e8f9','--accent-strong':'#0284c7','--accent-dim':'rgba(103,232,249,.16)','--accent-text':'#02131d','--bubble-me-bg':'linear-gradient(145deg,#0284c7 0%,#06b6d4 100%)','--bubble-me-glow':'rgba(34,211,238,.28)','--bubble-other-bg':'rgba(8,47,73,.86)','--bubble-other-border':'rgba(125,211,252,.16)','--bubble-other-text':'#e0f7ff','--dot-color':'rgba(125,211,252,.06)','--ui-modal-backdrop':'rgba(3,21,32,.68)'} },
+            sunset:  { key:'sunset',  type:'gradient', value:'linear-gradient(135deg,#1c0802 0%,#451a03 38%,#c2410c 74%,#f97316 100%)', palette:{'--bg-base':'#140602','--bg-chat':'#241006','--sidebar-bg':'#180905','--nav-bg':'rgba(24,9,5,.94)','--surface':'#23100a','--surface-2':'#32170d','--surface-3':'#452011','--surface-hover':'#3b1b0f','--surface-active':'#5a2a13','--surface-glass':'rgba(35,16,10,.82)','--text':'#fff7ed','--muted':'#d6b49b','--muted-soft':'#916b55','--border':'rgba(251,146,60,.11)','--border-strong':'rgba(251,146,60,.22)','--accent':'#fb923c','--accent-strong':'#ea580c','--accent-dim':'rgba(251,146,60,.17)','--accent-text':'#1c0802','--bubble-me-bg':'linear-gradient(145deg,#c2410c 0%,#f97316 100%)','--bubble-me-glow':'rgba(249,115,22,.30)','--bubble-other-bg':'rgba(69,26,3,.84)','--bubble-other-border':'rgba(251,146,60,.18)','--bubble-other-text':'#ffedd5','--dot-color':'rgba(251,146,60,.055)','--ui-modal-backdrop':'rgba(28,8,2,.68)'} },
+            forest:  { key:'forest',  type:'gradient', value:'linear-gradient(135deg,#02110a 0%,#052e16 48%,#15803d 82%,#84cc16 100%)', palette:{'--bg-base':'#020f09','--bg-chat':'#061b11','--sidebar-bg':'#04140c','--nav-bg':'rgba(4,20,12,.94)','--surface':'#0a1d13','--surface-2':'#102b1b','--surface-3':'#163824','--surface-hover':'#13311f','--surface-active':'#1d4d2f','--surface-glass':'rgba(10,29,19,.82)','--text':'#ecfdf5','--muted':'#9cc4ad','--muted-soft':'#63826d','--border':'rgba(134,239,172,.09)','--border-strong':'rgba(134,239,172,.19)','--accent':'#86efac','--accent-strong':'#16a34a','--accent-dim':'rgba(134,239,172,.16)','--accent-text':'#02110a','--bubble-me-bg':'linear-gradient(145deg,#15803d 0%,#22c55e 100%)','--bubble-me-glow':'rgba(34,197,94,.28)','--bubble-other-bg':'rgba(5,46,22,.86)','--bubble-other-border':'rgba(134,239,172,.15)','--bubble-other-text':'#dcfce7','--dot-color':'rgba(134,239,172,.055)','--ui-modal-backdrop':'rgba(2,17,10,.68)'} },
+            purple:  { key:'purple',  type:'gradient', value:'linear-gradient(135deg,#120024 0%,#2e1065 44%,#7e22ce 78%,#f0abfc 100%)', palette:{'--bg-base':'#0b0614','--bg-chat':'#17102a','--sidebar-bg':'#10091e','--nav-bg':'rgba(16,9,30,.94)','--surface':'#181129','--surface-2':'#23183a','--surface-3':'#30204f','--surface-hover':'#2a1d46','--surface-active':'#3f276d','--surface-glass':'rgba(24,17,41,.82)','--text':'#faf5ff','--muted':'#c4afd8','--muted-soft':'#7e6790','--border':'rgba(216,180,254,.10)','--border-strong':'rgba(216,180,254,.20)','--accent':'#d8b4fe','--accent-strong':'#9333ea','--accent-dim':'rgba(216,180,254,.16)','--accent-text':'#120024','--bubble-me-bg':'linear-gradient(145deg,#7e22ce 0%,#c084fc 100%)','--bubble-me-glow':'rgba(192,132,252,.28)','--bubble-other-bg':'rgba(46,16,101,.74)','--bubble-other-border':'rgba(216,180,254,.16)','--bubble-other-text':'#f3e8ff','--dot-color':'rgba(216,180,254,.055)','--ui-modal-backdrop':'rgba(18,0,36,.68)'} }
         };
         function normalizeWallpaper(w){
             if (!w || typeof w !== 'object') return WALLPAPERS.default;
@@ -4016,6 +4067,32 @@ function dataUrlToFile(dataUrl, filename) {
             catch(_) { return WALLPAPERS.default; }
         }
         function saveWallpaper(w){ localStorage.setItem(WALLPAPER_KEY, JSON.stringify(normalizeWallpaper(w))); }
+        const UI_THEME_VARS = ['--bg-base','--bg-chat','--sidebar-bg','--nav-bg','--surface','--surface-2','--surface-3','--surface-hover','--surface-active','--surface-glass','--text','--muted','--muted-soft','--border','--border-strong','--accent','--accent-strong','--accent-dim','--accent-text','--bubble-me-bg','--bubble-me-glow','--bubble-other-bg','--bubble-other-border','--bubble-other-text','--dot-color','--ui-modal-backdrop'];
+        function clamp255(n){ return Math.max(0, Math.min(255, Math.round(n))); }
+        function hexToRgb(hex){ const m = String(hex || '').trim().match(/^#?([0-9a-f]{6})$/i); if (!m) return null; const n = parseInt(m[1], 16); return { r:(n >> 16) & 255, g:(n >> 8) & 255, b:n & 255 }; }
+        function rgbToHex(c){ return '#' + [c.r,c.g,c.b].map(v => clamp255(v).toString(16).padStart(2,'0')).join(''); }
+        function mixRgb(a,b,t){ return { r:a.r+(b.r-a.r)*t, g:a.g+(b.g-a.g)*t, b:a.b+(b.b-a.b)*t }; }
+        function luminanceRgb(c){ const f = v => { v/=255; return v <= .03928 ? v/12.92 : Math.pow((v+.055)/1.055, 2.4); }; return .2126*f(c.r)+.7152*f(c.g)+.0722*f(c.b); }
+        function rgba(c,a){ return 'rgba(' + clamp255(c.r) + ',' + clamp255(c.g) + ',' + clamp255(c.b) + ',' + a + ')'; }
+        function derivePaletteFromColor(hex){
+            const c = hexToRgb(hex) || {r:8,g:12,b:21}, dark = {r:2,g:6,b:12}, white = {r:255,g:255,b:255};
+            const l = luminanceRgb(c), textLight = l < .62;
+            const accent = l > .58 ? mixRgb(c, dark, .28) : mixRgb(c, white, .18);
+            const base = mixRgb(c, dark, l > .42 ? .78 : .64), chat = mixRgb(c, dark, l > .42 ? .62 : .44), surface = mixRgb(c, dark, l > .42 ? .72 : .56), surface2 = mixRgb(c, white, l > .42 ? .72 : .08);
+            return {'--bg-base':rgbToHex(base),'--bg-chat':rgbToHex(chat),'--sidebar-bg':rgbToHex(mixRgb(c,dark,.72)),'--nav-bg':rgba(mixRgb(c,dark,.70),.94),'--surface':rgbToHex(surface),'--surface-2':rgbToHex(surface2),'--surface-3':rgbToHex(mixRgb(c,white,textLight?.14:.64)),'--surface-hover':rgbToHex(mixRgb(c,white,textLight?.10:.70)),'--surface-active':rgbToHex(mixRgb(c,white,textLight?.18:.58)),'--surface-glass':rgba(surface,.82),'--text':textLight?'#f8fafc':'#0f172a','--muted':textLight?'#cbd5e1':'#475569','--muted-soft':textLight?'#94a3b8':'#64748b','--border':rgba(accent,textLight?.10:.18),'--border-strong':rgba(accent,textLight?.20:.30),'--accent':rgbToHex(accent),'--accent-strong':rgbToHex(mixRgb(accent,dark,.18)),'--accent-dim':rgba(accent,.17),'--accent-text':textLight?'#020617':'#ffffff','--bubble-me-bg':'linear-gradient(145deg,' + rgbToHex(mixRgb(accent,dark,.18)) + ',' + rgbToHex(accent) + ')','--bubble-me-glow':rgba(accent,.30),'--bubble-other-bg':rgba(mixRgb(c,dark,.62),.86),'--bubble-other-border':rgba(accent,.16),'--bubble-other-text':textLight?'#f1f5f9':'#0f172a','--dot-color':rgba(accent,.055),'--ui-modal-backdrop':rgba(mixRgb(c,dark,.72),.68)};
+        }
+        function clearAdaptiveUiTheme(){ const root=document.documentElement; root.removeAttribute('data-chat-ui-theme'); UI_THEME_VARS.forEach(k => root.style.removeProperty(k)); }
+        function applyAdaptiveUiTheme(w){
+            const root = document.documentElement;
+            const normalized = normalizeWallpaper(w);
+            let palette = normalized && normalized.palette;
+            if (!palette && normalized?.type === 'color') palette = derivePaletteFromColor(normalized.value);
+            if (!palette && normalized?.type === 'image') palette = {'--bg-base':'#05070f','--bg-chat':'#080c15','--sidebar-bg':'rgba(6,10,18,.96)','--nav-bg':'rgba(5,7,15,.92)','--surface':'rgba(15,20,34,.90)','--surface-2':'rgba(20,25,39,.92)','--surface-3':'rgba(26,32,53,.94)','--surface-hover':'rgba(23,30,48,.94)','--surface-active':'rgba(28,42,66,.95)','--surface-glass':'rgba(15,20,34,.78)','--text':'#e8edf8','--muted':'#93a4bd','--muted-soft':'#64748b','--border':'rgba(255,255,255,.07)','--border-strong':'rgba(255,255,255,.13)','--accent':'#63b3ff','--accent-strong':'#4fa8f5','--accent-dim':'rgba(99,179,255,.14)','--accent-text':'#030b18','--bubble-me-bg':'linear-gradient(145deg,#1454a0,#3a8fe6)','--bubble-me-glow':'rgba(58,143,230,.28)','--bubble-other-bg':'rgba(20,25,39,.86)','--bubble-other-border':'rgba(255,255,255,.10)','--bubble-other-text':'#dde4f4','--dot-color':'rgba(99,179,255,.035)','--ui-modal-backdrop':'rgba(0,0,0,.64)'};
+            if (!palette || normalized?.value === 'default') return clearAdaptiveUiTheme();
+            root.setAttribute('data-chat-ui-theme','on');
+            UI_THEME_VARS.forEach(k => root.style.removeProperty(k));
+            Object.entries(palette).forEach(([k,v]) => root.style.setProperty(k, v));
+        }
         function setWallpaperVars(bg, image, size='24px 24px', position='center', repeat='repeat', attachment='scroll'){
             if (!tgMain) return;
             tgMain.style.setProperty('--chat-wallpaper-bg', bg);
@@ -4028,10 +4105,11 @@ function dataUrlToFile(dataUrl, filename) {
         function applyChatWallpaper(raw = getSavedWallpaper()){
             if (!tgMain) return;
             const w = normalizeWallpaper(raw);
+            applyAdaptiveUiTheme(w);
             if (!w || w.value === 'default') setWallpaperVars('var(--bg-chat)', 'radial-gradient(var(--dot-color) 1px, transparent 1px)');
             else if (w.type === 'image') setWallpaperVars('var(--bg-chat)', `linear-gradient(rgba(5,7,15,.38), rgba(5,7,15,.38)), url("${w.value}")`, 'cover', 'center', 'no-repeat', 'fixed');
-            else if (w.type === 'color') setWallpaperVars(w.value, 'radial-gradient(rgba(255,255,255,.035) 1px, transparent 1px)');
-            else setWallpaperVars('var(--bg-chat)', `${w.value}, radial-gradient(rgba(255,255,255,.035) 1px, transparent 1px)`, 'auto, 24px 24px');
+            else if (w.type === 'color') setWallpaperVars('var(--bg-chat)', `linear-gradient(135deg, ${w.value}, var(--surface-active)), radial-gradient(var(--dot-color) 1px, transparent 1px)`, 'auto, 24px 24px');
+            else setWallpaperVars('var(--bg-chat)', `${w.value}, radial-gradient(var(--dot-color) 1px, transparent 1px)`, 'auto, 24px 24px');
             const activeKey = w.key || '';
             document.querySelectorAll('.wallpaper-preset').forEach(btn => btn.classList.toggle('is-active', btn.dataset.wallpaper === activeKey));
         }
