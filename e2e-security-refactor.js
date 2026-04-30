@@ -1271,18 +1271,27 @@ async function sendDirectMessage(params) {
     const cloudUrl = await uploadToCloudinary(encryptedBlob, onProgress);
     if (!cloudUrl?.startsWith('https://')) throw new Error('Cloudinary не вернул ссылку');
 
-    // Шифруем AES-ключ (hex) RSA-ключами обоих участников
-    const aesHex        = bufferToHex(rawAesKey);
+    // Шифруем AES-ключ (hex) тем же стабильным E2E-конвертом, что и текст.
+    // Новые сообщения используют ECDH v3; RSA остаётся fallback для старых аккаунтов.
+    const aesHex = bufferToHex(rawAesKey);
     const [peerSnap, mySnap] = await Promise.all([
       fsGetDoc(fsDoc(firestoreDb, 'users', peerUid)),
       fsGetDoc(fsDoc(firestoreDb, 'users', myUid))
     ]);
-    const peerPubKey = await importPublicKey(peerSnap.data().publicKey);
-    const myPubKey   = await importPublicKey(mySnap.data().publicKey);
+    const peerData = peerSnap.data() || {};
+    const myData   = mySnap.data() || {};
 
     const [encAesForPeer, encAesForMe] = await Promise.all([
-      rsaEncrypt(peerPubKey, aesHex),
-      rsaEncrypt(myPubKey,   aesHex)
+      encryptForUserPublicKeys(
+        { ecdhPublicKey: peerData.ecdhPublicKey, rsaPublicKey: peerData.publicKey },
+        aesHex,
+        { convId, targetUid: peerUid, senderUid: myUid }
+      ),
+      encryptForUserPublicKeys(
+        { ecdhPublicKey: myData.ecdhPublicKey || _activeEcdhPublicKeyB64, rsaPublicKey: myData.publicKey },
+        aesHex,
+        { convId, targetUid: myUid, senderUid: myUid }
+      )
     ]);
 
     return { cloudUrl, encAesForPeer, encAesForMe };
@@ -1313,11 +1322,11 @@ async function sendDirectMessage(params) {
     const urlE2e = await enc(cloudUrl);
     msgData.e2eImgForPeer = JSON.stringify({ aes: encAesForPeer, url: urlE2e.forPeer });
     msgData.e2eImgForMe   = JSON.stringify({ aes: encAesForMe,   url: urlE2e.forMe  });
-    // Если нет текста — Rules требуют хоть одно e2e-поле с непустой строкой
+    // Если нет текста — кладём нормальный E2E-placeholder, а не AES-ключ медиа.
     if (!msgData.e2eForPeer) {
-      const placeholder = await enc(''); // пустой текст — Rules допускают
-      msgData.e2eForPeer = msgData.e2eForPeer || encAesForPeer;
-      msgData.e2eForMe   = msgData.e2eForMe   || encAesForMe;
+      const placeholder = await enc('🖼 Изображение');
+      msgData.e2eForPeer = placeholder.forPeer;
+      msgData.e2eForMe   = placeholder.forMe;
     }
   }
 
@@ -1330,8 +1339,9 @@ async function sendDirectMessage(params) {
     if (voiceDuration != null) msgData.voiceDuration = voiceDuration;
     if (voiceMime)             msgData.voiceMime     = voiceMime;
     if (!msgData.e2eForPeer) {
-      msgData.e2eForPeer = encAesForPeer;
-      msgData.e2eForMe   = encAesForMe;
+      const placeholder = await enc('🎙 Голосовое');
+      msgData.e2eForPeer = placeholder.forPeer;
+      msgData.e2eForMe   = placeholder.forMe;
     }
   }
 
@@ -1344,8 +1354,9 @@ async function sendDirectMessage(params) {
     if (musicDuration != null) msgData.musicDuration = musicDuration;
     if (musicMime)             msgData.musicMime     = musicMime;
     if (!msgData.e2eForPeer) {
-      msgData.e2eForPeer = encAesForPeer;
-      msgData.e2eForMe   = encAesForMe;
+      const placeholder = await enc('🎵 Музыка');
+      msgData.e2eForPeer = placeholder.forPeer;
+      msgData.e2eForMe   = placeholder.forMe;
     }
   }
 

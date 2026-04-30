@@ -11,7 +11,7 @@
     <meta http-equiv="Content-Security-Policy"
           content="
             default-src 'self';
-            script-src  'self' 'sha256-MXsSqBU1YZ0oCJ1qbc3HqyjyS/wXa6S2fSuOis06pUg=' 'sha256-FARTdYhn1xEkKumY8CCScDq9pCBflz0dxkTRZtkQt9s=' 'sha256-W+3qN73NtyclCONrlXrYeZd/+NY5essBlVXneQZI6Us=' 'sha256-7nL9De69GM99BnBlXik15mfa6cRds6eFTHTWVOh27wk=' https://www.gstatic.com https://apis.google.com;
+            script-src  'self' 'sha256-MXsSqBU1YZ0oCJ1qbc3HqyjyS/wXa6S2fSuOis06pUg=' 'sha256-FARTdYhn1xEkKumY8CCScDq9pCBflz0dxkTRZtkQt9s=' 'sha256-GZd3GoXXgmdorWb0hG5IgOw3RYJV7392MCN77YirxLc=' 'sha256-/VksjiXVTLPV56dhociBODcdecS9lAITszTepXH6kFM=' https://www.gstatic.com https://apis.google.com;
             script-src-attr 'none';
             style-src   'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com https://cdn.jsdelivr.net;
             font-src    'self' https://fonts.gstatic.com https://cdn.jsdelivr.net;
@@ -1322,18 +1322,27 @@ async function sendDirectMessage(params) {
     const cloudUrl = await uploadToCloudinary(encryptedBlob, onProgress);
     if (!cloudUrl?.startsWith('https://')) throw new Error('Cloudinary не вернул ссылку');
 
-    // Шифруем AES-ключ (hex) RSA-ключами обоих участников
-    const aesHex        = bufferToHex(rawAesKey);
+    // Шифруем AES-ключ (hex) тем же стабильным E2E-конвертом, что и текст.
+    // Новые сообщения используют ECDH v3; RSA остаётся fallback для старых аккаунтов.
+    const aesHex = bufferToHex(rawAesKey);
     const [peerSnap, mySnap] = await Promise.all([
       fsGetDoc(fsDoc(firestoreDb, 'users', peerUid)),
       fsGetDoc(fsDoc(firestoreDb, 'users', myUid))
     ]);
-    const peerPubKey = await importPublicKey(peerSnap.data().publicKey);
-    const myPubKey   = await importPublicKey(mySnap.data().publicKey);
+    const peerData = peerSnap.data() || {};
+    const myData   = mySnap.data() || {};
 
     const [encAesForPeer, encAesForMe] = await Promise.all([
-      rsaEncrypt(peerPubKey, aesHex),
-      rsaEncrypt(myPubKey,   aesHex)
+      encryptForUserPublicKeys(
+        { ecdhPublicKey: peerData.ecdhPublicKey, rsaPublicKey: peerData.publicKey },
+        aesHex,
+        { convId, targetUid: peerUid, senderUid: myUid }
+      ),
+      encryptForUserPublicKeys(
+        { ecdhPublicKey: myData.ecdhPublicKey || _activeEcdhPublicKeyB64, rsaPublicKey: myData.publicKey },
+        aesHex,
+        { convId, targetUid: myUid, senderUid: myUid }
+      )
     ]);
 
     return { cloudUrl, encAesForPeer, encAesForMe };
@@ -1364,11 +1373,11 @@ async function sendDirectMessage(params) {
     const urlE2e = await enc(cloudUrl);
     msgData.e2eImgForPeer = JSON.stringify({ aes: encAesForPeer, url: urlE2e.forPeer });
     msgData.e2eImgForMe   = JSON.stringify({ aes: encAesForMe,   url: urlE2e.forMe  });
-    // Если нет текста — Rules требуют хоть одно e2e-поле с непустой строкой
+    // Если нет текста — кладём нормальный E2E-placeholder, а не AES-ключ медиа.
     if (!msgData.e2eForPeer) {
-      const placeholder = await enc(''); // пустой текст — Rules допускают
-      msgData.e2eForPeer = msgData.e2eForPeer || encAesForPeer;
-      msgData.e2eForMe   = msgData.e2eForMe   || encAesForMe;
+      const placeholder = await enc('🖼 Изображение');
+      msgData.e2eForPeer = placeholder.forPeer;
+      msgData.e2eForMe   = placeholder.forMe;
     }
   }
 
@@ -1381,8 +1390,9 @@ async function sendDirectMessage(params) {
     if (voiceDuration != null) msgData.voiceDuration = voiceDuration;
     if (voiceMime)             msgData.voiceMime     = voiceMime;
     if (!msgData.e2eForPeer) {
-      msgData.e2eForPeer = encAesForPeer;
-      msgData.e2eForMe   = encAesForMe;
+      const placeholder = await enc('🎙 Голосовое');
+      msgData.e2eForPeer = placeholder.forPeer;
+      msgData.e2eForMe   = placeholder.forMe;
     }
   }
 
@@ -1395,8 +1405,9 @@ async function sendDirectMessage(params) {
     if (musicDuration != null) msgData.musicDuration = musicDuration;
     if (musicMime)             msgData.musicMime     = musicMime;
     if (!msgData.e2eForPeer) {
-      msgData.e2eForPeer = encAesForPeer;
-      msgData.e2eForMe   = encAesForMe;
+      const placeholder = await enc('🎵 Музыка');
+      msgData.e2eForPeer = placeholder.forPeer;
+      msgData.e2eForMe   = placeholder.forMe;
     }
   }
 
@@ -4159,20 +4170,42 @@ console.info('[E2E] Security module v2.0 загружен');
             return url.startsWith('blob:') || url.startsWith('data:audio/') || url.startsWith('data:image/') || /^https:\/\//i.test(url);
         }
 
+        function e2eCacheHash(value) {
+            const str = String(value || '');
+            let h = 2166136261;
+            for (let i = 0; i < str.length; i++) {
+                h ^= str.charCodeAt(i);
+                h = Math.imul(h, 16777619);
+            }
+            return (h >>> 0).toString(36);
+        }
+
+        function e2eMessageCacheKey(msgId, msgData) {
+            const fields = [
+                'e2eForPeer','e2eForMe',
+                'e2eImgForPeer','e2eImgForMe',
+                'e2eVoiceForPeer','e2eVoiceForMe','voiceDuration','voiceMime',
+                'e2eMusicForPeer','e2eMusicForMe','musicDuration','musicMime',
+                'e2eChecklistForPeer','e2eChecklistForMe','edited'
+            ];
+            const fingerprint = fields.map(k => `${k}=${msgData?.[k] ?? ''}`).join('\u001f');
+            return `${currentDMConvId || 'dm'}:${msgId || 'noid'}:${e2eCacheHash(fingerprint)}`;
+        }
+
         function decryptMessageCached(msgId, msgData) {
             if (!window.E2E || typeof window.E2E.decryptMessage !== 'function') {
                 return Promise.resolve({ text: '[🔒 E2E-модуль не загружен]' });
             }
-            const key = `${currentDMConvId || 'dm'}:${msgId || 'noid'}`;
+            const key = e2eMessageCacheKey(msgId, msgData);
             if (!_e2eMessageDecryptCache.has(key)) {
-                _e2eMessageDecryptCache.set(
-                    key,
-                    window.E2E.decryptMessage(msgData, auth.currentUser?.uid || '', myPrivateKey, db, doc, getDoc)
-                        .catch(err => {
-                            console.warn('[e2e] decryptMessageCached failed:', err?.message || err);
-                            return { text: '[🔒 Не удалось расшифровать]' };
-                        })
-                );
+                const promise = window.E2E.decryptMessage(msgData, auth.currentUser?.uid || '', myPrivateKey, db, doc, getDoc)
+                    .catch(err => {
+                        // Не кешируем сбой навсегда: Cloudinary/IndexedDB/ECDH могут быть временно не готовы.
+                        _e2eMessageDecryptCache.delete(key);
+                        console.warn('[e2e] decryptMessageCached failed:', err?.message || err);
+                        return { text: '[🔒 Не удалось расшифровать]', decryptError: true };
+                    });
+                _e2eMessageDecryptCache.set(key, promise);
             }
             return _e2eMessageDecryptCache.get(key);
         }
@@ -8262,26 +8295,26 @@ musicSendBtn.addEventListener('click', async () => {
     musicSendBtn.textContent = '⏳ Загружаю 0%...';
     try {
         const authorNameForRules = await getAuthorNameForRules(u);
-        const url = await uploadToCloudinary(_pendingMusicFile, percent => {
-            musicSendBtn.textContent = `⏳ Загружаю ${percent}%...`;
-        });
-        if (!url || !url.startsWith('https://')) throw new Error('Cloudinary не вернул ссылку на музыку');
-
-        const msg = {
-            uid: u.uid,
-            author: authorNameForRules,
-            text: '',
-            musicUrl: url,
-            musicTitle: _pendingMusicTitle || _pendingMusicFile.name.replace(/\.[^.]+$/, ''),
-            musicDuration: Math.round(_pendingMusicDur || 0),
-            musicMime: _pendingMusicFile.type,
-            createdAt: serverTimestamp(),
-            edited: false,
-        };
 
         if (currentChatMode === 'group') {
-            await addDoc(messagesCol, msg);
+            const url = await uploadToCloudinary(_pendingMusicFile, percent => {
+                musicSendBtn.textContent = `⏳ Загружаю ${percent}%...`;
+            });
+            if (!url || !url.startsWith('https://')) throw new Error('Cloudinary не вернул ссылку на музыку');
+
+            await addDoc(messagesCol, {
+                uid: u.uid,
+                author: authorNameForRules,
+                text: '',
+                musicUrl: url,
+                musicTitle: _pendingMusicTitle || _pendingMusicFile.name.replace(/\.[^.]+$/, ''),
+                musicDuration: Math.round(_pendingMusicDur || 0),
+                musicMime: _pendingMusicFile.type,
+                createdAt: serverTimestamp(),
+                edited: false,
+            });
         } else {
+            musicSendBtn.textContent = '⏳ Шифрую музыку…';
             if (!currentDMConvId || !currentDMPeerUid) throw new Error('ЛС не выбрано');
             const ok = await ensureDME2EUnlocked(u.uid);
             if (!ok || !myPrivateKey) throw new Error('ЛС не разблокированы мастер-кодом');
@@ -8305,7 +8338,7 @@ musicSendBtn.addEventListener('click', async () => {
                 fsGetDoc: getDoc,
                 fsServerTimestamp: serverTimestamp,
                 fsIncrement: increment,
-                uploadToCloudinary: e2e.uploadViaBackend
+                uploadToCloudinary: e2e.uploadViaBackend || uploadToCloudinary
             });
         }
 
