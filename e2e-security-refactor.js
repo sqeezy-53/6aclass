@@ -191,9 +191,9 @@ async function changeMasterPassword(uid, oldPassword, newPassword) {
   if (!strength.ok) throw new Error('Слабый новый мастер-пароль: ' + strength.reasons.join(', '));
 
   const [rsaPrivateKey, signingPrivateKey, ecdhPrivateKey] = await Promise.all([
-    loadPrivateKey(uid, oldPassword),
-    loadSigningPrivateKey(uid, oldPassword),
-    loadEcdhPrivateKey(uid, oldPassword)
+    loadPrivateKey(uid, oldPassword, { extractable: true }),
+    loadSigningPrivateKey(uid, oldPassword, { extractable: true }),
+    loadEcdhPrivateKey(uid, oldPassword, { extractable: true })
   ]);
 
   if (!rsaPrivateKey || !signingPrivateKey || !ecdhPrivateKey) {
@@ -278,7 +278,8 @@ async function savePrivateKey(uid, privateKey, password) {
  * @param {string} password
  * @returns {Promise<CryptoKey>}  RSA-OAEP privateKey
  */
-async function loadPrivateKey(uid, password) {
+async function loadPrivateKey(uid, password, options = {}) {
+  const extractable = options.extractable === true;
   const blob = await idbGet(`e2e_privkey_${uid}`);
   if (!(blob instanceof Uint8Array) || blob.length < 44) return null;
 
@@ -295,7 +296,7 @@ async function loadPrivateKey(uid, password) {
   return crypto.subtle.importKey(
     'jwk', jwk,
     { name: 'RSA-OAEP', hash: 'SHA-256' },
-    false, ['decrypt']
+    extractable, ['decrypt']
   );
 }
 
@@ -359,14 +360,15 @@ async function saveSigningPrivateKey(uid, privateKey, password) {
   blob.set(salt, 0); blob.set(iv, 32); blob.set(new Uint8Array(cipher), 44);
   await idbSet(`e2e_sign_priv_${uid}`, blob);
 }
-async function loadSigningPrivateKey(uid, password) {
+async function loadSigningPrivateKey(uid, password, options = {}) {
+  const extractable = options.extractable === true;
   const blob = await idbGet(`e2e_sign_priv_${uid}`);
   if (!(blob instanceof Uint8Array) || blob.length < 44) return null;
   const salt = blob.slice(0, 32), iv = blob.slice(32, 44), cipher = blob.slice(44);
   const aesKey = await deriveKeyFromPassword(password, salt);
   const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, aesKey, cipher);
   const jwk = JSON.parse(new TextDecoder().decode(plain));
-  return crypto.subtle.importKey('jwk', jwk, { name: 'ECDSA', namedCurve: E2E_SIGN_CURVE }, false, ['sign']);
+  return crypto.subtle.importKey('jwk', jwk, { name: 'ECDSA', namedCurve: E2E_SIGN_CURVE }, extractable, ['sign']);
 }
 async function fingerprintPublicKeyB64(b64) {
   const digest = await crypto.subtle.digest('SHA-256', b64ToBytes(b64));
@@ -406,6 +408,7 @@ async function ensureSigningKeyPair(uid, firestoreDb, fsDoc, fsSetDoc, password)
     publicKeyB64 = await exportSpkiB64(pair.publicKey);
     await saveSigningPrivateKey(uid, privateKey, password);
     await idbSet(`e2e_sign_pub_${uid}`, publicKeyB64);
+    privateKey = await loadSigningPrivateKey(uid, password);
   }
   _activeSigningPrivateKey = privateKey;
   _activeSigningPublicKeyB64 = publicKeyB64;
@@ -423,7 +426,9 @@ let _activeEcdhPrivateKey = null;
 let _activeEcdhPublicKeyB64 = null;
 
 async function generateEcdhKeyPair() {
-  return crypto.subtle.generateKey({ name: 'ECDH', namedCurve: E2E_ECDH_CURVE }, false, ['deriveKey']);
+  // Generate extractable so the private JWK can be wrapped by the master password.
+  // After saving, persistent working keys are re-imported as non-extractable by loadEcdhPrivateKey().
+  return crypto.subtle.generateKey({ name: 'ECDH', namedCurve: E2E_ECDH_CURVE }, true, ['deriveKey']);
 }
 async function importEcdhPublicKey(b64) {
   return crypto.subtle.importKey('spki', b64ToBytes(b64), { name: 'ECDH', namedCurve: E2E_ECDH_CURVE }, true, []);
@@ -444,14 +449,15 @@ async function saveEcdhPrivateKey(uid, privateKey, password) {
   blob.set(salt, 0); blob.set(iv, 32); blob.set(new Uint8Array(cipher), 44);
   await idbSet(`e2e_ecdh_priv_${uid}`, blob);
 }
-async function loadEcdhPrivateKey(uid, password) {
+async function loadEcdhPrivateKey(uid, password, options = {}) {
+  const extractable = options.extractable === true;
   const blob = await idbGet(`e2e_ecdh_priv_${uid}`);
   if (!(blob instanceof Uint8Array) || blob.length < 44) return null;
   const salt = blob.slice(0, 32), iv = blob.slice(32, 44), cipher = blob.slice(44);
   const aesKey = await deriveKeyFromPassword(password, salt);
   const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, aesKey, cipher);
   const jwk = JSON.parse(new TextDecoder().decode(plain));
-  return crypto.subtle.importKey('jwk', jwk, { name: 'ECDH', namedCurve: E2E_ECDH_CURVE }, false, ['deriveKey']);
+  return crypto.subtle.importKey('jwk', jwk, { name: 'ECDH', namedCurve: E2E_ECDH_CURVE }, extractable, ['deriveKey']);
 }
 async function ensureEcdhKeyPair(uid, firestoreDb, fsDoc, fsSetDoc, password) {
   let privateKey = null;
@@ -463,6 +469,7 @@ async function ensureEcdhKeyPair(uid, firestoreDb, fsDoc, fsSetDoc, password) {
     publicKeyB64 = await exportSpkiB64(pair.publicKey);
     await saveEcdhPrivateKey(uid, privateKey, password);
     await idbSet(`e2e_ecdh_pub_${uid}`, publicKeyB64);
+    privateKey = await loadEcdhPrivateKey(uid, password);
   }
   _activeEcdhPrivateKey = privateKey;
   _activeEcdhPublicKeyB64 = publicKeyB64;
@@ -1214,57 +1221,48 @@ async function initE2EForUser(uid, firestoreDb, fsDoc, fsGetDoc, fsSetDoc) {
         const privateKey = await loadPrivateKey(uid, password);
         if (!privateKey) throw new Error('null key');
 
-        // Проверяем совпадение с публичным ключом в Firebase
-        const snap           = await fsGetDoc(fsDoc(firestoreDb, 'users', uid));
-        const storedPubB64   = snap.data()?.publicKey ?? null;
+        // Проверяем совпадение с публичным ключом в Firebase или локальной копией.
+        // ВАЖНО: privateKey загружается как non-extractable, поэтому нельзя пытаться экспортировать
+        // из него public key. Публичный ключ должен храниться отдельно в Firebase/IndexedDB.
+        const snap = await fsGetDoc(fsDoc(firestoreDb, 'users', uid));
+        const localPubB64 = await idbGet(`e2e_pubkey_${uid}`);
+        const storedPubB64 = snap.data()?.publicKey || localPubB64 || null;
 
         if (storedPubB64) {
-          const pubKey    = await importPublicKey(storedPubB64);
-          const testCt    = await rsaEncrypt(pubKey, 'e2e_ok');
+          const pubKey = await importPublicKey(storedPubB64);
+          const testCt = await rsaEncrypt(pubKey, 'e2e_ok');
           const testPlain = await rsaDecrypt(privateKey, testCt);
-
-          if (testPlain === 'e2e_ok') {
-            await ensureSigningKeyPair(uid, firestoreDb, fsDoc, fsSetDoc, password);
-            await ensureEcdhKeyPair(uid, firestoreDb, fsDoc, fsSetDoc, password);
-            await registerCurrentDevice(uid, firestoreDb, fsDoc, fsSetDoc);
-            setupE2EAutoLock();
-            console.info('[e2e] Ключи разблокированы и верифицированы');
-            return { privateKey, publicKeyB64: storedPubB64 };
-          }
+          if (testPlain !== 'e2e_ok') throw new Error('e2e_keypair_mismatch');
         } else {
-          // Публичного ключа нет в Firebase — публикуем свой
-          const pubKeyImported = await crypto.subtle.exportKey(
-            'spki',
-            // Нам нужен публичный ключ — пересоздадим из JWK
-            // Простейший способ: экспортируем приватный→JWK, извлекаем n/e → строим публичный
-            privateKey  // placeholder — см. NOTE ниже
-          );
-          // NOTE: Web Crypto не позволяет «вытащить» публичный ключ из CryptoKey private.
-          // Корректный путь — при сохранении дублировать публичный ключ в IDB.
-          // Если публичного нет — инициируем перегенерацию.
-          throw new Error('no_public_in_firebase');
+          console.warn('[e2e] RSA publicKey отсутствует в Firebase/IDB; пароль верный, продолжаем без RSA-проверки legacy-ключа.');
         }
+
+        await ensureSigningKeyPair(uid, firestoreDb, fsDoc, fsSetDoc, password);
+        await ensureEcdhKeyPair(uid, firestoreDb, fsDoc, fsSetDoc, password);
+        await registerCurrentDevice(uid, firestoreDb, fsDoc, fsSetDoc);
+        setupE2EAutoLock();
+        console.info('[e2e] Ключи разблокированы');
+        return { privateKey, publicKeyB64: storedPubB64 };
       } catch (err) {
-        attempts++;
-        if (err.message === 'no_public_in_firebase') break; // → перегенерация
-        if (err.name === 'OperationError') {
-          // AES-GCM провалился → неверный пароль
+        if (err?.name === 'OperationError') {
+          // AES-GCM провалился → неверный мастер-пароль.
+          attempts++;
           console.warn(`[e2e] Неверный пароль (попытка ${attempts}/3)`);
           if (attempts >= 3) {
             alert('Неверный пароль 3 раза. E2E-переписка недоступна на этом устройстве.');
             return { privateKey: null, publicKeyB64: null };
           }
-        } else {
-          console.error('[e2e] Ошибка загрузки ключа:', err);
-          break;
+          continue;
         }
+        console.error('[e2e] Ошибка разблокировки E2E-ключей:', err);
+        alert('Мастер-пароль принят, но E2E-ключи не удалось подготовить: ' + (err?.message || err));
+        return { privateKey: null, publicKeyB64: null };
       }
     }
-    // Если дошли сюда — ключевая пара не совпала → перегенерация
-    console.warn('[e2e] Несоответствие ключей — генерируем новую пару');
+    return { privateKey: null, publicKeyB64: null };
   }
 
-  // ── Сценарий A: первый вход или перегенерация ──
+  // ── Сценарий A: первый вход — ключей на устройстве ещё нет ──
   let password;
   try {
     password = await promptMasterPassword('create');
