@@ -837,6 +837,32 @@ async function decryptMediaUrl(myPrivateKey, encryptedAesB64, cloudinaryRawUrl) 
   return rememberObjectUrl(URL.createObjectURL(new Blob([plainBuf])));
 }
 
+async function decryptMediaFileFromUrlAndAesHex(cloudinaryRawUrl, aesHex) {
+  if (!cloudinaryRawUrl || !String(cloudinaryRawUrl).startsWith('https://')) throw new Error('invalid_media_url');
+  const rawAesKey = hexToBuffer(aesHex);
+  const resp = await fetch(cloudinaryRawUrl);
+  if (!resp.ok) throw new Error(`Fetch failed: ${resp.status}`);
+  const encBuf = await resp.arrayBuffer();
+  const plainBuf = await decryptBuffer(encBuf, rawAesKey);
+  return rememberObjectUrl(URL.createObjectURL(new Blob([plainBuf])));
+}
+
+async function decryptE2EMediaPayload(myPrivateKey, mediaRaw) {
+  if (!mediaRaw) return null;
+  if (typeof mediaRaw === 'string' && mediaRaw.trim().startsWith('{')) {
+    let parsed = null;
+    try { parsed = JSON.parse(mediaRaw); } catch (_) { parsed = null; }
+    if (parsed && parsed.aes && parsed.url) {
+      const aesHex = await rsaDecrypt(myPrivateKey, parsed.aes);
+      const cloudUrl = await rsaDecrypt(myPrivateKey, parsed.url);
+      return decryptMediaFileFromUrlAndAesHex(cloudUrl, aesHex);
+    }
+  }
+  const legacyUrl = await rsaDecrypt(myPrivateKey, mediaRaw);
+  if (legacyUrl && String(legacyUrl).startsWith('https://')) return legacyUrl;
+  return null;
+}
+
 /* ═══════════════════════════════════════════════════════════════
    § 5  УТИЛИТЫ
 ═══════════════════════════════════════════════════════════════ */
@@ -1331,15 +1357,19 @@ async function sendDirectMessage(params) {
                     : voiceFile ? '🎙 Голосовое'
                     : musicFile ? '🎵 Музыка'
                     : '🔒 Сообщение';
-  await fsSetDoc(
-    fsDoc(firestoreDb, 'dmConvs', convId),
-    {
-      lastText: previewText,
-      lastAt:   fsServerTimestamp(),
-      [`unread.${peerUid}`]: fsIncrement(1)
-    },
-    { merge: true }
-  );
+  try {
+    await fsSetDoc(
+      fsDoc(firestoreDb, 'dmConvs', convId),
+      {
+        lastText: previewText,
+        lastAt:   fsServerTimestamp(),
+        [`unread.${peerUid}`]: fsIncrement(1)
+      },
+      { merge: true }
+    );
+  } catch (e) {
+    console.warn('[e2e] DM metadata update failed; message was created', e);
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -1386,15 +1416,10 @@ async function decryptMessage(msgData, myUid, myPrivateKey, firestoreDb = null, 
   const imgRaw = pick('e2eImgForPeer', 'e2eImgForMe');
   if (imgRaw) {
     try {
-      const { aes, url: encUrl } = JSON.parse(imgRaw);
-      // Расшифровываем Cloudinary URL
-      const cloudUrl   = await rsaDecrypt(myPrivateKey, encUrl);
-      // Расшифровываем AES-ключ
-      const aesHex     = await rsaDecrypt(myPrivateKey, aes);
-      // Загружаем и расшифровываем файл
-      result.imageObjectUrl = await decryptMediaUrl(myPrivateKey, aes, cloudUrl);
-    } catch {
-      result.imageObjectUrl = null; // отображать заглушку
+      result.imageObjectUrl = await decryptE2EMediaPayload(myPrivateKey, imgRaw);
+    } catch (e) {
+      console.warn('[e2e] image decrypt failed:', e?.message || e);
+      result.imageObjectUrl = null;
     }
   }
 
@@ -1402,10 +1427,9 @@ async function decryptMessage(msgData, myUid, myPrivateKey, firestoreDb = null, 
   const voiceRaw = pick('e2eVoiceForPeer', 'e2eVoiceForMe');
   if (voiceRaw) {
     try {
-      const { aes, url: encUrl } = JSON.parse(voiceRaw);
-      const cloudUrl = await rsaDecrypt(myPrivateKey, encUrl);
-      result.voiceObjectUrl = await decryptMediaUrl(myPrivateKey, aes, cloudUrl);
-    } catch {
+      result.voiceObjectUrl = await decryptE2EMediaPayload(myPrivateKey, voiceRaw);
+    } catch (e) {
+      console.warn('[e2e] voice decrypt failed:', e?.message || e);
       result.voiceObjectUrl = null;
     }
   }
@@ -1414,10 +1438,9 @@ async function decryptMessage(msgData, myUid, myPrivateKey, firestoreDb = null, 
   const musicRaw = pick('e2eMusicForPeer', 'e2eMusicForMe');
   if (musicRaw) {
     try {
-      const { aes, url: encUrl } = JSON.parse(musicRaw);
-      const cloudUrl = await rsaDecrypt(myPrivateKey, encUrl);
-      result.musicObjectUrl = await decryptMediaUrl(myPrivateKey, aes, cloudUrl);
-    } catch {
+      result.musicObjectUrl = await decryptE2EMediaPayload(myPrivateKey, musicRaw);
+    } catch (e) {
+      console.warn('[e2e] music decrypt failed:', e?.message || e);
       result.musicObjectUrl = null;
     }
   }
@@ -1426,9 +1449,15 @@ async function decryptMessage(msgData, myUid, myPrivateKey, firestoreDb = null, 
   const checklistCipher = pick('e2eChecklistForPeer', 'e2eChecklistForMe');
   if (checklistCipher) {
     try {
-      const json = await rsaDecrypt(myPrivateKey, checklistCipher);
+      let json = null;
+      if (checklistCipher === textCipher && typeof result.text === 'string' && result.text.trim().startsWith('{')) {
+        json = result.text;
+      } else {
+        json = await rsaDecrypt(myPrivateKey, checklistCipher);
+      }
       result.checklist = JSON.parse(json);
-    } catch {
+    } catch (e) {
+      console.warn('[e2e] checklist decrypt failed:', e?.message || e);
       result.checklist = null;
     }
   }
@@ -1548,6 +1577,8 @@ window.E2E = {
   encryptBlob,
   decryptBuffer,
   decryptMediaUrl,
+  decryptE2EMediaPayload,
+  decryptMediaFileFromUrlAndAesHex,
 
   // Сообщения
   sendDirectMessage,
