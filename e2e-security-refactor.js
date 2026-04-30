@@ -124,6 +124,88 @@ async function idbDelete(key) {
   });
 }
 
+/**
+ * Возвращает все ключи локального E2E-хранилища IndexedDB.
+ * Нужен для безопасного локального сброса E2E-данных на устройстве.
+ * @returns {Promise<string[]>}
+ */
+async function idbKeys() {
+  const db = await openIDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(E2E_IDB_STORE, 'readonly');
+    const store = tx.objectStore(E2E_IDB_STORE);
+    const req = store.getAllKeys ? store.getAllKeys() : null;
+    if (!req) { resolve([]); return; }
+    req.onsuccess = () => resolve(Array.from(req.result || []));
+    req.onerror = () => reject(req.error);
+  });
+}
+
+/**
+ * Удаляет локальные E2E-ключи и ratchet-состояние с текущего устройства.
+ * Это НЕ удаляет сообщения из Firebase и НЕ восстанавливает старые ЛС.
+ * После сброса старые E2E-сообщения на этом устройстве могут стать нечитаемыми.
+ */
+async function resetLocalE2EStorage(options = {}) {
+  const requireConfirm = options.confirmReset !== false;
+  if (requireConfirm && typeof confirm === 'function') {
+    const ok1 = confirm('Сбросить локальные E2E-ключи на этом устройстве?\n\nСтарые личные сообщения могут перестать открываться без старого мастер-пароля/ключей.');
+    if (!ok1) return false;
+    const ok2 = confirm('Последнее подтверждение: это действие нельзя отменить. Продолжить?');
+    if (!ok2) return false;
+  }
+
+  lockE2EKeys('local-reset');
+  const keys = await idbKeys();
+  const prefixes = [
+    'e2e_privkey_', 'e2e_sign_priv_', 'e2e_ecdh_priv_',
+    'e2e_pubkey_', 'e2e_sign_pub_', 'e2e_ecdh_pub_',
+    'e2e_salt_', 'e2e_ratchet_'
+  ];
+  await Promise.all(
+    keys
+      .map(String)
+      .filter(k => prefixes.some(prefix => k.startsWith(prefix)))
+      .map(k => idbDelete(k))
+  );
+
+  try {
+    localStorage.removeItem(E2E_DEVICE_ID_KEY);
+    for (const k of Object.keys(localStorage)) {
+      if (k.startsWith(E2E_TRUST_STORE_PREFIX)) localStorage.removeItem(k);
+    }
+  } catch (_) {}
+
+  return true;
+}
+
+/**
+ * Меняет мастер-пароль локального E2E-хранилища без смены публичных ключей.
+ * Старый пароль нужен, потому что приватные ключи надо сначала расшифровать.
+ * @param {string} uid
+ * @param {string} oldPassword
+ * @param {string} newPassword
+ */
+async function changeMasterPassword(uid, oldPassword, newPassword) {
+  const strength = validateMasterPasswordStrength(newPassword);
+  if (!strength.ok) throw new Error('Слабый новый мастер-пароль: ' + strength.reasons.join(', '));
+
+  const [rsaPrivateKey, signingPrivateKey, ecdhPrivateKey] = await Promise.all([
+    loadPrivateKey(uid, oldPassword),
+    loadSigningPrivateKey(uid, oldPassword),
+    loadEcdhPrivateKey(uid, oldPassword)
+  ]);
+
+  if (!rsaPrivateKey || !signingPrivateKey || !ecdhPrivateKey) {
+    throw new Error('Не удалось загрузить все локальные E2E-ключи. Проверьте старый мастер-пароль.');
+  }
+
+  await savePrivateKey(uid, rsaPrivateKey, newPassword);
+  await saveSigningPrivateKey(uid, signingPrivateKey, newPassword);
+  await saveEcdhPrivateKey(uid, ecdhPrivateKey, newPassword);
+  return true;
+}
+
 /* ═══════════════════════════════════════════════════════════════
    § 2  МАСТЕР-ПАРОЛЬ — PBKDF2 → AES-GCM (обёртка приватного RSA)
 ═══════════════════════════════════════════════════════════════ */
@@ -1018,6 +1100,14 @@ function promptMasterPassword(mode) {
           ${isCreate ? 'Создать' : 'Войти'}
         </button>
       </div>
+      ${!isCreate ? `
+        <button id="mp-reset-local" style="margin-top:14px;width:100%;padding:10px 14px;border-radius:12px;border:1px solid rgba(248,113,113,.35);background:rgba(248,113,113,.08);color:var(--danger,#f87171);cursor:pointer;font-size:.82rem;font-weight:700;">
+          Сбросить E2E-ключи на этом устройстве
+        </button>
+        <p style="margin:8px 0 0;font-size:.72rem;color:var(--muted,#7d8da6);line-height:1.35;">
+          Используйте только если забыли мастер-пароль. Старые ЛС на этом устройстве могут стать нечитаемыми.
+        </p>
+      ` : ''}
     `;
 
     overlay.appendChild(card);
@@ -1036,13 +1126,37 @@ function promptMasterPassword(mode) {
       cleanup(); reject(new Error('cancelled'));
     });
 
+    const resetBtn = card.querySelector('#mp-reset-local');
+    if (resetBtn) {
+      resetBtn.addEventListener('click', async () => {
+        try {
+          const didReset = await resetLocalE2EStorage({ confirmReset: true });
+          if (didReset) {
+            cleanup();
+            alert('Локальные E2E-ключи сброшены. Войдите заново и создайте новый мастер-пароль.');
+            location.reload();
+          }
+        } catch (e) {
+          showErr('Не удалось сбросить E2E-ключи: ' + (e?.message || e));
+        }
+      });
+    }
+
     card.querySelector('#mp-ok').addEventListener('click', () => {
       const pwd = input.value;
-      const strength = validateMasterPasswordStrength(pwd);
-      if (!strength.ok) { showErr('Слабый мастер-пароль: ' + strength.reasons.join(', ')); return; }
+
+      // ВАЖНО: проверка силы пароля применяется только при СОЗДАНИИ
+      // нового мастер-пароля. При разблокировке старого хранилища нельзя
+      // блокировать пароль новыми правилами сложности: иначе пользователи
+      // со старыми паролями потеряют доступ к уже созданным E2E-ключам.
       if (isCreate) {
+        const strength = validateMasterPasswordStrength(pwd);
+        if (!strength.ok) { showErr('Слабый мастер-пароль: ' + strength.reasons.join(', ')); return; }
         if (pwd !== input2.value) { showErr('Пароли не совпадают'); return; }
+      } else {
+        if (!pwd) { showErr('Введите мастер-пароль'); return; }
       }
+
       hideErr();
       cleanup();
       resolve(pwd);
@@ -1689,6 +1803,9 @@ window.E2E = {
   idbGet,
   idbSet,
   idbDelete,
+  idbKeys,
+  resetLocalE2EStorage,
+  changeMasterPassword,
   detectCipherAlg,
   getOrCreateDeviceId,
   currentDeviceFingerprint,
