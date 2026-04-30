@@ -409,10 +409,13 @@ async function ecdhEncryptForPublicKeyB64(publicKeyB64, text) {
   });
 }
 async function encryptForUserPublicKeys({ ecdhPublicKey, rsaPublicKey }, text, options = {}) {
-  if (ecdhPublicKey && options.convId) {
-    try { return ratchetEncryptForPublicKeyB64(ecdhPublicKey, text, options); }
-    catch (e) { console.warn('[e2e] ratchet-lite fallback to plain ECDH:', e); }
-  }
+  // СТАБИЛЬНЫЙ РЕЖИМ ДЛЯ FIRESTORE-ИСТОРИИ.
+  // Ratchet-Lite v4 в этой версии оставлен только для чтения уже созданных legacy-v4 сообщений.
+  // Причина: текущий ratchetDecryptEnvelope() двигает локальную KDF-цепочку вперёд, а UI чата
+  // многократно ререндерит и расшифровывает одни и те же Firestore-сообщения. Это приводило к
+  // ratchet_message_key_expired при повторной расшифровке image/music/checklist.
+  // Новые сообщения шифруем повторно-дешифруемым ECDH v3 envelope. RSA — только fallback для
+  // старых пользователей без ECDH-ключа.
   if (ecdhPublicKey) return ecdhEncryptForPublicKeyB64(ecdhPublicKey, text);
   if (rsaPublicKey) return rsaEncrypt(await importPublicKey(rsaPublicKey), text);
   throw new Error('У пользователя нет E2E public key');
@@ -456,6 +459,7 @@ async function verifyEncryptedMessageSignature(msgData, firestoreDb, fsDoc, fsGe
   } catch (e) { return { ok: false, reason: 'verify_error' }; }
 }
 
+const _e2eRatchetPlaintextCache = new Map();
 const _e2eObjectUrls = new Set();
 function rememberObjectUrl(url) { if (url && url.startsWith('blob:')) _e2eObjectUrls.add(url); return url; }
 function revokeE2EObjectUrls() { for (const url of _e2eObjectUrls) { try { URL.revokeObjectURL(url); } catch (_) {} } _e2eObjectUrls.clear(); }
@@ -726,7 +730,11 @@ async function rsaDecrypt(privateKey, value) {
     try {
       const env = JSON.parse(value);
       if (env && env.v === 4 && env.alg === E2E_CIPHER_V4) {
-        return ratchetDecryptEnvelope(privateKey, env);
+        const cacheKey = value;
+        if (_e2eRatchetPlaintextCache.has(cacheKey)) return _e2eRatchetPlaintextCache.get(cacheKey);
+        const plain = await ratchetDecryptEnvelope(privateKey, env);
+        _e2eRatchetPlaintextCache.set(cacheKey, plain);
+        return plain;
       }
       if (env && env.v === 3 && env.alg === E2E_CIPHER_V3) {
         if (!_activeEcdhPrivateKey) throw new Error('ecdh_private_key_not_loaded');
