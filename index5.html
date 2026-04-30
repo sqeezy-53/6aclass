@@ -11,7 +11,7 @@
     <meta http-equiv="Content-Security-Policy"
           content="
             default-src 'self';
-            script-src  'self' 'sha256-MXsSqBU1YZ0oCJ1qbc3HqyjyS/wXa6S2fSuOis06pUg=' 'sha256-FARTdYhn1xEkKumY8CCScDq9pCBflz0dxkTRZtkQt9s=' 'sha256-GZd3GoXXgmdorWb0hG5IgOw3RYJV7392MCN77YirxLc=' 'sha256-/VksjiXVTLPV56dhociBODcdecS9lAITszTepXH6kFM=' https://www.gstatic.com https://apis.google.com;
+            script-src  'self' 'sha256-MXsSqBU1YZ0oCJ1qbc3HqyjyS/wXa6S2fSuOis06pUg=' 'sha256-FARTdYhn1xEkKumY8CCScDq9pCBflz0dxkTRZtkQt9s=' 'sha256-NS5D/qXO1bxR/X6jAKFs9z3nZ9OXs/00bacETCNBQ44=' 'sha256-/VksjiXVTLPV56dhociBODcdecS9lAITszTepXH6kFM=' https://www.gstatic.com https://apis.google.com;
             script-src-attr 'none';
             style-src   'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com https://cdn.jsdelivr.net;
             font-src    'self' https://fonts.gstatic.com https://cdn.jsdelivr.net;
@@ -809,7 +809,9 @@ async function rsaDecrypt(privateKey, value) {
       if (String(value).includes(E2E_CIPHER_V3)) throw e;
     }
   }
-  return rsaDecryptLegacy(privateKey, value);
+  const legacyValue = normalizeB64ForAtob(value);
+  if (!isLikelyLegacyRsaPayload(legacyValue)) throw new Error('not_legacy_rsa_ciphertext');
+  return rsaDecryptLegacy(privateKey, legacyValue);
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -912,27 +914,79 @@ function isLikelyHexKey(value) {
   return typeof value === 'string' && /^[0-9a-fA-F]{64}$/.test(value.trim());
 }
 
-async function decryptE2ETextValue(myPrivateKey, value) {
-  const raw = normalizeE2EStoredValue(value).trim();
-  if (!raw) return '';
-  if (isProbablyPlainMediaUrl(raw)) return raw;
-
-  if (raw.startsWith('{') || raw.startsWith('[')) {
+function unwrapJsonString(value, maxDepth = 2) {
+  let raw = normalizeE2EStoredValue(value).trim();
+  for (let i = 0; i < maxDepth; i++) {
+    if (!(raw.startsWith('"') || raw.startsWith("'"))) break;
     try {
       const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === 'object' && parsed.alg && parsed.v) {
-        return rsaDecrypt(myPrivateKey, raw);
-      }
-      return raw;
-    } catch (_) {}
+      if (typeof parsed !== 'string') break;
+      raw = parsed.trim();
+    } catch (_) { break; }
+  }
+  return raw;
+}
+
+function tryParseJsonObject(value) {
+  const raw = unwrapJsonString(value);
+  if (!raw || !(raw.startsWith('{') || raw.startsWith('['))) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch (_) { return null; }
+}
+
+function normalizeB64ForAtob(value) {
+  return String(value || '').trim().replace(/\s+/g, '');
+}
+
+function isLikelyLegacyRsaPayload(value) {
+  const s = normalizeB64ForAtob(value);
+  // Legacy RSA/AES envelope is a large regular base64 blob produced by btoa().
+  // Do not pass plaintext labels / broken Firestore values into atob().
+  return s.length >= 80 && s.length % 4 === 0 && /^[A-Za-z0-9+/]+={0,2}$/.test(s);
+}
+
+function isE2EEnvelopeObject(value) {
+  return !!(value && typeof value === 'object' && value.v && value.alg && (value.ct || value.seed || value.epk));
+}
+
+function isMediaEnvelopeObject(value) {
+  return !!(value && typeof value === 'object' && (value.aes || value.key || value.e2eAes || value.encryptedAes) && (value.url || value.cloudUrl || value.src));
+}
+
+async function decryptE2ETextValue(myPrivateKey, value, options = {}) {
+  const raw = unwrapJsonString(value).trim();
+  if (!raw) return '';
+  if (isProbablyPlainMediaUrl(raw)) return raw;
+  if (isLikelyHexKey(raw)) return raw;
+
+  const parsed = tryParseJsonObject(raw);
+  if (parsed) {
+    if (isE2EEnvelopeObject(parsed)) {
+      return rsaDecrypt(myPrivateKey, JSON.stringify(parsed));
+    }
+    // Media wrapper itself is not ciphertext. The caller will decrypt aes/url separately.
+    if (isMediaEnvelopeObject(parsed)) return JSON.stringify(parsed);
+    return raw;
   }
 
-  return rsaDecrypt(myPrivateKey, raw);
+  if (!isLikelyLegacyRsaPayload(raw)) {
+    if (options.strict) throw new Error('not_e2e_ciphertext');
+    return raw;
+  }
+
+  try {
+    return await rsaDecrypt(myPrivateKey, normalizeB64ForAtob(raw));
+  } catch (e) {
+    if (options.strict) throw e;
+    return raw;
+  }
 }
 
 async function decryptMediaFileFromUrlAndAesHex(cloudinaryRawUrl, aesHex, mimeType = 'application/octet-stream') {
-  const url = String(cloudinaryRawUrl || '').trim();
-  const keyHex = String(aesHex || '').trim();
+  const url = unwrapJsonString(cloudinaryRawUrl).trim();
+  const keyHex = unwrapJsonString(aesHex).trim();
   if (!url || !url.startsWith('https://')) throw new Error('invalid_media_url');
   if (!isLikelyHexKey(keyHex)) throw new Error('invalid_media_aes_key');
   const rawAesKey = hexToBuffer(keyHex);
@@ -945,25 +999,42 @@ async function decryptMediaFileFromUrlAndAesHex(cloudinaryRawUrl, aesHex, mimeTy
 
 async function decryptE2EMediaPayload(myPrivateKey, mediaRaw, mimeType = 'application/octet-stream') {
   if (!mediaRaw) return null;
-  const raw = normalizeE2EStoredValue(mediaRaw).trim();
+  const raw = unwrapJsonString(mediaRaw).trim();
   if (!raw) return null;
 
   if (isProbablyPlainMediaUrl(raw)) return raw;
 
-  let parsed = null;
-  if (raw.startsWith('{')) {
-    try { parsed = JSON.parse(raw); } catch (_) { parsed = null; }
+  const parsed = tryParseJsonObject(raw);
+
+  // Current + fixed legacy media format: { aes: <encrypted-or-plain-hex>, url: <encrypted-or-plain-url> }
+  if (isMediaEnvelopeObject(parsed)) {
+    const aesField = parsed.aes ?? parsed.key ?? parsed.e2eAes ?? parsed.encryptedAes;
+    const urlField = parsed.url ?? parsed.cloudUrl ?? parsed.src;
+
+    let aesHex = unwrapJsonString(await decryptE2ETextValue(myPrivateKey, aesField)).trim();
+    let cloudUrl = unwrapJsonString(await decryptE2ETextValue(myPrivateKey, urlField)).trim();
+
+    // Tolerate broken interim builds that accidentally stored already-decrypted values.
+    const rawAesCandidate = unwrapJsonString(aesField).trim();
+    const rawUrlCandidate = unwrapJsonString(urlField).trim();
+    if (!isLikelyHexKey(aesHex) && isLikelyHexKey(rawAesCandidate)) aesHex = rawAesCandidate;
+    if (!isProbablyPlainMediaUrl(cloudUrl) && isProbablyPlainMediaUrl(rawUrlCandidate)) cloudUrl = rawUrlCandidate;
+
+    if (isProbablyPlainMediaUrl(cloudUrl) && !cloudUrl.startsWith('https://')) return cloudUrl;
+    if (cloudUrl.startsWith('https://') && isLikelyHexKey(aesHex)) {
+      return decryptMediaFileFromUrlAndAesHex(cloudUrl, aesHex, mimeType);
+    }
+
+    // If this is an old non-E2E/plain media wrapper, prefer returning the safe URL over hard-locking UI.
+    if (cloudUrl.startsWith('https://') && !aesField) return cloudUrl;
+    return null;
   }
 
-  if (parsed && parsed.aes && parsed.url) {
-    const aesHex = await decryptE2ETextValue(myPrivateKey, parsed.aes);
-    const cloudUrl = await decryptE2ETextValue(myPrivateKey, parsed.url);
-    if (isProbablyPlainMediaUrl(cloudUrl) && !String(cloudUrl).startsWith('https://')) return cloudUrl;
-    return decryptMediaFileFromUrlAndAesHex(cloudUrl, aesHex, mimeType);
-  }
-
-  const legacyUrl = await decryptE2ETextValue(myPrivateKey, raw);
-  if (isProbablyPlainMediaUrl(legacyUrl)) return legacyUrl;
+  // Direct E2E field that decrypts to a URL, or to a media wrapper from an older deployment.
+  const legacyPlain = unwrapJsonString(await decryptE2ETextValue(myPrivateKey, raw)).trim();
+  if (isProbablyPlainMediaUrl(legacyPlain)) return legacyPlain;
+  const nested = tryParseJsonObject(legacyPlain);
+  if (isMediaEnvelopeObject(nested)) return decryptE2EMediaPayload(myPrivateKey, nested, mimeType);
   return null;
 }
 
@@ -1719,7 +1790,7 @@ window.E2E = {
   detectCipherAlg,
 };
 
-console.info('[E2E] Security module v2.0 загружен');
+console.info('[E2E] Security module v2.1 загружен');
 
     </script>
 
