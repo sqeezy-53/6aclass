@@ -33,6 +33,7 @@ const E2E_SIGN_CURVE    = 'P-384';          // ECDSA P-384 для подписе
 const E2E_ECDH_CURVE    = 'P-384';          // ECDH P-384 для новых сообщений
 const E2E_CIPHER_V3     = 'ECDH-P384-AES-GCM';
 const E2E_CIPHER_V4     = 'RATCHET-LITE-P384-HKDF-AESGCM';
+const E2E_ENABLE_DM_METADATA_UPDATE = true; // best-effort only
 const E2E_RATCHET_MAX_SKIP = 64;          // сколько пропущенных message-keys держим для out-of-order сообщений
 const E2E_TRUSTED_ORIGINS = new Set(['https://6aclass.online']);
 
@@ -855,23 +856,97 @@ async function decryptMediaFileFromUrlAndAesHex(cloudinaryRawUrl, aesHex) {
   return rememberObjectUrl(URL.createObjectURL(new Blob([plainBuf])));
 }
 
+function isE2EEnvelopeString(value) {
+  if (typeof value !== 'string') return false;
+  const s = value.trim();
+  if (!s.startsWith('{')) return false;
+  try {
+    const env = JSON.parse(s);
+    return !!(env && typeof env === 'object' && env.ct && (env.alg || env.v === 3 || env.v === 4));
+  } catch (_) { return false; }
+}
+
+async function decryptStringOrPlain(myPrivateKey, value) {
+  if (value == null) return null;
+  if (typeof value !== 'string') return value;
+  const s = value.trim();
+  if (!s) return '';
+  if (/^(https?:|blob:|data:)/i.test(s)) return s;
+  if (s.startsWith('{')) {
+    try {
+      const obj = JSON.parse(s);
+      if (obj && typeof obj === 'object' && obj.ct && (obj.alg || obj.v === 3 || obj.v === 4)) {
+        return await rsaDecrypt(myPrivateKey, s);
+      }
+      return s;
+    } catch (_) {}
+  }
+  try {
+    return await rsaDecrypt(myPrivateKey, s);
+  } catch (_) {
+    return s;
+  }
+}
+
+function isLikelyHexAesKey(value) {
+  return typeof value === 'string' && /^[0-9a-f]{64}$/i.test(value.trim());
+}
+
 async function decryptE2EMediaPayload(myPrivateKey, mediaRaw) {
   if (!mediaRaw) return null;
-  if (typeof mediaRaw === 'string' && mediaRaw.trim().startsWith('{')) {
+  const raw = typeof mediaRaw === 'string' ? mediaRaw : JSON.stringify(mediaRaw);
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+
+  if (trimmed.startsWith('{')) {
     let parsed = null;
-    try { parsed = JSON.parse(mediaRaw); } catch (_) { parsed = null; }
+    try { parsed = JSON.parse(trimmed); } catch (_) { parsed = null; }
+
     if (parsed && parsed.aes && parsed.url) {
-      const aesHex = await rsaDecrypt(myPrivateKey, parsed.aes);
-      const cloudUrl = await rsaDecrypt(myPrivateKey, parsed.url);
-      return decryptMediaFileFromUrlAndAesHex(cloudUrl, aesHex);
+      const aesHex = await decryptStringOrPlain(myPrivateKey, parsed.aes);
+      const cloudUrl = await decryptStringOrPlain(myPrivateKey, parsed.url);
+      if (isLikelyHexAesKey(aesHex) && typeof cloudUrl === 'string' && cloudUrl.startsWith('https://')) {
+        return decryptMediaFileFromUrlAndAesHex(cloudUrl, aesHex.trim());
+      }
+      if (typeof cloudUrl === 'string' && /^(https?:|blob:|data:)/i.test(cloudUrl)) return cloudUrl;
+      return null;
+    }
+
+    if (parsed && parsed.url) {
+      const url = await decryptStringOrPlain(myPrivateKey, parsed.url);
+      if (typeof url === 'string' && /^(https?:|blob:|data:)/i.test(url)) return url;
+    }
+
+    if (isE2EEnvelopeString(trimmed)) {
+      const plain = await decryptStringOrPlain(myPrivateKey, trimmed);
+      if (typeof plain === 'string' && /^(https?:|blob:|data:)/i.test(plain.trim())) return plain.trim();
+      if (typeof plain === 'string' && plain.trim().startsWith('{')) {
+        try {
+          const p = JSON.parse(plain);
+          if (p.url && /^(https?:|blob:|data:)/i.test(String(p.url))) return String(p.url);
+        } catch (_) {}
+      }
+    }
+
+    return null;
+  }
+
+  const legacyPlain = await decryptStringOrPlain(myPrivateKey, trimmed);
+  if (typeof legacyPlain === 'string') {
+    const p = legacyPlain.trim();
+    if (/^(https?:|blob:|data:)/i.test(p)) return p;
+    if (p.startsWith('{')) {
+      try {
+        const obj = JSON.parse(p);
+        if (obj.url && /^(https?:|blob:|data:)/i.test(String(obj.url))) return String(obj.url);
+      } catch (_) {}
     }
   }
-  const legacyUrl = await rsaDecrypt(myPrivateKey, mediaRaw);
-  if (legacyUrl && String(legacyUrl).startsWith('https://')) return legacyUrl;
   return null;
 }
 
 /* ═══════════════════════════════════════════════════════════════
+   § 5/* ═══════════════════════════════════════════════════════════════
    § 5  УТИЛИТЫ
 ═══════════════════════════════════════════════════════════════ */
 
@@ -1365,8 +1440,8 @@ async function sendDirectMessage(params) {
                     : voiceFile ? '🎙 Голосовое'
                     : musicFile ? '🎵 Музыка'
                     : '🔒 Сообщение';
-  try {
-    await fsSetDoc(
+  if (E2E_ENABLE_DM_METADATA_UPDATE) {
+    fsSetDoc(
       fsDoc(firestoreDb, 'dmConvs', convId),
       {
         lastText: previewText,
@@ -1374,9 +1449,9 @@ async function sendDirectMessage(params) {
         [`unread.${peerUid}`]: fsIncrement(1)
       },
       { merge: true }
-    );
-  } catch (e) {
-    console.warn('[e2e] DM metadata update failed; message was created', e);
+    ).catch(() => {
+      // Metadata is non-security-critical. The encrypted message was already created.
+    });
   }
 }
 
@@ -1461,9 +1536,20 @@ async function decryptMessage(msgData, myUid, myPrivateKey, firestoreDb = null, 
       if (checklistCipher === textCipher && typeof result.text === 'string' && result.text.trim().startsWith('{')) {
         json = result.text;
       } else {
-        json = await rsaDecrypt(myPrivateKey, checklistCipher);
+        json = await decryptStringOrPlain(myPrivateKey, checklistCipher);
       }
-      result.checklist = JSON.parse(json);
+      if (json && typeof json === 'object') {
+        result.checklist = json;
+      } else if (typeof json === 'string') {
+        const trimmedJson = json.trim();
+        if (trimmedJson.startsWith('{') || trimmedJson.startsWith('[')) {
+          result.checklist = JSON.parse(trimmedJson);
+        } else {
+          result.checklist = null;
+        }
+      } else {
+        result.checklist = null;
+      }
     } catch (e) {
       console.warn('[e2e] checklist decrypt failed:', e?.message || e);
       result.checklist = null;
@@ -1474,6 +1560,7 @@ async function decryptMessage(msgData, myUid, myPrivateKey, firestoreDb = null, 
 }
 
 /* ═══════════════════════════════════════════════════════════════
+   § 10/* ═══════════════════════════════════════════════════════════════
    § 10  МОДЕРАЦИЯ через бэкенд (убираем Perspective API из фронта)
 ═══════════════════════════════════════════════════════════════ */
 
@@ -1587,6 +1674,7 @@ window.E2E = {
   decryptMediaUrl,
   decryptE2EMediaPayload,
   decryptMediaFileFromUrlAndAesHex,
+  decryptStringOrPlain,
 
   // Сообщения
   sendDirectMessage,
