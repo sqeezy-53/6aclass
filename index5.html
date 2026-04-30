@@ -11,22 +11,19 @@
     <meta http-equiv="Content-Security-Policy"
           content="
             default-src 'self';
-            script-src  'self' 'sha256-xz1oD6aAjmx8TRpMdRh+vU2JDH7yvKsiThx8u14qhbI=' 'sha256-FARTdYhn1xEkKumY8CCScDq9pCBflz0dxkTRZtkQt9s=' 'sha256-v8tkyBZ9n9785AOyrDVHuHY4LUsIuol2WvPYLIC9AR8=' 'sha256-Tom9xucgHRXejx1G6XmCZ/qhwBlCizJjd6O6eCLFVjY=' https://www.gstatic.com https://apis.google.com;
+            script-src  'self' 'sha256-BbBQ/aq4tSK3yZ2NYcjpZZHgWcEfDcsQC4e7i4GDgxk=' 'sha256-FARTdYhn1xEkKumY8CCScDq9pCBflz0dxkTRZtkQt9s=' 'sha256-XfejXU7oYcJG55sYmXhQOzfWu4GlOCpinMhROU+F53w=' 'sha256-zyo0YHCQbXRE7lNODrE2q1juzTgDsejf/pjI8Y9ARq8=' https://www.gstatic.com https://apis.google.com;
             script-src-attr 'none';
             style-src   'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com https://cdn.jsdelivr.net;
             font-src    'self' https://fonts.gstatic.com https://cdn.jsdelivr.net;
             img-src     'self' data: blob: https:;
-            media-src   'self' blob: https:;
-            connect-src 'self' https://sixaclass.onrender.com https://*.firebaseio.com https://*.googleapis.com wss://*.firebaseio.com;
+            media-src   'self' data: blob: https:;
+            connect-src 'self' https://sixaclass.onrender.com https://res.cloudinary.com https://*.cloudinary.com https://*.firebaseio.com https://*.googleapis.com https://www.gstatic.com wss://*.firebaseio.com;
             object-src  'none';
-            frame-ancestors 'none';
             base-uri    'self';
             form-action 'self';
             upgrade-insecure-requests;
-            report-uri https://sixaclass.onrender.com/api/security-alert;
           ">
     <!-- §1 · Запрет рендеринга в iframe (Clickjacking protection) -->
-    <meta http-equiv="X-Frame-Options" content="DENY">
     <!-- §1 · Запрет MIME-sniffing -->
     <meta http-equiv="X-Content-Type-Options" content="nosniff">
     <!-- §1 · Referrer минимизация -->
@@ -42,15 +39,15 @@
     <!-- Apply theme before render to avoid flash -->
     <script>
         (function () {
-            var t = localStorage.getItem('index6a_theme');
             var root = document.documentElement;
+            var t = localStorage.getItem('index6a_theme');
             root.setAttribute('data-theme', t === 'light' ? 'light' : 'dark');
-
-            var uiStyle = localStorage.getItem('index6a_ui_style_v1') || 'minimal';
-            if (uiStyle !== 'skeuo') uiStyle = 'minimal';
-            var skin = localStorage.getItem('index6a_ui_skin_v1') || (uiStyle === 'skeuo' ? 'skeuo-blue' : 'min-ios');
-            root.setAttribute('data-ui-style', uiStyle);
-            root.setAttribute('data-chat-skin', skin);
+            root.setAttribute('data-ui-style', localStorage.getItem('index6a_ui_style_v2') || 'minimal');
+            root.setAttribute('data-ui-skin', localStorage.getItem('index6a_ui_skin_v2') || 'min-obsidian');
+            root.setAttribute('data-ui-radius', localStorage.getItem('index6a_ui_radius_v1') || 'soft');
+            root.setAttribute('data-ui-density', localStorage.getItem('index6a_ui_density_v1') || 'comfortable');
+            root.setAttribute('data-ui-motion', localStorage.getItem('index6a_ui_motion_v1') || 'balanced');
+            root.setAttribute('data-ui-glass', localStorage.getItem('index6a_ui_glass_v1') || 'on');
         })();
     </script>
 
@@ -470,10 +467,13 @@ async function ecdhEncryptForPublicKeyB64(publicKeyB64, text) {
   });
 }
 async function encryptForUserPublicKeys({ ecdhPublicKey, rsaPublicKey }, text, options = {}) {
-  if (ecdhPublicKey && options.convId) {
-    try { return ratchetEncryptForPublicKeyB64(ecdhPublicKey, text, options); }
-    catch (e) { console.warn('[e2e] ratchet-lite fallback to plain ECDH:', e); }
-  }
+  // СТАБИЛЬНЫЙ РЕЖИМ ДЛЯ FIRESTORE-ИСТОРИИ.
+  // Ratchet-Lite v4 в этой версии оставлен только для чтения уже созданных legacy-v4 сообщений.
+  // Причина: текущий ratchetDecryptEnvelope() двигает локальную KDF-цепочку вперёд, а UI чата
+  // многократно ререндерит и расшифровывает одни и те же Firestore-сообщения. Это приводило к
+  // ratchet_message_key_expired при повторной расшифровке image/music/checklist.
+  // Новые сообщения шифруем повторно-дешифруемым ECDH v3 envelope. RSA — только fallback для
+  // старых пользователей без ECDH-ключа.
   if (ecdhPublicKey) return ecdhEncryptForPublicKeyB64(ecdhPublicKey, text);
   if (rsaPublicKey) return rsaEncrypt(await importPublicKey(rsaPublicKey), text);
   throw new Error('У пользователя нет E2E public key');
@@ -517,6 +517,7 @@ async function verifyEncryptedMessageSignature(msgData, firestoreDb, fsDoc, fsGe
   } catch (e) { return { ok: false, reason: 'verify_error' }; }
 }
 
+const _e2eRatchetPlaintextCache = new Map();
 const _e2eObjectUrls = new Set();
 function rememberObjectUrl(url) { if (url && url.startsWith('blob:')) _e2eObjectUrls.add(url); return url; }
 function revokeE2EObjectUrls() { for (const url of _e2eObjectUrls) { try { URL.revokeObjectURL(url); } catch (_) {} } _e2eObjectUrls.clear(); }
@@ -787,7 +788,11 @@ async function rsaDecrypt(privateKey, value) {
     try {
       const env = JSON.parse(value);
       if (env && env.v === 4 && env.alg === E2E_CIPHER_V4) {
-        return ratchetDecryptEnvelope(privateKey, env);
+        const cacheKey = value;
+        if (_e2eRatchetPlaintextCache.has(cacheKey)) return _e2eRatchetPlaintextCache.get(cacheKey);
+        const plain = await ratchetDecryptEnvelope(privateKey, env);
+        _e2eRatchetPlaintextCache.set(cacheKey, plain);
+        return plain;
       }
       if (env && env.v === 3 && env.alg === E2E_CIPHER_V3) {
         if (!_activeEcdhPrivateKey) throw new Error('ecdh_private_key_not_loaded');
@@ -811,7 +816,9 @@ async function rsaDecrypt(privateKey, value) {
       if (String(value).includes(E2E_CIPHER_V3)) throw e;
     }
   }
-  return rsaDecryptLegacy(privateKey, value);
+  const legacyValue = normalizeB64ForAtob(value);
+  if (!isLikelyLegacyRsaPayload(legacyValue)) throw new Error('not_legacy_rsa_ciphertext');
+  return rsaDecryptLegacy(privateKey, legacyValue);
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -896,6 +903,146 @@ async function decryptMediaUrl(myPrivateKey, encryptedAesB64, cloudinaryRawUrl) 
 
   // 4. Возвращаем Object URL — не забудь вызвать revokeObjectURL после использования
   return rememberObjectUrl(URL.createObjectURL(new Blob([plainBuf])));
+}
+
+function normalizeE2EStoredValue(value) {
+  if (value == null) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'object') return JSON.stringify(value);
+  return String(value);
+}
+
+function isProbablyPlainMediaUrl(value) {
+  const s = String(value || '').trim();
+  return s.startsWith('https://') || s.startsWith('blob:') || s.startsWith('data:audio/') || s.startsWith('data:image/') || s.startsWith('data:video/');
+}
+
+function isLikelyHexKey(value) {
+  return typeof value === 'string' && /^[0-9a-fA-F]{64}$/.test(value.trim());
+}
+
+function unwrapJsonString(value, maxDepth = 2) {
+  let raw = normalizeE2EStoredValue(value).trim();
+  for (let i = 0; i < maxDepth; i++) {
+    if (!(raw.startsWith('"') || raw.startsWith("'"))) break;
+    try {
+      const parsed = JSON.parse(raw);
+      if (typeof parsed !== 'string') break;
+      raw = parsed.trim();
+    } catch (_) { break; }
+  }
+  return raw;
+}
+
+function tryParseJsonObject(value) {
+  const raw = unwrapJsonString(value);
+  if (!raw || !(raw.startsWith('{') || raw.startsWith('['))) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch (_) { return null; }
+}
+
+function normalizeB64ForAtob(value) {
+  return String(value || '').trim().replace(/\s+/g, '');
+}
+
+function isLikelyLegacyRsaPayload(value) {
+  const s = normalizeB64ForAtob(value);
+  // Legacy RSA/AES envelope is a large regular base64 blob produced by btoa().
+  // Do not pass plaintext labels / broken Firestore values into atob().
+  return s.length >= 80 && s.length % 4 === 0 && /^[A-Za-z0-9+/]+={0,2}$/.test(s);
+}
+
+function isE2EEnvelopeObject(value) {
+  return !!(value && typeof value === 'object' && value.v && value.alg && (value.ct || value.seed || value.epk));
+}
+
+function isMediaEnvelopeObject(value) {
+  return !!(value && typeof value === 'object' && (value.aes || value.key || value.e2eAes || value.encryptedAes) && (value.url || value.cloudUrl || value.src));
+}
+
+async function decryptE2ETextValue(myPrivateKey, value, options = {}) {
+  const raw = unwrapJsonString(value).trim();
+  if (!raw) return '';
+  if (isProbablyPlainMediaUrl(raw)) return raw;
+  if (isLikelyHexKey(raw)) return raw;
+
+  const parsed = tryParseJsonObject(raw);
+  if (parsed) {
+    if (isE2EEnvelopeObject(parsed)) {
+      return rsaDecrypt(myPrivateKey, JSON.stringify(parsed));
+    }
+    // Media wrapper itself is not ciphertext. The caller will decrypt aes/url separately.
+    if (isMediaEnvelopeObject(parsed)) return JSON.stringify(parsed);
+    return raw;
+  }
+
+  if (!isLikelyLegacyRsaPayload(raw)) {
+    if (options.strict) throw new Error('not_e2e_ciphertext');
+    return raw;
+  }
+
+  try {
+    return await rsaDecrypt(myPrivateKey, normalizeB64ForAtob(raw));
+  } catch (e) {
+    if (options.strict) throw e;
+    return raw;
+  }
+}
+
+async function decryptMediaFileFromUrlAndAesHex(cloudinaryRawUrl, aesHex, mimeType = 'application/octet-stream') {
+  const url = unwrapJsonString(cloudinaryRawUrl).trim();
+  const keyHex = unwrapJsonString(aesHex).trim();
+  if (!url || !url.startsWith('https://')) throw new Error('invalid_media_url');
+  if (!isLikelyHexKey(keyHex)) throw new Error('invalid_media_aes_key');
+  const rawAesKey = hexToBuffer(keyHex);
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error(`Fetch failed: ${resp.status}`);
+  const encBuf = await resp.arrayBuffer();
+  const plainBuf = await decryptBuffer(encBuf, rawAesKey);
+  return rememberObjectUrl(URL.createObjectURL(new Blob([plainBuf], { type: mimeType || 'application/octet-stream' })));
+}
+
+async function decryptE2EMediaPayload(myPrivateKey, mediaRaw, mimeType = 'application/octet-stream') {
+  if (!mediaRaw) return null;
+  const raw = unwrapJsonString(mediaRaw).trim();
+  if (!raw) return null;
+
+  if (isProbablyPlainMediaUrl(raw)) return raw;
+
+  const parsed = tryParseJsonObject(raw);
+
+  // Current + fixed legacy media format: { aes: <encrypted-or-plain-hex>, url: <encrypted-or-plain-url> }
+  if (isMediaEnvelopeObject(parsed)) {
+    const aesField = parsed.aes ?? parsed.key ?? parsed.e2eAes ?? parsed.encryptedAes;
+    const urlField = parsed.url ?? parsed.cloudUrl ?? parsed.src;
+
+    let aesHex = unwrapJsonString(await decryptE2ETextValue(myPrivateKey, aesField)).trim();
+    let cloudUrl = unwrapJsonString(await decryptE2ETextValue(myPrivateKey, urlField)).trim();
+
+    // Tolerate broken interim builds that accidentally stored already-decrypted values.
+    const rawAesCandidate = unwrapJsonString(aesField).trim();
+    const rawUrlCandidate = unwrapJsonString(urlField).trim();
+    if (!isLikelyHexKey(aesHex) && isLikelyHexKey(rawAesCandidate)) aesHex = rawAesCandidate;
+    if (!isProbablyPlainMediaUrl(cloudUrl) && isProbablyPlainMediaUrl(rawUrlCandidate)) cloudUrl = rawUrlCandidate;
+
+    if (isProbablyPlainMediaUrl(cloudUrl) && !cloudUrl.startsWith('https://')) return cloudUrl;
+    if (cloudUrl.startsWith('https://') && isLikelyHexKey(aesHex)) {
+      return decryptMediaFileFromUrlAndAesHex(cloudUrl, aesHex, mimeType);
+    }
+
+    // If this is an old non-E2E/plain media wrapper, prefer returning the safe URL over hard-locking UI.
+    if (cloudUrl.startsWith('https://') && !aesField) return cloudUrl;
+    return null;
+  }
+
+  // Direct E2E field that decrypts to a URL, or to a media wrapper from an older deployment.
+  const legacyPlain = unwrapJsonString(await decryptE2ETextValue(myPrivateKey, raw)).trim();
+  if (isProbablyPlainMediaUrl(legacyPlain)) return legacyPlain;
+  const nested = tryParseJsonObject(legacyPlain);
+  if (isMediaEnvelopeObject(nested)) return decryptE2EMediaPayload(myPrivateKey, nested, mimeType);
+  return null;
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -1253,18 +1400,27 @@ async function sendDirectMessage(params) {
     const cloudUrl = await uploadToCloudinary(encryptedBlob, onProgress);
     if (!cloudUrl?.startsWith('https://')) throw new Error('Cloudinary не вернул ссылку');
 
-    // Шифруем AES-ключ (hex) RSA-ключами обоих участников
-    const aesHex        = bufferToHex(rawAesKey);
+    // Шифруем AES-ключ (hex) тем же стабильным E2E-конвертом, что и текст.
+    // Новые сообщения используют ECDH v3; RSA остаётся fallback для старых аккаунтов.
+    const aesHex = bufferToHex(rawAesKey);
     const [peerSnap, mySnap] = await Promise.all([
       fsGetDoc(fsDoc(firestoreDb, 'users', peerUid)),
       fsGetDoc(fsDoc(firestoreDb, 'users', myUid))
     ]);
-    const peerPubKey = await importPublicKey(peerSnap.data().publicKey);
-    const myPubKey   = await importPublicKey(mySnap.data().publicKey);
+    const peerData = peerSnap.data() || {};
+    const myData   = mySnap.data() || {};
 
     const [encAesForPeer, encAesForMe] = await Promise.all([
-      rsaEncrypt(peerPubKey, aesHex),
-      rsaEncrypt(myPubKey,   aesHex)
+      encryptForUserPublicKeys(
+        { ecdhPublicKey: peerData.ecdhPublicKey, rsaPublicKey: peerData.publicKey },
+        aesHex,
+        { convId, targetUid: peerUid, senderUid: myUid }
+      ),
+      encryptForUserPublicKeys(
+        { ecdhPublicKey: myData.ecdhPublicKey || _activeEcdhPublicKeyB64, rsaPublicKey: myData.publicKey },
+        aesHex,
+        { convId, targetUid: myUid, senderUid: myUid }
+      )
     ]);
 
     return { cloudUrl, encAesForPeer, encAesForMe };
@@ -1295,11 +1451,11 @@ async function sendDirectMessage(params) {
     const urlE2e = await enc(cloudUrl);
     msgData.e2eImgForPeer = JSON.stringify({ aes: encAesForPeer, url: urlE2e.forPeer });
     msgData.e2eImgForMe   = JSON.stringify({ aes: encAesForMe,   url: urlE2e.forMe  });
-    // Если нет текста — Rules требуют хоть одно e2e-поле с непустой строкой
+    // Если нет текста — кладём нормальный E2E-placeholder, а не AES-ключ медиа.
     if (!msgData.e2eForPeer) {
-      const placeholder = await enc(''); // пустой текст — Rules допускают
-      msgData.e2eForPeer = msgData.e2eForPeer || encAesForPeer;
-      msgData.e2eForMe   = msgData.e2eForMe   || encAesForMe;
+      const placeholder = await enc('🖼 Изображение');
+      msgData.e2eForPeer = placeholder.forPeer;
+      msgData.e2eForMe   = placeholder.forMe;
     }
   }
 
@@ -1312,8 +1468,9 @@ async function sendDirectMessage(params) {
     if (voiceDuration != null) msgData.voiceDuration = voiceDuration;
     if (voiceMime)             msgData.voiceMime     = voiceMime;
     if (!msgData.e2eForPeer) {
-      msgData.e2eForPeer = encAesForPeer;
-      msgData.e2eForMe   = encAesForMe;
+      const placeholder = await enc('🎙 Голосовое');
+      msgData.e2eForPeer = placeholder.forPeer;
+      msgData.e2eForMe   = placeholder.forMe;
     }
   }
 
@@ -1326,14 +1483,16 @@ async function sendDirectMessage(params) {
     if (musicDuration != null) msgData.musicDuration = musicDuration;
     if (musicMime)             msgData.musicMime     = musicMime;
     if (!msgData.e2eForPeer) {
-      msgData.e2eForPeer = encAesForPeer;
-      msgData.e2eForMe   = encAesForMe;
+      const placeholder = await enc('🎵 Музыка');
+      msgData.e2eForPeer = placeholder.forPeer;
+      msgData.e2eForMe   = placeholder.forMe;
     }
   }
 
   // Чеклист
-  if (checklist && Array.isArray(checklist)) {
-    const serialized = JSON.stringify(checklist);
+  if (checklist && (Array.isArray(checklist) || typeof checklist === 'object')) {
+    const normalizedChecklist = Array.isArray(checklist) ? { title: '', items: checklist, done: {} } : checklist;
+    const serialized = JSON.stringify(normalizedChecklist);
     const e2e = await enc(serialized);
     msgData.e2eChecklistForPeer = e2e.forPeer;
     msgData.e2eChecklistForMe   = e2e.forMe;
@@ -1392,15 +1551,20 @@ async function sendDirectMessage(params) {
                     : voiceFile ? '🎙 Голосовое'
                     : musicFile ? '🎵 Музыка'
                     : '🔒 Сообщение';
-  await fsSetDoc(
-    fsDoc(firestoreDb, 'dmConvs', convId),
-    {
-      lastText: previewText,
-      lastAt:   fsServerTimestamp(),
-      [`unread.${peerUid}`]: fsIncrement(1)
-    },
-    { merge: true }
-  );
+  try {
+    await fsSetDoc(
+      fsDoc(firestoreDb, 'dmConvs', convId),
+      {
+        members: [myUid, peerUid],
+        lastText: previewText,
+        lastAt:   fsServerTimestamp(),
+        [`unread.${peerUid}`]: fsIncrement(1)
+      },
+      { merge: true }
+    );
+  } catch (e) {
+    console.debug('[e2e] DM metadata update skipped; message was created', e);
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -1447,15 +1611,10 @@ async function decryptMessage(msgData, myUid, myPrivateKey, firestoreDb = null, 
   const imgRaw = pick('e2eImgForPeer', 'e2eImgForMe');
   if (imgRaw) {
     try {
-      const { aes, url: encUrl } = JSON.parse(imgRaw);
-      // Расшифровываем Cloudinary URL
-      const cloudUrl   = await rsaDecrypt(myPrivateKey, encUrl);
-      // Расшифровываем AES-ключ
-      const aesHex     = await rsaDecrypt(myPrivateKey, aes);
-      // Загружаем и расшифровываем файл
-      result.imageObjectUrl = await decryptMediaUrl(myPrivateKey, aes, cloudUrl);
-    } catch {
-      result.imageObjectUrl = null; // отображать заглушку
+      result.imageObjectUrl = await decryptE2EMediaPayload(myPrivateKey, imgRaw, msgData.imageMime || 'image/*');
+    } catch (e) {
+      console.warn('[e2e] image decrypt failed:', e?.message || e);
+      result.imageObjectUrl = null;
     }
   }
 
@@ -1463,10 +1622,9 @@ async function decryptMessage(msgData, myUid, myPrivateKey, firestoreDb = null, 
   const voiceRaw = pick('e2eVoiceForPeer', 'e2eVoiceForMe');
   if (voiceRaw) {
     try {
-      const { aes, url: encUrl } = JSON.parse(voiceRaw);
-      const cloudUrl = await rsaDecrypt(myPrivateKey, encUrl);
-      result.voiceObjectUrl = await decryptMediaUrl(myPrivateKey, aes, cloudUrl);
-    } catch {
+      result.voiceObjectUrl = await decryptE2EMediaPayload(myPrivateKey, voiceRaw, msgData.voiceMime || 'audio/webm');
+    } catch (e) {
+      console.warn('[e2e] voice decrypt failed:', e?.message || e);
       result.voiceObjectUrl = null;
     }
   }
@@ -1475,10 +1633,9 @@ async function decryptMessage(msgData, myUid, myPrivateKey, firestoreDb = null, 
   const musicRaw = pick('e2eMusicForPeer', 'e2eMusicForMe');
   if (musicRaw) {
     try {
-      const { aes, url: encUrl } = JSON.parse(musicRaw);
-      const cloudUrl = await rsaDecrypt(myPrivateKey, encUrl);
-      result.musicObjectUrl = await decryptMediaUrl(myPrivateKey, aes, cloudUrl);
-    } catch {
+      result.musicObjectUrl = await decryptE2EMediaPayload(myPrivateKey, musicRaw, msgData.musicMime || 'audio/mpeg');
+    } catch (e) {
+      console.warn('[e2e] music decrypt failed:', e?.message || e);
       result.musicObjectUrl = null;
     }
   }
@@ -1487,9 +1644,18 @@ async function decryptMessage(msgData, myUid, myPrivateKey, firestoreDb = null, 
   const checklistCipher = pick('e2eChecklistForPeer', 'e2eChecklistForMe');
   if (checklistCipher) {
     try {
-      const json = await rsaDecrypt(myPrivateKey, checklistCipher);
-      result.checklist = JSON.parse(json);
-    } catch {
+      let json = null;
+      if (checklistCipher === textCipher && typeof result.text === 'string' && (result.text.trim().startsWith('{') || result.text.trim().startsWith('['))) {
+        json = result.text;
+      } else {
+        json = await decryptE2ETextValue(myPrivateKey, checklistCipher);
+      }
+      const parsedChecklist = JSON.parse(json);
+      result.checklist = Array.isArray(parsedChecklist)
+        ? { title: '', items: parsedChecklist, done: {} }
+        : parsedChecklist;
+    } catch (e) {
+      console.warn('[e2e] checklist decrypt failed:', e?.message || e);
       result.checklist = null;
     }
   }
@@ -1609,6 +1775,9 @@ window.E2E = {
   encryptBlob,
   decryptBuffer,
   decryptMediaUrl,
+  decryptE2EMediaPayload,
+  decryptE2ETextValue,
+  decryptMediaFileFromUrlAndAesHex,
 
   // Сообщения
   sendDirectMessage,
@@ -1628,7 +1797,7 @@ window.E2E = {
   detectCipherAlg,
 };
 
-console.info('[E2E] Security module v2.0 загружен');
+console.info('[E2E] Security module v2.2 загружен');
 
     </script>
 
@@ -3123,107 +3292,6 @@ console.info('[E2E] Security module v2.0 загружен');
         @media (min-width:1024px) { #profileModal .settings-drawer { height:min(720px, calc(100dvh - 80px)) !important; } #profileModal .settings-content { min-height:0 !important; } }
 
 
-        /* ═══════════════════════════════════════
-           UI STYLE MODES — Minimal / Skeuomorphic
-        ═══════════════════════════════════════ */
-        .ui-style-grid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:10px; margin-top:8px; }
-        .ui-style-card {
-            min-height:112px; border:1.5px solid var(--border-strong); border-radius:22px;
-            background:linear-gradient(145deg,var(--surface-2),var(--surface)); color:var(--text);
-            padding:14px; text-align:left; cursor:pointer; font-family:inherit; position:relative; overflow:hidden;
-            display:flex; flex-direction:column; gap:6px; transition:transform .18s, border-color .18s, box-shadow .18s, background .18s;
-        }
-        .ui-style-card::before { content:''; position:absolute; inset:-40% -20%; opacity:.14; pointer-events:none; background:radial-gradient(circle at 20% 10%, var(--accent), transparent 32%); }
-        .ui-style-card:hover { transform:translateY(-2px); border-color:var(--accent); box-shadow:0 12px 34px rgba(0,0,0,.22); }
-        .ui-style-card.is-active { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-dim), 0 16px 42px rgba(0,0,0,.26); }
-        .ui-style-icon { width:32px; height:32px; border-radius:12px; display:grid; place-items:center; background:var(--accent-dim); color:var(--accent); font-weight:900; }
-        .ui-style-card strong { font-family:var(--font-display); font-size:1rem; letter-spacing:-.02em; position:relative; }
-        .ui-style-card small { color:var(--muted); line-height:1.35; font-size:.76rem; position:relative; }
-        .skin-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:10px; margin-top:8px; }
-        .skin-card {
-            min-height:92px; border-radius:22px; border:1.5px solid var(--border-strong);
-            color:#fff; font-family:inherit; cursor:pointer; padding:12px; text-align:left; overflow:hidden; position:relative;
-            background:var(--skin-preview); display:flex; flex-direction:column; justify-content:flex-end; gap:3px;
-            box-shadow:inset 0 1px 0 rgba(255,255,255,.22), inset 0 -34px 54px rgba(0,0,0,.26);
-            transition:transform .18s, border-color .18s, box-shadow .18s, filter .18s;
-        }
-        .skin-card:hover { transform:translateY(-2px); border-color:rgba(255,255,255,.72); filter:saturate(1.06); }
-        .skin-card.is-active { border-color:#fff; box-shadow:0 0 0 3px var(--accent-dim), inset 0 1px 0 rgba(255,255,255,.34), inset 0 -36px 58px rgba(0,0,0,.28); }
-        .skin-card.is-active::after { content:'✓'; position:absolute; top:9px; right:9px; width:25px; height:25px; border-radius:50%; display:grid; place-items:center; background:rgba(255,255,255,.94); color:#111827; font-weight:900; box-shadow:0 5px 14px rgba(0,0,0,.28); }
-        .skin-card span { font-family:var(--font-display); font-weight:900; font-size:.95rem; text-shadow:0 2px 12px rgba(0,0,0,.55); position:relative; z-index:1; }
-        .skin-card small { font-size:.68rem; color:rgba(255,255,255,.86); line-height:1.25; text-shadow:0 1px 8px rgba(0,0,0,.50); position:relative; z-index:1; }
-        #profileModal[data-current-ui-style="minimal"] .skin-card[data-style-group="skeuo"],
-        #profileModal[data-current-ui-style="skeuo"] .skin-card[data-style-group="minimal"] { display:none; }
-
-        html[data-ui-style="minimal"] { --ui-ring-soft:0 0 0 1px rgba(255,255,255,.06); }
-        html[data-ui-style="minimal"] .tg-sidebar,
-        html[data-ui-style="minimal"] .tg-chat-header,
-        html[data-ui-style="minimal"] .sidebar-header,
-        html[data-ui-style="minimal"] .compose-shell,
-        html[data-ui-style="minimal"] .modal-box,
-        html[data-ui-style="minimal"] .chat-list-item,
-        html[data-ui-style="minimal"] .attach-sheet { box-shadow:none !important; }
-        html[data-ui-style="minimal"] .btn,
-        html[data-ui-style="minimal"] .icon-btn,
-        html[data-ui-style="minimal"] .settings-tab-btn,
-        html[data-ui-style="minimal"] .folder-tab { box-shadow:none !important; }
-        html[data-ui-style="minimal"] .msg-bubble { box-shadow:0 1px 8px rgba(0,0,0,.10) !important; }
-        html[data-ui-style="minimal"] .tg-main::before { opacity:.32; }
-
-        html[data-ui-style="skeuo"] { --radius-xs:12px; --radius-sm:16px; --radius:24px; --radius-lg:34px; --transition:.20s cubic-bezier(.2,.8,.2,1); }
-        html[data-ui-style="skeuo"] body { text-shadow:0 1px 0 rgba(0,0,0,.18); }
-        html[data-ui-style="skeuo"] body::after {
-            content:''; position:fixed; inset:0; pointer-events:none; z-index:0; opacity:.13; mix-blend-mode:soft-light;
-            background-image:radial-gradient(circle at 1px 1px, rgba(255,255,255,.30) 1px, transparent 0);
-            background-size:4px 4px;
-        }
-        html[data-ui-style="skeuo"] #appRoot { position:relative; z-index:1; }
-        html[data-ui-style="skeuo"] .tg-sidebar,
-        html[data-ui-style="skeuo"] .tg-chat-header,
-        html[data-ui-style="skeuo"] .sidebar-header,
-        html[data-ui-style="skeuo"] .compose-shell,
-        html[data-ui-style="skeuo"] .modal-box,
-        html[data-ui-style="skeuo"] .attach-sheet,
-        html[data-ui-style="skeuo"] .emoji-popover,
-        html[data-ui-style="skeuo"] .ctx-menu {
-            border-width:1.5px !important;
-            box-shadow:inset 0 1px 0 rgba(255,255,255,.18), inset 0 -1px 0 rgba(0,0,0,.28), 0 18px 48px rgba(0,0,0,.34) !important;
-        }
-        html[data-ui-style="skeuo"] .tg-chat-header,
-        html[data-ui-style="skeuo"] .sidebar-header,
-        html[data-ui-style="skeuo"] .input-footer {
-            background-image:linear-gradient(180deg, rgba(255,255,255,.13), rgba(255,255,255,.03) 48%, rgba(0,0,0,.18)) !important;
-        }
-        html[data-ui-style="skeuo"] .btn,
-        html[data-ui-style="skeuo"] .icon-btn,
-        html[data-ui-style="skeuo"] .settings-tab-btn,
-        html[data-ui-style="skeuo"] .folder-tab,
-        html[data-ui-style="skeuo"] .wallpaper-preset,
-        html[data-ui-style="skeuo"] .status-chip {
-            border-width:1.5px !important;
-            box-shadow:inset 0 1px 0 rgba(255,255,255,.28), inset 0 -10px 18px rgba(0,0,0,.18), 0 8px 20px rgba(0,0,0,.20) !important;
-            background-image:linear-gradient(180deg, rgba(255,255,255,.18), rgba(255,255,255,.02) 46%, rgba(0,0,0,.14)) !important;
-        }
-        html[data-ui-style="skeuo"] .btn:active,
-        html[data-ui-style="skeuo"] .icon-btn:active,
-        html[data-ui-style="skeuo"] .settings-tab-btn:active { transform:translateY(1px) scale(.985) !important; box-shadow:inset 0 3px 10px rgba(0,0,0,.32) !important; }
-        html[data-ui-style="skeuo"] .msg-bubble {
-            border:1px solid rgba(255,255,255,.14) !important;
-            box-shadow:inset 0 1px 0 rgba(255,255,255,.22), inset 0 -14px 24px rgba(0,0,0,.16), 0 5px 18px rgba(0,0,0,.24) !important;
-        }
-        html[data-ui-style="skeuo"] .msg-bubble--me { text-shadow:0 1px 1px rgba(0,0,0,.25); }
-        html[data-ui-style="skeuo"] .profile-av-big,
-        html[data-ui-style="skeuo"] .sidebar-user-av,
-        html[data-ui-style="skeuo"] .tg-header-av,
-        html[data-ui-style="skeuo"] .msg-avatar { box-shadow:inset 0 2px 2px rgba(255,255,255,.35), inset 0 -8px 18px rgba(0,0,0,.28), 0 5px 16px rgba(0,0,0,.30) !important; }
-        html[data-ui-style="skeuo"] input,
-        html[data-ui-style="skeuo"] textarea,
-        html[data-ui-style="skeuo"] select { box-shadow:inset 0 2px 6px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.10) !important; }
-        html[data-ui-style="skeuo"] .tg-main { background-blend-mode:overlay, normal; }
-
-        @media (max-width:620px) { .ui-style-grid { grid-template-columns:1fr; } .skin-grid { grid-template-columns:1fr; } }
-
-
         /* ADAPTIVE UI THEME: wallpapers recolor the whole interface, not only chat canvas */
         html[data-chat-ui-theme="on"] body,
         html[data-chat-ui-theme="on"] #appRoot { background: var(--bg-base) !important; }
@@ -3274,7 +3342,13 @@ console.info('[E2E] Security module v2.0 загружен');
         html[data-chat-ui-theme="on"] .btn-mic-main { background: linear-gradient(135deg, var(--accent-strong), var(--accent)) !important; color: var(--accent-text) !important; }
         html[data-chat-ui-theme="on"] .btn-ghost { background: var(--surface-2) !important; color: var(--accent) !important; border-color: var(--border-strong) !important; }
 
-    </style>
+    
+        /* EXTENDED APPEARANCE MODES */
+        html[data-ui-radius="sharp"]{--radius-xs:8px;--radius-sm:10px;--radius:14px;--radius-lg:18px;--radius-bubble-me:14px 14px 4px 14px;--radius-bubble-other:14px 14px 14px 4px}html[data-ui-radius="soft"]{--radius-xs:10px;--radius-sm:14px;--radius:20px;--radius-lg:28px;--radius-bubble-me:22px 22px 6px 22px;--radius-bubble-other:22px 22px 22px 6px}html[data-ui-radius="round"]{--radius-xs:14px;--radius-sm:18px;--radius:26px;--radius-lg:34px;--radius-bubble-me:28px 28px 10px 28px;--radius-bubble-other:28px 28px 28px 10px}html[data-ui-radius="bubble"]{--radius-xs:18px;--radius-sm:24px;--radius:32px;--radius-lg:42px;--radius-bubble-me:34px 34px 12px 34px;--radius-bubble-other:34px 34px 34px 12px}html[data-ui-density="compact"]{--ui-message-pad:8px 12px}html[data-ui-density="comfortable"]{--ui-message-pad:10px 15px}html[data-ui-density="spacious"]{--ui-message-pad:14px 19px}
+        .appearance-field{margin-bottom:20px}.appearance-style-grid,.skin-grid,.appearance-options-grid{display:grid;gap:12px}.appearance-style-grid,.appearance-options-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.skin-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.appearance-style-card,.skin-card{position:relative;min-height:78px;border-radius:var(--radius);border:1.5px solid var(--border-strong);background:var(--surface-2);color:var(--text);cursor:pointer;padding:14px 16px;text-align:left;overflow:hidden;font-family:var(--font-body);transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease,filter .18s ease}.appearance-style-card:hover,.skin-card:hover{transform:translateY(-2px);border-color:var(--accent);box-shadow:0 14px 38px rgba(0,0,0,.22),0 0 0 3px var(--accent-dim)}.appearance-style-card.is-active,.skin-card.is-active{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-dim),inset 0 1px 0 rgba(255,255,255,.12)}.appearance-style-card.is-active::after,.skin-card.is-active::after{content:'✓';position:absolute;top:10px;right:10px;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;background:rgba(255,255,255,.92);color:#2563eb;font-weight:900;text-shadow:none}.asc-title{display:block;font-family:var(--font-display);font-weight:900;font-size:1rem;margin-bottom:5px}.asc-sub{display:block;color:var(--muted);font-size:.76rem;line-height:1.35;max-width:210px}.skin-card{min-height:96px;background:linear-gradient(135deg,var(--skin-a),var(--skin-b) 62%,var(--skin-c));display:flex;align-items:flex-end}.skin-card span{position:relative;z-index:1;font-weight:900;font-family:var(--font-display);font-size:.95rem;text-shadow:0 2px 10px rgba(0,0,0,.42)}.skin-card::before{content:'';position:absolute;inset:0;background:radial-gradient(circle at 20% 10%,rgba(255,255,255,.28),transparent 34%),linear-gradient(180deg,rgba(255,255,255,.12),transparent 50%,rgba(0,0,0,.18))}.skin-card--skeuo::before{background:radial-gradient(circle at 22% 12%,rgba(255,255,255,.55),transparent 24%),linear-gradient(180deg,rgba(255,255,255,.36),rgba(255,255,255,.06) 42%,rgba(0,0,0,.30))}.skin-card--skeuo{border-width:2px;box-shadow:inset 0 2px 0 rgba(255,255,255,.30),inset 0 -12px 22px rgba(0,0,0,.20),0 10px 22px rgba(0,0,0,.18)}html[data-ui-style="minimal"] [data-skin-group="skeuo"],html[data-ui-style="skeuo"] [data-skin-group="minimal"]{display:none}@media(max-width:640px){.appearance-style-grid,.skin-grid,.appearance-options-grid{grid-template-columns:1fr}}
+        html[data-ui-style="minimal"] body,html[data-ui-style="minimal"] #appRoot,html[data-ui-style="minimal"] .tg-main{background:var(--bg-chat)!important}html[data-ui-style="minimal"] .tg-sidebar,html[data-ui-style="minimal"] .sidebar-list,html[data-ui-style="minimal"] .sidebar-footer{background:var(--sidebar-bg)!important}html[data-ui-style="minimal"] .tg-chat-header,html[data-ui-style="minimal"] .sidebar-header,html[data-ui-style="minimal"] .input-footer{background:var(--nav-bg)!important;border-color:var(--border)!important}html[data-ui-style="minimal"] .compose-shell,html[data-ui-style="minimal"] .chat-list-item,html[data-ui-style="minimal"] .settings-drawer,html[data-ui-style="minimal"] .modal-box,html[data-ui-style="minimal"] .attach-sheet,html[data-ui-style="minimal"] .ctx-menu{background:var(--surface-glass)!important;color:var(--text)!important;border-color:var(--border-strong)!important}html[data-ui-style="minimal"] .msg-bubble{padding:var(--ui-message-pad,10px 15px)!important}html[data-ui-style="minimal"] .msg-bubble--me{background:var(--bubble-me-bg)!important;color:var(--bubble-me-text)!important;border-radius:var(--radius-bubble-me)!important}html[data-ui-style="minimal"] .msg-bubble--other{background:var(--bubble-other-bg)!important;color:var(--bubble-other-text)!important;border-radius:var(--radius-bubble-other)!important}
+        html[data-ui-style="skeuo"] body,html[data-ui-style="skeuo"] #appRoot,html[data-ui-style="skeuo"] .tg-main{background:radial-gradient(circle at 20% 0%,rgba(255,255,255,.10),transparent 28%),linear-gradient(145deg,var(--bg-base),var(--bg-chat))!important}html[data-ui-style="skeuo"] .tg-sidebar,html[data-ui-style="skeuo"] .sidebar-list,html[data-ui-style="skeuo"] .sidebar-footer{background:linear-gradient(180deg,var(--surface-2),var(--sidebar-bg))!important;box-shadow:inset -1px 0 0 rgba(255,255,255,.12),inset -18px 0 28px rgba(0,0,0,.12)}html[data-ui-style="skeuo"] .tg-chat-header,html[data-ui-style="skeuo"] .sidebar-header{background:linear-gradient(180deg,rgba(255,255,255,.20),rgba(255,255,255,.04) 44%,var(--nav-bg))!important;border-color:var(--border-strong)!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.28),0 8px 28px rgba(0,0,0,.20)}html[data-ui-style="skeuo"] .input-footer{background:linear-gradient(180deg,rgba(255,255,255,.06),var(--bg-chat) 24%,var(--surface) 100%)!important;border-top:1px solid var(--border-strong)!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.18),0 -14px 40px rgba(0,0,0,.18)!important}html[data-ui-style="skeuo"] .compose-shell{background:linear-gradient(180deg,var(--surface-2),var(--surface))!important;border:1.5px solid var(--border-strong)!important;box-shadow:inset 0 2px 0 rgba(255,255,255,.22),inset 0 -12px 20px rgba(0,0,0,.15),0 12px 32px rgba(0,0,0,.24)!important}html[data-ui-style="skeuo"] .compose-input{background:linear-gradient(180deg,rgba(0,0,0,.18),rgba(255,255,255,.04))!important;border-radius:calc(var(--radius-sm) + 4px)!important;box-shadow:inset 0 2px 10px rgba(0,0,0,.24),inset 0 1px 0 rgba(255,255,255,.08)!important;padding-inline:12px!important}html[data-ui-style="skeuo"] .settings-drawer,html[data-ui-style="skeuo"] .modal-box,html[data-ui-style="skeuo"] .user-profile-modal{background:linear-gradient(180deg,var(--surface-2),var(--surface) 58%,var(--bg-chat))!important;border:2px solid var(--border-strong)!important;box-shadow:inset 0 2px 0 rgba(255,255,255,.30),inset 0 -18px 28px rgba(0,0,0,.18),0 34px 95px rgba(0,0,0,.45)!important}html[data-ui-style="skeuo"] .settings-hero,html[data-ui-style="skeuo"] .user-profile-modal .upm-hero{background:radial-gradient(circle at 25% 0%,rgba(255,255,255,.55),transparent 28%),linear-gradient(135deg,var(--accent),var(--surface-2) 58%,var(--surface))!important;border-bottom:1px solid var(--border-strong)!important;box-shadow:inset 0 2px 0 rgba(255,255,255,.28),inset 0 -16px 28px rgba(0,0,0,.18)!important}html[data-ui-style="skeuo"] .profile-av-big,html[data-ui-style="skeuo"] .user-profile-av,html[data-ui-style="skeuo"] .cli-avatar-inner,html[data-ui-style="skeuo"] .tg-header-av{box-shadow:inset 0 2px 0 rgba(255,255,255,.42),inset 0 -8px 15px rgba(0,0,0,.20),0 8px 22px rgba(0,0,0,.28),0 0 0 4px var(--accent-dim)!important;border:2px solid var(--border-strong)!important}html[data-ui-style="skeuo"] .chat-list-item,html[data-ui-style="skeuo"] .settings-tab-btn,html[data-ui-style="skeuo"] .status-chip,html[data-ui-style="skeuo"] .btn,html[data-ui-style="skeuo"] .icon-btn,html[data-ui-style="skeuo"] .attach-sheet,html[data-ui-style="skeuo"] .ctx-menu{background:linear-gradient(180deg,rgba(255,255,255,.16),rgba(255,255,255,.03) 45%,var(--surface-2))!important;border-color:var(--border-strong)!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.24),inset 0 -7px 15px rgba(0,0,0,.10),0 8px 20px rgba(0,0,0,.15)!important}html[data-ui-style="skeuo"] .btn-primary,html[data-ui-style="skeuo"] .btn-send,html[data-ui-style="skeuo"] .btn-mic-main,html[data-ui-style="skeuo"] .music-play-btn,html[data-ui-style="skeuo"] .voice-play-btn{background:linear-gradient(180deg,rgba(255,255,255,.58),var(--accent) 42%,var(--accent-strong))!important;color:var(--accent-text)!important;border:1px solid var(--border-strong)!important;text-shadow:0 1px 0 rgba(255,255,255,.20);box-shadow:inset 0 2px 0 rgba(255,255,255,.46),inset 0 -10px 18px rgba(0,0,0,.18),0 9px 22px var(--bubble-me-glow)!important}html[data-ui-style="skeuo"] .msg-bubble{padding:var(--ui-message-pad,12px 18px)!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.22),inset 0 -12px 24px rgba(0,0,0,.12),0 7px 20px rgba(0,0,0,.22)!important;border-width:1.5px!important}html[data-ui-style="skeuo"] .msg-bubble--me{background:var(--bubble-me-bg)!important;border-radius:var(--radius-bubble-me)!important;border-color:rgba(255,255,255,.22)!important}html[data-ui-style="skeuo"] .msg-bubble--other{background:var(--bubble-other-bg)!important;border-radius:var(--radius-bubble-other)!important;border-color:var(--bubble-other-border)!important}html[data-ui-style="skeuo"] .msg-row{animation:skeuoPop .34s cubic-bezier(.2,1.35,.35,1) both}@keyframes skeuoPop{from{opacity:0;transform:translateY(12px) scale(.94)}to{opacity:1;transform:translateY(0) scale(1)}}html[data-ui-motion="playful"][data-ui-style="skeuo"] .btn:hover,html[data-ui-motion="playful"][data-ui-style="skeuo"] .chat-list-item:hover,html[data-ui-motion="playful"][data-ui-style="skeuo"] .settings-tab-btn:hover{transform:translateY(-2px) scale(1.015)!important;filter:saturate(1.08) brightness(1.06)}html[data-ui-motion="calm"] *,html[data-ui-motion="calm"] *::before,html[data-ui-motion="calm"] *::after{animation-duration:.01ms!important;transition-duration:.12s!important}html[data-ui-glass="off"] .auth-card,html[data-ui-glass="off"] .settings-drawer,html[data-ui-glass="off"] .modal-box,html[data-ui-glass="off"] .compose-shell,html[data-ui-glass="off"] .tg-chat-header,html[data-ui-glass="off"] .sidebar-header{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+</style>
 </head>
 <body>
 
@@ -3522,82 +3596,59 @@ console.info('[E2E] Security module v2.0 загружен');
 
                 <section class="settings-panel" data-settings-panel="appearance">
                     <h3>Внешний вид</h3>
-                    <div class="modal-field">
-                        <label for="profileTheme">Тема интерфейса</label>
+                    <div class="modal-field appearance-field">
+                        <label for="profileTheme">Базовая тема</label>
                         <select id="profileTheme">
-                            <option value="dark">🌙 Тёмная</option>
-                            <option value="light">☀️ Светлая</option>
-                            <option value="system">💻 Системная</option>
+                            <option value="dark">🌙 Тёмная база</option>
+                            <option value="light">☀️ Светлая база</option>
+                            <option value="system">💻 Как в системе</option>
                         </select>
+                        <div class="settings-help">База влияет на системные цвета. Стиль ниже перекрашивает весь чат.</div>
                     </div>
-                    <div class="modal-field">
+                    <div class="modal-field appearance-field">
                         <label>Стиль всего чата</label>
-                        <div class="ui-style-grid" id="uiStyleGrid">
-                            <button type="button" class="ui-style-card" data-ui-style-option="minimal">
-                                <span class="ui-style-icon">▣</span>
-                                <strong>Минимализм</strong>
-                                <small>Плоский, чистый, как новые iPhone: меньше бликов, больше воздуха.</small>
-                            </button>
-                            <button type="button" class="ui-style-card" data-ui-style-option="skeuo">
-                                <span class="ui-style-icon">◉</span>
-                                <strong>Скевоморфизм</strong>
-                                <small>Объём, глянец, тени и фактуры в духе старых iOS.</small>
-                            </button>
+                        <div class="appearance-style-grid" id="uiStyleGrid">
+                            <button type="button" class="appearance-style-card" data-ui-style-choice="minimal"><span class="asc-title">Минимализм</span><span class="asc-sub">Чисто, плоско, как современные iOS/Android.</span></button>
+                            <button type="button" class="appearance-style-card" data-ui-style-choice="skeuo"><span class="asc-title">Скевоморфизм</span><span class="asc-sub">Объём, блики, материалы, старый iPhone-вайб.</span></button>
                         </div>
                     </div>
-                    <div class="modal-field">
-                        <label>Темы выбранного стиля</label>
-                        <div class="skin-grid" id="chatSkinGrid">
-                            <button type="button" class="skin-card" data-style-group="minimal" data-chat-skin="min-ios" style="--skin-preview:linear-gradient(135deg,#f8fafc,#e2e8f0,#60a5fa)">
-                                <span>iOS Clear</span><small>светлый стеклянный минимализм</small>
-                            </button>
-                            <button type="button" class="skin-card" data-style-group="minimal" data-chat-skin="min-graphite" style="--skin-preview:linear-gradient(135deg,#020617,#111827,#64748b)">
-                                <span>Graphite</span><small>тёмный строгий минимализм</small>
-                            </button>
-                            <button type="button" class="skin-card" data-style-group="minimal" data-chat-skin="min-snow" style="--skin-preview:linear-gradient(135deg,#ffffff,#eff6ff,#dbeafe)">
-                                <span>Snow</span><small>чистый бело-синий интерфейс</small>
-                            </button>
-                            <button type="button" class="skin-card" data-style-group="minimal" data-chat-skin="min-lilac" style="--skin-preview:linear-gradient(135deg,#111827,#7c3aed,#e9d5ff)">
-                                <span>Lilac Pro</span><small>минимализм с фиолетовым акцентом</small>
-                            </button>
-                            <button type="button" class="skin-card" data-style-group="skeuo" data-chat-skin="skeuo-blue" style="--skin-preview:linear-gradient(135deg,#082f49,#0284c7,#7dd3fc)">
-                                <span>Old Blue</span><small>глянцевые панели и синий iOS-стиль</small>
-                            </button>
-                            <button type="button" class="skin-card" data-style-group="skeuo" data-chat-skin="skeuo-leather" style="--skin-preview:linear-gradient(135deg,#1c0f08,#7c2d12,#d97706)">
-                                <span>Leather</span><small>тёплая кожа, тиснение и объём</small>
-                            </button>
-                            <button type="button" class="skin-card" data-style-group="skeuo" data-chat-skin="skeuo-felt" style="--skin-preview:linear-gradient(135deg,#052e16,#15803d,#84cc16)">
-                                <span>Green Felt</span><small>мягкая ткань, зелёные кнопки</small>
-                            </button>
-                            <button type="button" class="skin-card" data-style-group="skeuo" data-chat-skin="skeuo-candy" style="--skin-preview:linear-gradient(135deg,#831843,#db2777,#f9a8d4)">
-                                <span>Candy</span><small>яркий глянец и крупные формы</small>
-                            </button>
-                        </div>
-                        <div class="settings-help">Стиль меняет весь чат: список, шапку, сообщения, кнопки, модалки и поле ввода. Фон ниже можно настроить отдельно.</div>
-                    </div>
-                    <div class="modal-field">
-                        <label>Фон чата</label>
-                        <div class="wallpaper-grid" id="wallpaperPresetGrid">
-                            <button type="button" class="wallpaper-preset" data-wallpaper="default" style="background:#080c15">Стандарт</button>
-                            <button type="button" class="wallpaper-preset" data-wallpaper="aurora" style="background:linear-gradient(135deg,#0f172a,#1e3a8a,#7c3aed)">Аврора</button>
-                            <button type="button" class="wallpaper-preset" data-wallpaper="ocean" style="background:linear-gradient(135deg,#082f49,#0369a1,#67e8f9)">Океан</button>
-                            <button type="button" class="wallpaper-preset" data-wallpaper="sunset" style="background:linear-gradient(135deg,#451a03,#c2410c,#f97316)">Закат</button>
-                            <button type="button" class="wallpaper-preset" data-wallpaper="forest" style="background:linear-gradient(135deg,#052e16,#15803d,#84cc16)">Лес</button>
-                            <button type="button" class="wallpaper-preset" data-wallpaper="purple" style="background:linear-gradient(135deg,#2e1065,#7e22ce,#f0abfc)">Фиолет</button>
+                    <div class="modal-field appearance-field">
+                        <label>Темы минимализма</label>
+                        <div class="skin-grid" data-skin-group="minimal">
+                            <button type="button" class="skin-card" data-ui-skin-choice="min-obsidian" style="--skin-a:#030712;--skin-b:#111827;--skin-c:#60a5fa"><span>Obsidian</span></button>
+                            <button type="button" class="skin-card" data-ui-skin-choice="min-graphite" style="--skin-a:#09090b;--skin-b:#2f3338;--skin-c:#e5e7eb"><span>Graphite</span></button>
+                            <button type="button" class="skin-card" data-ui-skin-choice="min-amoled" style="--skin-a:#000;--skin-b:#050505;--skin-c:#38bdf8"><span>AMOLED</span></button>
+                            <button type="button" class="skin-card" data-ui-skin-choice="min-nord" style="--skin-a:#0f172a;--skin-b:#334155;--skin-c:#93c5fd"><span>Nord</span></button>
+                            <button type="button" class="skin-card" data-ui-skin-choice="min-ink" style="--skin-a:#060314;--skin-b:#1e1b4b;--skin-c:#818cf8"><span>Ink</span></button>
+                            <button type="button" class="skin-card" data-ui-skin-choice="min-cyber" style="--skin-a:#021014;--skin-b:#063344;--skin-c:#22d3ee"><span>Cyber</span></button>
+                            <button type="button" class="skin-card" data-ui-skin-choice="min-lilac" style="--skin-a:#10081f;--skin-b:#3b0764;--skin-c:#d8b4fe"><span>Lilac Pro</span></button>
+                            <button type="button" class="skin-card" data-ui-skin-choice="min-rose" style="--skin-a:#150810;--skin-b:#4a102a;--skin-c:#fb7185"><span>Rose Night</span></button>
+                            <button type="button" class="skin-card" data-ui-skin-choice="min-emerald" style="--skin-a:#01140b;--skin-b:#064e3b;--skin-c:#34d399"><span>Emerald</span></button>
+                            <button type="button" class="skin-card" data-ui-skin-choice="min-snow" style="--skin-a:#f8fafc;--skin-b:#dbeafe;--skin-c:#2563eb;color:#111827"><span>Snow</span></button>
                         </div>
                     </div>
-                    <div class="modal-field">
-                        <label>Свой фон</label>
-                        <div class="wallpaper-row">
-                            <input type="color" id="chatWallpaperColor" value="#080c15" title="Цвет фона">
-                            <button type="button" class="btn btn-ghost" id="chatWallpaperColorBtn" style="font-size:.82rem;padding:9px 13px">Применить цвет</button>
-                            <button type="button" class="btn btn-ghost" id="chatWallpaperImageBtn" style="font-size:.82rem;padding:9px 13px"><i class="ph ph-image-square" aria-hidden="true"></i> Своя картинка</button>
-                            <button type="button" class="btn btn-ghost" id="chatWallpaperResetBtn" style="font-size:.82rem;padding:9px 13px;color:var(--danger)">Сбросить</button>
-                            <input type="file" id="chatWallpaperImageInput" accept="image/*" style="display:none">
+                    <div class="modal-field appearance-field">
+                        <label>Темы скевоморфизма</label>
+                        <div class="skin-grid" data-skin-group="skeuo">
+                            <button type="button" class="skin-card skin-card--skeuo" data-ui-skin-choice="sk-blue-gel" style="--skin-a:#102a5c;--skin-b:#2f80ed;--skin-c:#dbeafe"><span>Blue Gel</span></button>
+                            <button type="button" class="skin-card skin-card--skeuo" data-ui-skin-choice="sk-leather" style="--skin-a:#2b1208;--skin-b:#8a3f18;--skin-c:#fbbf24"><span>Leather</span></button>
+                            <button type="button" class="skin-card skin-card--skeuo" data-ui-skin-choice="sk-felt" style="--skin-a:#062411;--skin-b:#2f7d32;--skin-c:#bbf7d0"><span>Green Felt</span></button>
+                            <button type="button" class="skin-card skin-card--skeuo" data-ui-skin-choice="sk-candy" style="--skin-a:#3b0764;--skin-b:#ec4899;--skin-c:#fbcfe8"><span>Candy</span></button>
+                            <button type="button" class="skin-card skin-card--skeuo" data-ui-skin-choice="sk-metal" style="--skin-a:#1f2937;--skin-b:#94a3b8;--skin-c:#f8fafc;color:#111827"><span>Brushed Metal</span></button>
+                            <button type="button" class="skin-card skin-card--skeuo" data-ui-skin-choice="sk-walnut" style="--skin-a:#1c0f08;--skin-b:#7c2d12;--skin-c:#fed7aa"><span>Walnut</span></button>
+                            <button type="button" class="skin-card skin-card--skeuo" data-ui-skin-choice="sk-aqua" style="--skin-a:#042f2e;--skin-b:#06b6d4;--skin-c:#cffafe"><span>Aqua Glass</span></button>
+                            <button type="button" class="skin-card skin-card--skeuo" data-ui-skin-choice="sk-cream" style="--skin-a:#7c2d12;--skin-b:#f5d0a9;--skin-c:#fff7ed;color:#24110a"><span>Cream</span></button>
                         </div>
-                        <div class="settings-help">Фон сохраняется только на этом устройстве через localStorage.</div>
                     </div>
+                    <div class="modal-field appearance-field appearance-options-grid">
+                        <div><label for="uiRadiusSelect">Скругление сообщений</label><select id="uiRadiusSelect"><option value="sharp">Строже</option><option value="soft">Мягко</option><option value="round">Очень кругло</option><option value="bubble">Пузырьки</option></select></div>
+                        <div><label for="uiDensitySelect">Плотность интерфейса</label><select id="uiDensitySelect"><option value="compact">Компактно</option><option value="comfortable">Обычно</option><option value="spacious">Просторно</option></select></div>
+                        <div><label for="uiMotionSelect">Анимации</label><select id="uiMotionSelect"><option value="calm">Спокойные</option><option value="balanced">Нормальные</option><option value="playful">Больше движения</option></select></div>
+                        <div><label for="uiGlassSelect">Стекло / блики</label><select id="uiGlassSelect"><option value="on">Включено</option><option value="off">Минимум</option></select></div>
+                    </div>
+                    <div class="settings-help">Фон чата и свой фон убраны. Теперь оформление задаётся стилем, темой, скруглением, плотностью и анимациями.</div>
                 </section>
+
 
                                 <section class="settings-panel" data-settings-panel="music">
                     <h3>Музыка</h3>
@@ -3952,6 +4003,9 @@ console.info('[E2E] Security module v2.0 загружен');
         let myPublicKeyB64 = null;
         // Кеш расшифрованных E2E текстов: msgId → plaintext
         const _e2eDecryptedCache = new Map();
+        // Полный кеш расшифровки E2E: msgId → Promise<decryptMessageResult>.
+        // Нужен, чтобы UI не расшифровывал один и тот же ciphertext несколько раз при onSnapshot/rerender.
+        const _e2eMessageDecryptCache = new Map();
 
         // ── Защита приватного ключа паролем (AES-GCM) ──
         // Ключ шифруется через PBKDF2 из uid пользователя + фиксированной соли устройства.
@@ -4165,6 +4219,7 @@ console.info('[E2E] Security module v2.0 загружен');
             _e2eUnlockedUid = null;
             _e2eUnlockPromise = null;
             _e2eDecryptedCache.clear();
+            _e2eMessageDecryptCache.clear();
         }
 
         // Получить публичный ключ любого пользователя из Firebase (без кеша — всегда свежий)
@@ -4182,7 +4237,7 @@ console.info('[E2E] Security module v2.0 загружен');
         async function encryptDM(text, peerUid, myUid) {
             if (!text) return { forPeer: '', forMe: '' };
             if (!window.E2E || typeof window.E2E.encryptDM !== 'function') throw new Error('E2E-модуль не загружен');
-            return window.E2E.encryptDM(text, peerUid, myUid, myPrivateKey, db, doc, getDoc);
+            return window.E2E.encryptDM(text, peerUid, myUid, myPrivateKey, db, doc, getDoc, { convId: currentDMConvId || '' });
         }
 
         // Расшифровать входящее ЛС-сообщение
@@ -4213,6 +4268,52 @@ console.info('[E2E] Security module v2.0 загружен');
             const cipher = pickE2ECipher(msgData, myUid, forPeerField, forMeField);
             if (!cipher) return '';
             return rsaDecrypt(myPrivateKey, cipher);
+        }
+
+        function isSafeMediaSrc(url) {
+            if (typeof url !== 'string') return false;
+            if (!url || url.startsWith('[🔒') || url.includes('Не удалось расшифровать')) return false;
+            return url.startsWith('blob:') || url.startsWith('data:audio/') || url.startsWith('data:image/') || /^https:\/\//i.test(url);
+        }
+
+        function e2eCacheHash(value) {
+            const str = String(value || '');
+            let h = 2166136261;
+            for (let i = 0; i < str.length; i++) {
+                h ^= str.charCodeAt(i);
+                h = Math.imul(h, 16777619);
+            }
+            return (h >>> 0).toString(36);
+        }
+
+        function e2eMessageCacheKey(msgId, msgData) {
+            const fields = [
+                'e2eForPeer','e2eForMe',
+                'e2eImgForPeer','e2eImgForMe',
+                'e2eVoiceForPeer','e2eVoiceForMe','voiceDuration','voiceMime',
+                'e2eMusicForPeer','e2eMusicForMe','musicDuration','musicMime',
+                'e2eChecklistForPeer','e2eChecklistForMe','edited','readBy','pinned'
+            ];
+            const fingerprint = fields.map(k => `${k}=${msgData?.[k] ?? ''}`).join('\u001f');
+            return `${currentDMConvId || 'dm'}:${msgId || 'noid'}:${e2eCacheHash(fingerprint)}`;
+        }
+
+        function decryptMessageCached(msgId, msgData) {
+            if (!window.E2E || typeof window.E2E.decryptMessage !== 'function') {
+                return Promise.resolve({ text: '[🔒 E2E-модуль не загружен]' });
+            }
+            const key = e2eMessageCacheKey(msgId, msgData);
+            if (!_e2eMessageDecryptCache.has(key)) {
+                const promise = window.E2E.decryptMessage(msgData, auth.currentUser?.uid || '', myPrivateKey, db, doc, getDoc)
+                    .catch(err => {
+                        // Не кешируем сбой навсегда: Cloudinary/IndexedDB/ECDH могут быть временно не готовы.
+                        _e2eMessageDecryptCache.delete(key);
+                        console.warn('[e2e] decryptMessageCached failed:', err?.message || err);
+                        return { text: '[🔒 Не удалось расшифровать]', decryptError: true };
+                    });
+                _e2eMessageDecryptCache.set(key, promise);
+            }
+            return _e2eMessageDecryptCache.get(key);
         }
 
         async function encryptDMToFields(text, peerUid, myUid, forPeerField, forMeField, plainField) {
@@ -4466,6 +4567,12 @@ function dataUrlToFile(dataUrl, filename) {
         const AUTODEL_KEY       = 'index6a_autodel';   // { chatId → seconds }
         const PROFILE_KEY       = 'index6a_profile';   // { bio, status }
         const VISUAL_NICK_KEY   = 'index6a_visual_nick'; // визуальный ник (только UI)
+        const UI_STYLE_KEY      = 'index6a_ui_style_v2';
+        const UI_SKIN_KEY       = 'index6a_ui_skin_v2';
+        const UI_RADIUS_KEY     = 'index6a_ui_radius_v1';
+        const UI_DENSITY_KEY    = 'index6a_ui_density_v1';
+        const UI_MOTION_KEY     = 'index6a_ui_motion_v1';
+        const UI_GLASS_KEY      = 'index6a_ui_glass_v1';
 
         /* Admin UIDs — add real UIDs here */
         const ADMIN_UIDS = new Set(['iMey77WyBccVB1wVFlqdWlrviLx2']);
@@ -4887,6 +4994,40 @@ function dataUrlToFile(dataUrl, filename) {
         }
         imgLightbox.addEventListener('click', () => imgLightbox.classList.remove('is-open'));
         document.addEventListener('keydown', e => { if (e.key==='Escape') imgLightbox.classList.remove('is-open'); });
+
+        /* EXTENDED APPEARANCE SETTINGS */
+        const UI_SKIN_DEFAULTS = { minimal:'min-obsidian', skeuo:'sk-blue-gel' };
+        const UI_SKIN_STYLE = {'min-obsidian':'minimal','min-graphite':'minimal','min-amoled':'minimal','min-nord':'minimal','min-ink':'minimal','min-cyber':'minimal','min-lilac':'minimal','min-rose':'minimal','min-emerald':'minimal','min-snow':'minimal','sk-blue-gel':'skeuo','sk-leather':'skeuo','sk-felt':'skeuo','sk-candy':'skeuo','sk-metal':'skeuo','sk-walnut':'skeuo','sk-aqua':'skeuo','sk-cream':'skeuo'};
+        const UI_SKIN_PALETTES = {
+          'min-obsidian': {'--bg-base':'#030712','--bg-chat':'#060b16','--sidebar-bg':'#050914','--nav-bg':'rgba(5,9,20,.94)','--surface':'#0b1220','--surface-2':'#111827','--surface-3':'#1f2937','--surface-hover':'#172033','--surface-active':'#1d2b44','--surface-glass':'rgba(10,18,32,.82)','--text':'#f8fafc','--muted':'#94a3b8','--muted-soft':'#64748b','--border':'rgba(148,163,184,.08)','--border-strong':'rgba(148,163,184,.16)','--accent':'#60a5fa','--accent-strong':'#2563eb','--accent-dim':'rgba(96,165,250,.16)','--accent-text':'#031326','--bubble-me-bg':'linear-gradient(145deg,#2563eb,#60a5fa)','--bubble-other-bg':'#111827','--bubble-other-border':'rgba(148,163,184,.13)','--bubble-other-text':'#e5e7eb','--dot-color':'rgba(96,165,250,.035)'},
+          'min-graphite': {'--bg-base':'#09090b','--bg-chat':'#0d0d10','--sidebar-bg':'#0b0b0d','--nav-bg':'rgba(10,10,12,.94)','--surface':'#141416','--surface-2':'#1f2024','--surface-3':'#2f3338','--surface-hover':'#272a30','--surface-active':'#343942','--surface-glass':'rgba(20,20,22,.84)','--text':'#f5f5f5','--muted':'#a1a1aa','--muted-soft':'#71717a','--border':'rgba(244,244,245,.08)','--border-strong':'rgba(244,244,245,.16)','--accent':'#e5e7eb','--accent-strong':'#a1a1aa','--accent-dim':'rgba(229,231,235,.12)','--accent-text':'#09090b','--bubble-me-bg':'linear-gradient(145deg,#3f3f46,#d4d4d8)','--bubble-other-bg':'#1f2024','--bubble-other-border':'rgba(244,244,245,.12)','--bubble-other-text':'#f4f4f5','--dot-color':'rgba(244,244,245,.022)'},
+          'min-amoled': {'--bg-base':'#000','--bg-chat':'#000','--sidebar-bg':'#050505','--nav-bg':'rgba(0,0,0,.96)','--surface':'#070707','--surface-2':'#101010','--surface-3':'#1b1b1b','--surface-hover':'#151515','--surface-active':'#202020','--surface-glass':'rgba(8,8,8,.86)','--text':'#f8fafc','--muted':'#8b98a8','--muted-soft':'#566170','--border':'rgba(255,255,255,.07)','--border-strong':'rgba(255,255,255,.14)','--accent':'#38bdf8','--accent-strong':'#0284c7','--accent-dim':'rgba(56,189,248,.14)','--accent-text':'#00131c','--bubble-me-bg':'linear-gradient(145deg,#0369a1,#38bdf8)','--bubble-other-bg':'#0d0d0d','--bubble-other-border':'rgba(255,255,255,.10)','--bubble-other-text':'#f1f5f9','--dot-color':'rgba(56,189,248,.025)'},
+          'min-nord': {'--bg-base':'#0f172a','--bg-chat':'#111827','--sidebar-bg':'#0b1120','--nav-bg':'rgba(11,17,32,.94)','--surface':'#172033','--surface-2':'#1f2937','--surface-3':'#334155','--surface-hover':'#253044','--surface-active':'#364862','--surface-glass':'rgba(23,32,51,.84)','--text':'#eaf2ff','--muted':'#a7b6cf','--muted-soft':'#718096','--border':'rgba(191,219,254,.09)','--border-strong':'rgba(191,219,254,.18)','--accent':'#93c5fd','--accent-strong':'#3b82f6','--accent-dim':'rgba(147,197,253,.15)','--accent-text':'#081525','--bubble-me-bg':'linear-gradient(145deg,#3b82f6,#93c5fd)','--bubble-other-bg':'#1f2937','--bubble-other-border':'rgba(191,219,254,.13)','--bubble-other-text':'#eef6ff','--dot-color':'rgba(147,197,253,.035)'},
+          'min-ink': {'--bg-base':'#060314','--bg-chat':'#09051f','--sidebar-bg':'#08041a','--nav-bg':'rgba(8,4,26,.94)','--surface':'#120d2b','--surface-2':'#1b1640','--surface-3':'#27205a','--surface-hover':'#20194d','--surface-active':'#2f2470','--surface-glass':'rgba(18,13,43,.84)','--text':'#f5f3ff','--muted':'#b8b0d9','--muted-soft':'#766b97','--border':'rgba(167,139,250,.10)','--border-strong':'rgba(167,139,250,.20)','--accent':'#818cf8','--accent-strong':'#4f46e5','--accent-dim':'rgba(129,140,248,.16)','--accent-text':'#08041a','--bubble-me-bg':'linear-gradient(145deg,#4f46e5,#818cf8)','--bubble-other-bg':'#1b1640','--bubble-other-border':'rgba(167,139,250,.16)','--bubble-other-text':'#f5f3ff','--dot-color':'rgba(129,140,248,.04)'},
+          'min-cyber': {'--bg-base':'#021014','--bg-chat':'#031820','--sidebar-bg':'#020c10','--nav-bg':'rgba(2,12,16,.94)','--surface':'#061b22','--surface-2':'#092a35','--surface-3':'#0d3f4d','--surface-hover':'#0b3440','--surface-active':'#105569','--surface-glass':'rgba(6,27,34,.84)','--text':'#ecfeff','--muted':'#9bd9e4','--muted-soft':'#5b8f9b','--border':'rgba(34,211,238,.10)','--border-strong':'rgba(34,211,238,.20)','--accent':'#22d3ee','--accent-strong':'#0891b2','--accent-dim':'rgba(34,211,238,.16)','--accent-text':'#021014','--bubble-me-bg':'linear-gradient(145deg,#0891b2,#22d3ee)','--bubble-other-bg':'#092a35','--bubble-other-border':'rgba(34,211,238,.15)','--bubble-other-text':'#ecfeff','--dot-color':'rgba(34,211,238,.04)'},
+          'min-lilac': {'--bg-base':'#10081f','--bg-chat':'#170d2b','--sidebar-bg':'#13091f','--nav-bg':'rgba(19,9,31,.94)','--surface':'#1d1231','--surface-2':'#281942','--surface-3':'#3a245f','--surface-hover':'#302051','--surface-active':'#4c2d78','--surface-glass':'rgba(29,18,49,.84)','--text':'#faf5ff','--muted':'#cab8df','--muted-soft':'#856e99','--border':'rgba(216,180,254,.10)','--border-strong':'rgba(216,180,254,.20)','--accent':'#d8b4fe','--accent-strong':'#a855f7','--accent-dim':'rgba(216,180,254,.16)','--accent-text':'#160b2e','--bubble-me-bg':'linear-gradient(145deg,#9333ea,#d8b4fe)','--bubble-other-bg':'#281942','--bubble-other-border':'rgba(216,180,254,.14)','--bubble-other-text':'#f3e8ff','--dot-color':'rgba(216,180,254,.04)'},
+          'min-rose': {'--bg-base':'#150810','--bg-chat':'#1e0b15','--sidebar-bg':'#12070d','--nav-bg':'rgba(18,7,13,.94)','--surface':'#25111b','--surface-2':'#351827','--surface-3':'#51233a','--surface-hover':'#421d31','--surface-active':'#612946','--surface-glass':'rgba(37,17,27,.84)','--text':'#fff1f5','--muted':'#e0a9bc','--muted-soft':'#936174','--border':'rgba(251,113,133,.10)','--border-strong':'rgba(251,113,133,.20)','--accent':'#fb7185','--accent-strong':'#e11d48','--accent-dim':'rgba(251,113,133,.16)','--accent-text':'#21070f','--bubble-me-bg':'linear-gradient(145deg,#e11d48,#fb7185)','--bubble-other-bg':'#351827','--bubble-other-border':'rgba(251,113,133,.14)','--bubble-other-text':'#fff1f5','--dot-color':'rgba(251,113,133,.035)'},
+          'min-emerald': {'--bg-base':'#01140b','--bg-chat':'#041b10','--sidebar-bg':'#03120b','--nav-bg':'rgba(3,18,11,.94)','--surface':'#062315','--surface-2':'#0b3320','--surface-3':'#0f4a2c','--surface-hover':'#0d3e25','--surface-active':'#145c37','--surface-glass':'rgba(6,35,21,.84)','--text':'#ecfdf5','--muted':'#a7d9c2','--muted-soft':'#65967e','--border':'rgba(52,211,153,.10)','--border-strong':'rgba(52,211,153,.20)','--accent':'#34d399','--accent-strong':'#059669','--accent-dim':'rgba(52,211,153,.16)','--accent-text':'#01140b','--bubble-me-bg':'linear-gradient(145deg,#059669,#34d399)','--bubble-other-bg':'#0b3320','--bubble-other-border':'rgba(52,211,153,.14)','--bubble-other-text':'#ecfdf5','--dot-color':'rgba(52,211,153,.035)'},
+          'min-snow': {'--bg-base':'#f8fafc','--bg-chat':'#eef4ff','--sidebar-bg':'#ffffff','--nav-bg':'rgba(255,255,255,.94)','--surface':'#ffffff','--surface-2':'#f1f5f9','--surface-3':'#e2e8f0','--surface-hover':'#edf2f7','--surface-active':'#dbeafe','--surface-glass':'rgba(255,255,255,.88)','--text':'#0f172a','--muted':'#64748b','--muted-soft':'#94a3b8','--border':'rgba(15,23,42,.08)','--border-strong':'rgba(15,23,42,.14)','--accent':'#2563eb','--accent-strong':'#1d4ed8','--accent-dim':'rgba(37,99,235,.12)','--accent-text':'#fff','--bubble-me-bg':'linear-gradient(145deg,#2563eb,#60a5fa)','--bubble-other-bg':'#fff','--bubble-other-border':'rgba(15,23,42,.08)','--bubble-other-text':'#0f172a','--dot-color':'rgba(37,99,235,.025)'},
+          'sk-blue-gel': {'--bg-base':'#061027','--bg-chat':'#081a3b','--sidebar-bg':'#071326','--nav-bg':'rgba(7,19,38,.94)','--surface':'#0f2851','--surface-2':'#173a75','--surface-3':'#22539b','--surface-hover':'#1d4787','--surface-active':'#2f6fc6','--surface-glass':'rgba(15,40,81,.88)','--text':'#f7fbff','--muted':'#c5d8f2','--muted-soft':'#8aa4c8','--border':'rgba(219,234,254,.18)','--border-strong':'rgba(219,234,254,.34)','--accent':'#dbeafe','--accent-strong':'#2f80ed','--accent-dim':'rgba(219,234,254,.20)','--accent-text':'#071326','--bubble-me-bg':'linear-gradient(180deg,#8cc8ff,#2f80ed 50%,#0d47a1)','--bubble-other-bg':'linear-gradient(180deg,#274d82,#102a5c)','--bubble-other-border':'rgba(219,234,254,.28)','--bubble-other-text':'#f7fbff','--dot-color':'rgba(219,234,254,.05)'},
+          'sk-leather': {'--bg-base':'#1a0d07','--bg-chat':'#231108','--sidebar-bg':'#1c0f08','--nav-bg':'rgba(28,15,8,.94)','--surface':'#3a1d0f','--surface-2':'#512711','--surface-3':'#743814','--surface-hover':'#5e2d13','--surface-active':'#8a3f18','--surface-glass':'rgba(58,29,15,.90)','--text':'#fff4e6','--muted':'#e4b98d','--muted-soft':'#a67146','--border':'rgba(251,191,36,.18)','--border-strong':'rgba(251,191,36,.34)','--accent':'#fbbf24','--accent-strong':'#b45309','--accent-dim':'rgba(251,191,36,.18)','--accent-text':'#201006','--bubble-me-bg':'linear-gradient(180deg,#f59e0b,#b45309)','--bubble-other-bg':'linear-gradient(180deg,#512711,#2b1208)','--bubble-other-border':'rgba(251,191,36,.22)','--bubble-other-text':'#fff4e6','--dot-color':'rgba(251,191,36,.04)'},
+          'sk-felt': {'--bg-base':'#021508','--bg-chat':'#062411','--sidebar-bg':'#03190b','--nav-bg':'rgba(3,25,11,.94)','--surface':'#0d3b1c','--surface-2':'#14532d','--surface-3':'#1f7a3b','--surface-hover':'#196634','--surface-active':'#2f7d32','--surface-glass':'rgba(13,59,28,.90)','--text':'#f0fff4','--muted':'#bce7c8','--muted-soft':'#7bad89','--border':'rgba(187,247,208,.18)','--border-strong':'rgba(187,247,208,.34)','--accent':'#bbf7d0','--accent-strong':'#65a30d','--accent-dim':'rgba(187,247,208,.17)','--accent-text':'#021508','--bubble-me-bg':'linear-gradient(180deg,#a3e635,#4d7c0f)','--bubble-other-bg':'linear-gradient(180deg,#14532d,#062411)','--bubble-other-border':'rgba(187,247,208,.22)','--bubble-other-text':'#f0fff4','--dot-color':'rgba(187,247,208,.045)'},
+          'sk-candy': {'--bg-base':'#23051f','--bg-chat':'#3b0730','--sidebar-bg':'#2a0626','--nav-bg':'rgba(42,6,38,.94)','--surface':'#5b0f4f','--surface-2':'#86198f','--surface-3':'#be185d','--surface-hover':'#9d1d79','--surface-active':'#ec4899','--surface-glass':'rgba(91,15,79,.90)','--text':'#fff5fb','--muted':'#fbcfe8','--muted-soft':'#d98abb','--border':'rgba(251,207,232,.20)','--border-strong':'rgba(251,207,232,.38)','--accent':'#fbcfe8','--accent-strong':'#ec4899','--accent-dim':'rgba(251,207,232,.18)','--accent-text':'#2a0626','--bubble-me-bg':'linear-gradient(180deg,#f9a8d4,#ec4899,#be185d)','--bubble-other-bg':'linear-gradient(180deg,#86198f,#3b0764)','--bubble-other-border':'rgba(251,207,232,.22)','--bubble-other-text':'#fff5fb','--dot-color':'rgba(251,207,232,.05)'},
+          'sk-metal': {'--bg-base':'#111827','--bg-chat':'#1f2937','--sidebar-bg':'#18202d','--nav-bg':'rgba(24,32,45,.94)','--surface':'#334155','--surface-2':'#475569','--surface-3':'#64748b','--surface-hover':'#526174','--surface-active':'#94a3b8','--surface-glass':'rgba(51,65,85,.90)','--text':'#f8fafc','--muted':'#dbe3ef','--muted-soft':'#a8b3c2','--border':'rgba(248,250,252,.20)','--border-strong':'rgba(248,250,252,.38)','--accent':'#f8fafc','--accent-strong':'#94a3b8','--accent-dim':'rgba(248,250,252,.16)','--accent-text':'#111827','--bubble-me-bg':'linear-gradient(180deg,#f8fafc,#94a3b8,#475569)','--bubble-other-bg':'linear-gradient(180deg,#64748b,#334155)','--bubble-other-border':'rgba(248,250,252,.24)','--bubble-other-text':'#f8fafc','--dot-color':'rgba(248,250,252,.035)'},
+          'sk-walnut': {'--bg-base':'#140a05','--bg-chat':'#1c0f08','--sidebar-bg':'#170c06','--nav-bg':'rgba(23,12,6,.94)','--surface':'#2d160b','--surface-2':'#4a230f','--surface-3':'#7c2d12','--surface-hover':'#613014','--surface-active':'#9a3412','--surface-glass':'rgba(45,22,11,.90)','--text':'#fff7ed','--muted':'#fdc99c','--muted-soft':'#b47b55','--border':'rgba(254,215,170,.18)','--border-strong':'rgba(254,215,170,.34)','--accent':'#fed7aa','--accent-strong':'#c2410c','--accent-dim':'rgba(254,215,170,.17)','--accent-text':'#1c0f08','--bubble-me-bg':'linear-gradient(180deg,#fdba74,#c2410c)','--bubble-other-bg':'linear-gradient(180deg,#4a230f,#1c0f08)','--bubble-other-border':'rgba(254,215,170,.22)','--bubble-other-text':'#fff7ed','--dot-color':'rgba(254,215,170,.04)'},
+          'sk-aqua': {'--bg-base':'#022325','--bg-chat':'#042f35','--sidebar-bg':'#032529','--nav-bg':'rgba(3,37,41,.94)','--surface':'#064e55','--surface-2':'#0e7490','--surface-3':'#06b6d4','--surface-hover':'#0f8aa3','--surface-active':'#22d3ee','--surface-glass':'rgba(6,78,85,.90)','--text':'#ecfeff','--muted':'#cffafe','--muted-soft':'#7dd3fc','--border':'rgba(207,250,254,.20)','--border-strong':'rgba(207,250,254,.38)','--accent':'#cffafe','--accent-strong':'#06b6d4','--accent-dim':'rgba(207,250,254,.18)','--accent-text':'#022325','--bubble-me-bg':'linear-gradient(180deg,#a5f3fc,#06b6d4,#0e7490)','--bubble-other-bg':'linear-gradient(180deg,#0e7490,#064e55)','--bubble-other-border':'rgba(207,250,254,.22)','--bubble-other-text':'#ecfeff','--dot-color':'rgba(207,250,254,.045)'},
+          'sk-cream': {'--bg-base':'#f7eadb','--bg-chat':'#f2dcc5','--sidebar-bg':'#fff7ed','--nav-bg':'rgba(255,247,237,.94)','--surface':'#fff1df','--surface-2':'#f5d0a9','--surface-3':'#f2b783','--surface-hover':'#f8c99a','--surface-active':'#fb923c','--surface-glass':'rgba(255,241,223,.92)','--text':'#2a1307','--muted':'#8a5a3b','--muted-soft':'#a47656','--border':'rgba(124,45,18,.18)','--border-strong':'rgba(124,45,18,.34)','--accent':'#7c2d12','--accent-strong':'#c2410c','--accent-dim':'rgba(124,45,18,.14)','--accent-text':'#fff7ed','--bubble-me-bg':'linear-gradient(180deg,#fed7aa,#fb923c,#c2410c)','--bubble-other-bg':'linear-gradient(180deg,#fff7ed,#f5d0a9)','--bubble-other-border':'rgba(124,45,18,.20)','--bubble-other-text':'#2a1307','--dot-color':'rgba(124,45,18,.03)'}
+        };
+        const UI_THEME_VARS_EXT = ['--bg-base','--bg-chat','--sidebar-bg','--nav-bg','--surface','--surface-2','--surface-3','--surface-hover','--surface-active','--surface-glass','--text','--muted','--muted-soft','--border','--border-strong','--accent','--accent-strong','--accent-dim','--accent-text','--bubble-me-bg','--bubble-other-bg','--bubble-other-border','--bubble-other-text','--dot-color'];
+        function getUiAppearanceSettings(){let style=localStorage.getItem(UI_STYLE_KEY)||'minimal';if(!['minimal','skeuo'].includes(style))style='minimal';let skin=localStorage.getItem(UI_SKIN_KEY)||UI_SKIN_DEFAULTS[style];if(UI_SKIN_STYLE[skin]!==style)skin=UI_SKIN_DEFAULTS[style];return{style,skin,radius:localStorage.getItem(UI_RADIUS_KEY)||'soft',density:localStorage.getItem(UI_DENSITY_KEY)||'comfortable',motion:localStorage.getItem(UI_MOTION_KEY)||'balanced',glass:localStorage.getItem(UI_GLASS_KEY)||'on'};}
+        function clearLegacyWallpaperState(){try{localStorage.removeItem('index6a_chat_wallpaper_v3');localStorage.removeItem('index6a_chat_wallpaper_v2');localStorage.removeItem('index6a_chat_wallpaper');}catch(_){} if(typeof clearAdaptiveUiTheme==='function'){try{clearAdaptiveUiTheme();}catch(_){}} if(tgMain){['--chat-wallpaper-bg','--chat-wallpaper-image','--chat-wallpaper-size','--chat-wallpaper-position','--chat-wallpaper-repeat','--chat-wallpaper-attachment'].forEach(k=>tgMain.style.removeProperty(k));}}
+        function applyUiAppearance(settings=getUiAppearanceSettings()){const root=document.documentElement;clearLegacyWallpaperState();root.setAttribute('data-ui-style',settings.style);root.setAttribute('data-ui-skin',settings.skin);root.setAttribute('data-ui-radius',settings.radius);root.setAttribute('data-ui-density',settings.density);root.setAttribute('data-ui-motion',settings.motion);root.setAttribute('data-ui-glass',settings.glass);root.removeAttribute('data-chat-ui-theme');UI_THEME_VARS_EXT.forEach(k=>root.style.removeProperty(k));Object.entries(UI_SKIN_PALETTES[settings.skin]||{}).forEach(([k,v])=>root.style.setProperty(k,v));if(tgMain){tgMain.style.setProperty('--chat-wallpaper-bg','var(--bg-chat)');tgMain.style.setProperty('--chat-wallpaper-image','radial-gradient(var(--dot-color) 1px, transparent 1px)');tgMain.style.setProperty('--chat-wallpaper-size','24px 24px');}}
+        function persistUiAppearance(settings){localStorage.setItem(UI_STYLE_KEY,settings.style);localStorage.setItem(UI_SKIN_KEY,settings.skin);localStorage.setItem(UI_RADIUS_KEY,settings.radius);localStorage.setItem(UI_DENSITY_KEY,settings.density);localStorage.setItem(UI_MOTION_KEY,settings.motion);localStorage.setItem(UI_GLASS_KEY,settings.glass);applyUiAppearance(settings);syncAppearanceControls(settings);}
+        function syncAppearanceControls(settings=getUiAppearanceSettings()){document.querySelectorAll('[data-ui-style-choice]').forEach(btn=>btn.classList.toggle('is-active',btn.dataset.uiStyleChoice===settings.style));document.querySelectorAll('[data-ui-skin-choice]').forEach(btn=>btn.classList.toggle('is-active',btn.dataset.uiSkinChoice===settings.skin));const r=document.getElementById('uiRadiusSelect');if(r)r.value=settings.radius;const d=document.getElementById('uiDensitySelect');if(d)d.value=settings.density;const m=document.getElementById('uiMotionSelect');if(m)m.value=settings.motion;const g=document.getElementById('uiGlassSelect');if(g)g.value=settings.glass;}
+        function initAppearanceControls(){applyUiAppearance();syncAppearanceControls();document.querySelectorAll('[data-ui-style-choice]').forEach(btn=>btn.addEventListener('click',()=>{const nextStyle=btn.dataset.uiStyleChoice||'minimal';persistUiAppearance({...getUiAppearanceSettings(),style:nextStyle,skin:UI_SKIN_DEFAULTS[nextStyle]||'min-obsidian'});}));document.querySelectorAll('[data-ui-skin-choice]').forEach(btn=>btn.addEventListener('click',()=>{const skin=btn.dataset.uiSkinChoice;persistUiAppearance({...getUiAppearanceSettings(),style:UI_SKIN_STYLE[skin]||'minimal',skin});}));['uiRadiusSelect','uiDensitySelect','uiMotionSelect','uiGlassSelect'].forEach(id=>{const el=document.getElementById(id);if(!el)return;el.addEventListener('change',()=>persistUiAppearance({...getUiAppearanceSettings(),radius:document.getElementById('uiRadiusSelect')?.value||'soft',density:document.getElementById('uiDensitySelect')?.value||'comfortable',motion:document.getElementById('uiMotionSelect')?.value||'balanced',glass:document.getElementById('uiGlassSelect')?.value||'on'}));});}
+        function saveUiAppearanceFromControls(){const activeStyle=document.querySelector('[data-ui-style-choice].is-active')?.dataset.uiStyleChoice||getUiAppearanceSettings().style;let activeSkin=document.querySelector('[data-ui-skin-choice].is-active')?.dataset.uiSkinChoice||getUiAppearanceSettings().skin;if(UI_SKIN_STYLE[activeSkin]!==activeStyle)activeSkin=UI_SKIN_DEFAULTS[activeStyle];persistUiAppearance({style:activeStyle,skin:activeSkin,radius:document.getElementById('uiRadiusSelect')?.value||'soft',density:document.getElementById('uiDensitySelect')?.value||'comfortable',motion:document.getElementById('uiMotionSelect')?.value||'balanced',glass:document.getElementById('uiGlassSelect')?.value||'on'});}
+        initAppearanceControls();
+
 
         /* ══════════════════════════════
            THEME
@@ -5448,9 +5589,9 @@ function dataUrlToFile(dataUrl, filename) {
             document.getElementById('profileAvBig').style.background = cur?'':avatarGradient(u.uid);
             // Status chips
             document.querySelectorAll('.status-chip').forEach(c=>c.classList.toggle('is-active',c.dataset.status===(userProfile.status||'online')));
-            // Theme select
+            // Theme select + extended appearance
             document.getElementById('profileTheme').value = localStorage.getItem(THEME_KEY)||'dark';
-            syncInterfaceStyleControls();
+            try { syncAppearanceControls(getUiAppearanceSettings()); } catch(_) {}
             // Header + reset tabs
             const heroName = document.getElementById('settingsHeroName');
             if (heroName) heroName.textContent = displayNick(u);
@@ -5755,18 +5896,6 @@ function dataUrlToFile(dataUrl, filename) {
         }
         function saveWallpaper(w){ localStorage.setItem(WALLPAPER_KEY, JSON.stringify(normalizeWallpaper(w))); }
         const UI_THEME_VARS = ['--bg-base','--bg-chat','--sidebar-bg','--nav-bg','--surface','--surface-2','--surface-3','--surface-hover','--surface-active','--surface-glass','--text','--muted','--muted-soft','--border','--border-strong','--accent','--accent-strong','--accent-dim','--accent-text','--bubble-me-bg','--bubble-me-glow','--bubble-other-bg','--bubble-other-border','--bubble-other-text','--dot-color','--ui-modal-backdrop'];
-        const UI_STYLE_KEY = 'index6a_ui_style_v1';
-        const UI_SKIN_KEY  = 'index6a_ui_skin_v1';
-        const CHAT_SKINS = {
-            'min-ios': { style:'minimal', wallpaper:'linear-gradient(135deg,#f8fafc 0%,#e2e8f0 46%,#bfdbfe 100%)', wallpaperBg:'#eff6ff', palette:{'--bg-base':'#eef4fb','--bg-chat':'#edf4ff','--sidebar-bg':'rgba(248,250,252,.94)','--nav-bg':'rgba(255,255,255,.86)','--surface':'rgba(255,255,255,.88)','--surface-2':'rgba(248,250,252,.92)','--surface-3':'#eef4ff','--surface-hover':'#e8f0fe','--surface-active':'#dbeafe','--surface-glass':'rgba(255,255,255,.68)','--text':'#0f172a','--muted':'#64748b','--muted-soft':'#94a3b8','--border':'rgba(15,23,42,.08)','--border-strong':'rgba(15,23,42,.14)','--accent':'#2563eb','--accent-strong':'#1d4ed8','--accent-dim':'rgba(37,99,235,.12)','--accent-text':'#ffffff','--bubble-me-bg':'linear-gradient(145deg,#2563eb,#60a5fa)','--bubble-me-glow':'rgba(37,99,235,.20)','--bubble-other-bg':'rgba(255,255,255,.90)','--bubble-other-border':'rgba(15,23,42,.08)','--bubble-other-text':'#111827','--dot-color':'rgba(37,99,235,.035)','--ui-modal-backdrop':'rgba(15,23,42,.28)'} },
-            'min-graphite': { style:'minimal', wallpaper:'linear-gradient(135deg,#020617 0%,#111827 58%,#334155 100%)', wallpaperBg:'#020617', palette:{'--bg-base':'#020617','--bg-chat':'#050816','--sidebar-bg':'#050816','--nav-bg':'rgba(5,8,22,.88)','--surface':'#0b1020','--surface-2':'#101827','--surface-3':'#172033','--surface-hover':'#111c2f','--surface-active':'#1e293b','--surface-glass':'rgba(11,16,32,.78)','--text':'#f8fafc','--muted':'#94a3b8','--muted-soft':'#64748b','--border':'rgba(148,163,184,.08)','--border-strong':'rgba(148,163,184,.16)','--accent':'#cbd5e1','--accent-strong':'#94a3b8','--accent-dim':'rgba(203,213,225,.12)','--accent-text':'#020617','--bubble-me-bg':'linear-gradient(145deg,#334155,#64748b)','--bubble-me-glow':'rgba(100,116,139,.22)','--bubble-other-bg':'rgba(15,23,42,.88)','--bubble-other-border':'rgba(148,163,184,.12)','--bubble-other-text':'#e2e8f0','--dot-color':'rgba(203,213,225,.035)','--ui-modal-backdrop':'rgba(2,6,23,.70)'} },
-            'min-snow': { style:'minimal', wallpaper:'linear-gradient(135deg,#ffffff 0%,#f8fafc 46%,#dbeafe 100%)', wallpaperBg:'#ffffff', palette:{'--bg-base':'#f8fafc','--bg-chat':'#ffffff','--sidebar-bg':'#ffffff','--nav-bg':'rgba(255,255,255,.92)','--surface':'#ffffff','--surface-2':'#f1f5f9','--surface-3':'#e2e8f0','--surface-hover':'#f1f5f9','--surface-active':'#e0f2fe','--surface-glass':'rgba(255,255,255,.76)','--text':'#111827','--muted':'#64748b','--muted-soft':'#94a3b8','--border':'rgba(15,23,42,.07)','--border-strong':'rgba(15,23,42,.12)','--accent':'#0ea5e9','--accent-strong':'#0284c7','--accent-dim':'rgba(14,165,233,.11)','--accent-text':'#ffffff','--bubble-me-bg':'linear-gradient(145deg,#0284c7,#38bdf8)','--bubble-me-glow':'rgba(14,165,233,.18)','--bubble-other-bg':'#f8fafc','--bubble-other-border':'rgba(15,23,42,.08)','--bubble-other-text':'#111827','--dot-color':'rgba(14,165,233,.028)','--ui-modal-backdrop':'rgba(15,23,42,.24)'} },
-            'min-lilac': { style:'minimal', wallpaper:'linear-gradient(135deg,#111827 0%,#4c1d95 55%,#c084fc 100%)', wallpaperBg:'#111827', palette:{'--bg-base':'#0b0614','--bg-chat':'#140b2a','--sidebar-bg':'#10091e','--nav-bg':'rgba(16,9,30,.88)','--surface':'#17102a','--surface-2':'#211638','--surface-3':'#2e1d4d','--surface-hover':'#291b45','--surface-active':'#3b2666','--surface-glass':'rgba(23,16,42,.78)','--text':'#faf5ff','--muted':'#c4b5fd','--muted-soft':'#8b7aa8','--border':'rgba(216,180,254,.09)','--border-strong':'rgba(216,180,254,.18)','--accent':'#c084fc','--accent-strong':'#8b5cf6','--accent-dim':'rgba(192,132,252,.14)','--accent-text':'#120024','--bubble-me-bg':'linear-gradient(145deg,#7c3aed,#c084fc)','--bubble-me-glow':'rgba(192,132,252,.26)','--bubble-other-bg':'rgba(46,16,101,.66)','--bubble-other-border':'rgba(216,180,254,.14)','--bubble-other-text':'#f3e8ff','--dot-color':'rgba(216,180,254,.045)','--ui-modal-backdrop':'rgba(18,0,36,.68)'} },
-            'skeuo-blue': { style:'skeuo', wallpaper:'linear-gradient(135deg,#061826 0%,#075985 52%,#38bdf8 100%)', wallpaperBg:'#082f49', palette:{'--bg-base':'#061826','--bg-chat':'#082f49','--sidebar-bg':'#061f31','--nav-bg':'linear-gradient(180deg,rgba(14,116,144,.95),rgba(7,89,133,.95))','--surface':'#0b3551','--surface-2':'#0e4569','--surface-3':'#155e86','--surface-hover':'#145272','--surface-active':'#0ea5e9','--surface-glass':'rgba(11,53,81,.86)','--text':'#f0f9ff','--muted':'#bae6fd','--muted-soft':'#7dd3fc','--border':'rgba(186,230,253,.16)','--border-strong':'rgba(186,230,253,.30)','--accent':'#7dd3fc','--accent-strong':'#0284c7','--accent-dim':'rgba(125,211,252,.18)','--accent-text':'#032536','--bubble-me-bg':'linear-gradient(180deg,#7dd3fc 0%,#0284c7 52%,#075985 100%)','--bubble-me-glow':'rgba(125,211,252,.36)','--bubble-other-bg':'linear-gradient(180deg,#155e75,#0f3f5e)','--bubble-other-border':'rgba(186,230,253,.20)','--bubble-other-text':'#f0f9ff','--dot-color':'rgba(186,230,253,.07)','--ui-modal-backdrop':'rgba(3,21,32,.74)'} },
-            'skeuo-leather': { style:'skeuo', wallpaper:'linear-gradient(135deg,#1c0f08 0%,#7c2d12 58%,#d97706 100%)', wallpaperBg:'#1c0f08', palette:{'--bg-base':'#140b06','--bg-chat':'#25130a','--sidebar-bg':'#1a0e08','--nav-bg':'linear-gradient(180deg,#6b2a13,#361509)','--surface':'#2a170d','--surface-2':'#3a2112','--surface-3':'#522d18','--surface-hover':'#432413','--surface-active':'#854d0e','--surface-glass':'rgba(42,23,13,.88)','--text':'#fff7ed','--muted':'#fed7aa','--muted-soft':'#c0845a','--border':'rgba(251,191,36,.13)','--border-strong':'rgba(251,191,36,.27)','--accent':'#fbbf24','--accent-strong':'#d97706','--accent-dim':'rgba(251,191,36,.18)','--accent-text':'#1c0f08','--bubble-me-bg':'linear-gradient(180deg,#f59e0b,#c2410c 55%,#7c2d12)','--bubble-me-glow':'rgba(245,158,11,.32)','--bubble-other-bg':'linear-gradient(180deg,#4a2714,#2a170d)','--bubble-other-border':'rgba(251,191,36,.18)','--bubble-other-text':'#ffedd5','--dot-color':'rgba(251,191,36,.055)','--ui-modal-backdrop':'rgba(20,11,6,.74)'} },
-            'skeuo-felt': { style:'skeuo', wallpaper:'linear-gradient(135deg,#02110a 0%,#14532d 52%,#84cc16 100%)', wallpaperBg:'#052e16', palette:{'--bg-base':'#020f09','--bg-chat':'#052e16','--sidebar-bg':'#031b0d','--nav-bg':'linear-gradient(180deg,#166534,#064e3b)','--surface':'#0a2d18','--surface-2':'#12401f','--surface-3':'#1b5b2b','--surface-hover':'#164924','--surface-active':'#3f8f22','--surface-glass':'rgba(10,45,24,.86)','--text':'#f0fdf4','--muted':'#bbf7d0','--muted-soft':'#86efac','--border':'rgba(187,247,208,.13)','--border-strong':'rgba(187,247,208,.27)','--accent':'#bef264','--accent-strong':'#65a30d','--accent-dim':'rgba(190,242,100,.18)','--accent-text':'#02110a','--bubble-me-bg':'linear-gradient(180deg,#bef264,#22c55e 55%,#15803d)','--bubble-me-glow':'rgba(132,204,22,.32)','--bubble-other-bg':'linear-gradient(180deg,#14532d,#062b15)','--bubble-other-border':'rgba(187,247,208,.16)','--bubble-other-text':'#dcfce7','--dot-color':'rgba(187,247,208,.06)','--ui-modal-backdrop':'rgba(2,17,10,.72)'} },
-            'skeuo-candy': { style:'skeuo', wallpaper:'linear-gradient(135deg,#831843 0%,#db2777 52%,#f9a8d4 100%)', wallpaperBg:'#831843', palette:{'--bg-base':'#240516','--bg-chat':'#3b0a25','--sidebar-bg':'#2a071a','--nav-bg':'linear-gradient(180deg,#be185d,#831843)','--surface':'#3a1028','--surface-2':'#501436','--surface-3':'#6d1b49','--surface-hover':'#5b173d','--surface-active':'#be185d','--surface-glass':'rgba(58,16,40,.86)','--text':'#fff1f2','--muted':'#fbcfe8','--muted-soft':'#f9a8d4','--border':'rgba(251,207,232,.14)','--border-strong':'rgba(251,207,232,.28)','--accent':'#f9a8d4','--accent-strong':'#db2777','--accent-dim':'rgba(249,168,212,.18)','--accent-text':'#30051b','--bubble-me-bg':'linear-gradient(180deg,#f9a8d4,#db2777 58%,#9d174d)','--bubble-me-glow':'rgba(249,168,212,.34)','--bubble-other-bg':'linear-gradient(180deg,#6d1b49,#3a1028)','--bubble-other-border':'rgba(251,207,232,.17)','--bubble-other-text':'#fce7f3','--dot-color':'rgba(251,207,232,.055)','--ui-modal-backdrop':'rgba(36,5,22,.74)'} }
-        };
         function clamp255(n){ return Math.max(0, Math.min(255, Math.round(n))); }
         function hexToRgb(hex){ const m = String(hex || '').trim().match(/^#?([0-9a-f]{6})$/i); if (!m) return null; const n = parseInt(m[1], 16); return { r:(n >> 16) & 255, g:(n >> 8) & 255, b:n & 255 }; }
         function rgbToHex(c){ return '#' + [c.r,c.g,c.b].map(v => clamp255(v).toString(16).padStart(2,'0')).join(''); }
@@ -5782,9 +5911,6 @@ function dataUrlToFile(dataUrl, filename) {
         }
         function clearAdaptiveUiTheme(){ const root=document.documentElement; root.removeAttribute('data-chat-ui-theme'); UI_THEME_VARS.forEach(k => root.style.removeProperty(k)); }
         function applyAdaptiveUiTheme(w){
-            // Если выбран новый глобальный стиль интерфейса, фон больше не должен
-            // перекрашивать весь UI — он меняет только полотно чата.
-            if (localStorage.getItem('index6a_ui_skin_v1')) return;
             const root = document.documentElement;
             const normalized = normalizeWallpaper(w);
             let palette = normalized && normalized.palette;
@@ -5815,70 +5941,6 @@ function dataUrlToFile(dataUrl, filename) {
             const activeKey = w.key || '';
             document.querySelectorAll('.wallpaper-preset').forEach(btn => btn.classList.toggle('is-active', btn.dataset.wallpaper === activeKey));
         }
-        function normalizeUiStyle(value) { return value === 'skeuo' ? 'skeuo' : 'minimal'; }
-        function defaultSkinForStyle(style) { return normalizeUiStyle(style) === 'skeuo' ? 'skeuo-blue' : 'min-ios'; }
-        function getSavedUiStyle() { return normalizeUiStyle(localStorage.getItem(UI_STYLE_KEY) || 'minimal'); }
-        function getSavedSkinKey() {
-            const style = getSavedUiStyle();
-            const saved = localStorage.getItem(UI_SKIN_KEY);
-            if (saved && CHAT_SKINS[saved] && CHAT_SKINS[saved].style === style) return saved;
-            return defaultSkinForStyle(style);
-        }
-        function isCustomWallpaperOverride() {
-            const w = getSavedWallpaper();
-            return w && (w.key === 'custom-color' || w.key === 'custom-image');
-        }
-        function applyChatSkin(options = {}) {
-            const root = document.documentElement;
-            const style = getSavedUiStyle();
-            let skinKey = getSavedSkinKey();
-            let skin = CHAT_SKINS[skinKey] || CHAT_SKINS[defaultSkinForStyle(style)];
-            if (!skin || skin.style !== style) { skinKey = defaultSkinForStyle(style); skin = CHAT_SKINS[skinKey]; }
-
-            localStorage.setItem(UI_STYLE_KEY, style);
-            localStorage.setItem(UI_SKIN_KEY, skinKey);
-            root.setAttribute('data-ui-style', style);
-            root.setAttribute('data-chat-skin', skinKey);
-            root.setAttribute('data-chat-ui-theme', 'on');
-
-            UI_THEME_VARS.forEach(k => root.style.removeProperty(k));
-            Object.entries(skin.palette || {}).forEach(([k, v]) => root.style.setProperty(k, v));
-
-            if (tgMain && (options.forceWallpaper || !isCustomWallpaperOverride())) {
-                setWallpaperVars(skin.wallpaperBg || 'var(--bg-chat)', skin.wallpaper + ', radial-gradient(var(--dot-color) 1px, transparent 1px)', 'auto, 22px 22px');
-            }
-            syncInterfaceStyleControls();
-        }
-        function setUiStyle(style) {
-            style = normalizeUiStyle(style);
-            localStorage.setItem(UI_STYLE_KEY, style);
-            localStorage.setItem(UI_SKIN_KEY, defaultSkinForStyle(style));
-            saveWallpaper(WALLPAPERS.default);
-            applyChatSkin({ forceWallpaper: true });
-            showToast(style === 'skeuo' ? 'Скевоморфизм включён' : 'Минимализм включён');
-        }
-        function setChatSkin(skinKey) {
-            const skin = CHAT_SKINS[skinKey];
-            if (!skin) return;
-            localStorage.setItem(UI_STYLE_KEY, skin.style);
-            localStorage.setItem(UI_SKIN_KEY, skinKey);
-            saveWallpaper(WALLPAPERS.default);
-            applyChatSkin({ forceWallpaper: true });
-            showToast('Тема применена');
-        }
-        function syncInterfaceStyleControls() {
-            const modal = document.getElementById('profileModal');
-            const style = getSavedUiStyle();
-            const skinKey = getSavedSkinKey();
-            if (modal) modal.setAttribute('data-current-ui-style', style);
-            document.querySelectorAll('[data-ui-style-option]').forEach(btn => btn.classList.toggle('is-active', btn.dataset.uiStyleOption === style));
-            document.querySelectorAll('[data-chat-skin]').forEach(btn => btn.classList.toggle('is-active', btn.dataset.chatSkin === skinKey));
-        }
-        function initInterfaceStyleControls() {
-            document.querySelectorAll('[data-ui-style-option]').forEach(btn => btn.addEventListener('click', () => setUiStyle(btn.dataset.uiStyleOption)));
-            document.querySelectorAll('[data-chat-skin]').forEach(btn => btn.addEventListener('click', () => setChatSkin(btn.dataset.chatSkin)));
-            applyChatSkin();
-        }
         function initWallpaperControls(){
             applyChatWallpaper();
             document.querySelectorAll('.wallpaper-preset').forEach(btn => btn.addEventListener('click', () => {
@@ -5904,8 +5966,8 @@ function dataUrlToFile(dataUrl, filename) {
             });
             document.getElementById('chatWallpaperResetBtn')?.addEventListener('click', () => { saveWallpaper(WALLPAPERS.default); applyChatWallpaper(WALLPAPERS.default); showToast('Фон сброшен'); });
         }
-        initWallpaperControls();
-        initInterfaceStyleControls();
+        // Фоны чата отключены: оформление теперь задаётся расширенными стилями.
+        try { applyUiAppearance(); } catch(_) {}
 
         /* ── Ник: валидация ── */
         const NICK_FORBIDDEN = /[<>&"'\/\\]/;
@@ -6004,6 +6066,7 @@ function dataUrlToFile(dataUrl, filename) {
                 if (firestoreUpdate.musicUrl && typeof firestoreUpdate.musicUrl === 'string') updateMiniProfilePlayer({ url: firestoreUpdate.musicUrl, title: firestoreUpdate.musicTitle || 'Музыка профиля' });
                 else if (_profileMusicAction === 'clear' || !((_pmUrlInput?.value || '').trim())) updateMiniProfilePlayer(null);
                 setTheme(theme);
+                try { saveUiAppearanceFromControls(); } catch(_) {}
                 renderSidebarUser();
                 try { pingOnline(); } catch(_){}
                 document.getElementById('profileModal').classList.remove('is-open');
@@ -6666,23 +6729,38 @@ function dataUrlToFile(dataUrl, filename) {
                             stickToBottom = true;
                             showToast('⏳ Загружаю голосовое…');
                             const voiceFile = new File([blob], `voice_${Date.now()}.webm`, {type: mimeType});
-                            const voiceUrl = await uploadToCloudinary(voiceFile, percent => {
-                                showToast(`⏳ Загружаю голосовое ${percent}%...`);
-                            });
-                            if (!voiceUrl || !voiceUrl.startsWith('https://')) throw new Error('Cloudinary не вернул ссылку на голосовое');
-                            const baseMsg = { uid:u.uid, author:displayNick(u), text:'',
-                                createdAt:serverTimestamp(), edited:false,
-                                voiceUrl, voiceDuration:dur, voiceMime:mimeType };
                             if (currentChatMode==='group') {
+                                const voiceUrl = await uploadToCloudinary(voiceFile, percent => {
+                                    showToast(`⏳ Загружаю голосовое ${percent}%...`);
+                                });
+                                if (!voiceUrl || !voiceUrl.startsWith('https://')) throw new Error('Cloudinary не вернул ссылку на голосовое');
+                                const baseMsg = { uid:u.uid, author:displayNick(u), text:'',
+                                    createdAt:serverTimestamp(), edited:false,
+                                    voiceUrl, voiceDuration:dur, voiceMime:mimeType };
                                 await addDoc(messagesCol, baseMsg);
                             } else {
-                                const voiceE2e = await encryptDM(voiceUrl, currentDMPeerUid, u.uid);
-                                const dmMsg = { uid:u.uid, author:displayNick(u), text:'',
-                                    createdAt:serverTimestamp(), edited:false,
-                                    e2eVoiceForPeer: voiceE2e.forPeer, e2eVoiceForMe: voiceE2e.forMe,
-                                    voiceDuration:dur, voiceMime:mimeType };
-                                await addDoc(collection(db,'dmConvs',currentDMConvId,'messages'), dmMsg);
-                                await setDoc(doc(db,'dmConvs',currentDMConvId),{lastText:'🎤 Голосовое',lastAt:serverTimestamp(),[`unread.${currentDMPeerUid}`]:increment(1)},{merge:true});
+                                if (!currentDMConvId || !currentDMPeerUid) throw new Error('ЛС не выбрано');
+                                const ok = await ensureDME2EUnlocked(u.uid);
+                                if (!ok || !myPrivateKey) throw new Error('ЛС не разблокированы мастер-паролем');
+                                await window.E2E.sendDirectMessage({
+                                    convId: currentDMConvId,
+                                    peerUid: currentDMPeerUid,
+                                    myUid: u.uid,
+                                    authorName: displayNick(u),
+                                    myPrivateKey,
+                                    voiceFile,
+                                    voiceDuration: dur,
+                                    voiceMime: mimeType,
+                                    firestoreDb: db,
+                                    fsCollection: collection,
+                                    fsAddDoc: addDoc,
+                                    fsSetDoc: setDoc,
+                                    fsDoc: doc,
+                                    fsGetDoc: getDoc,
+                                    fsServerTimestamp: serverTimestamp,
+                                    fsIncrement: increment,
+                                    uploadToCloudinary: window.E2E.uploadViaBackend || uploadToCloudinary
+                                });
                             }
                             lastOutboundAt=Date.now();
                         } catch(e){ showToast('Ошибка: '+e.message); }
@@ -7060,6 +7138,7 @@ function dataUrlToFile(dataUrl, filename) {
             let decryptedText = hasE2E ? '🔒' : safeDecrypt(d.text || '');
 
             row.dataset.msgId=id; row.dataset.id=id; row.dataset.plain=decryptedText;
+            row.dataset.renderKey=e2eMessageCacheKey(id,d);
             row.setAttribute('data-has-e2e', hasE2E ? '1' : '0');
 
             const av=document.createElement('div');
@@ -7117,27 +7196,44 @@ function dataUrlToFile(dataUrl, filename) {
             // Forwarded badge
             if (d.forwarded){const fw=document.createElement('div');fw.style.cssText='font-size:.72rem;color:var(--accent);margin-bottom:4px;font-weight:600';fw.textContent='↗️ Переслано';bubble.appendChild(fw);}
 
-            // Image (if any) — E2E: расшифровываем Cloudinary URL, затем показываем img
+            // Image (if any) — E2E: новый формат = JSON { aes, url }, decryptMessage скачивает encrypted blob.
             if (currentChatMode === 'dm' && (d.e2eImgForPeer || d.e2eImgForMe)) {
                 const msgImg = document.createElement('img');
-                msgImg.className = 'msg-img'; msgImg.alt = '🖼 Загрузка…'; msgImg.loading = 'lazy';
+                msgImg.className = 'msg-img';
+                msgImg.alt = '🖼 Расшифровка…';
+                msgImg.loading = 'lazy';
                 msgImg.style.cssText = 'min-width:80px;min-height:60px;background:var(--surface-3)';
-                if (myPrivateKey) {
-                    const imgCipher = pickE2ECipher(d, myUid, 'e2eImgForPeer', 'e2eImgForMe');
-                    const imgFallback = d.e2eImgForPeer || d.e2eImgForMe;
-                    const applyUrl = (url) => {
-                        msgImg.src = url;
-                        msgImg.alt = '🖼';
-                        msgImg.style.cssText = '';
-                        msgImg.addEventListener('click', e => { e.stopPropagation(); openLightbox(url); });
-                    };
-                    rsaDecrypt(myPrivateKey, imgCipher).then(applyUrl).catch(() => {
-                        if (imgFallback && imgFallback !== imgCipher)
-                            rsaDecrypt(myPrivateKey, imgFallback).then(applyUrl).catch(()=>{ msgImg.alt='🔒 Изображение'; });
-                        else msgImg.alt = '🔒 Изображение';
-                    });
-                } else { msgImg.alt = '🔒 Изображение'; }
                 bubble.appendChild(msgImg);
+
+                const applyUrl = (url) => {
+                    if (!isSafeMediaSrc(url)) {
+                        msgImg.removeAttribute('src');
+                        msgImg.alt = '🔒 Изображение не расшифровано';
+                        return;
+                    }
+                    msgImg.src = url;
+                    msgImg.alt = '🖼';
+                    msgImg.style.cssText = '';
+                    msgImg.addEventListener('click', e => { e.stopPropagation(); openLightbox(url); });
+                };
+
+                if (myPrivateKey && window.E2E && typeof window.E2E.decryptMessage === 'function') {
+                    decryptMessageCached(id, d)
+                        .then(res => {
+                            if (res && res.imageObjectUrl) applyUrl(res.imageObjectUrl);
+                            else {
+                                msgImg.removeAttribute('src');
+                                msgImg.alt = '🔒 Изображение не расшифровано';
+                            }
+                        })
+                        .catch(() => {
+                            msgImg.removeAttribute('src');
+                            msgImg.alt = '🔒 Изображение не расшифровано';
+                        });
+                } else {
+                    msgImg.removeAttribute('src');
+                    msgImg.alt = '🔒 Изображение';
+                }
             } else if (d.imageBase64 || d.imageUrl) {
                 const imgSrc = d.imageUrl || d.imageBase64;
                 const msgImg = document.createElement('img');
@@ -7149,44 +7245,67 @@ function dataUrlToFile(dataUrl, filename) {
                 bubble.appendChild(msgImg);
             }
 
-            // Voice message (if any) — поддержка E2E зашифрованных голосовых в ЛС
+            // Voice message (if any) — E2E: новый формат = encrypted blob + E2E AES key.
             if (currentChatMode === 'dm' && (d.e2eVoiceForPeer || d.e2eVoiceForMe)) {
-                // Показываем плейсхолдер, расшифровываем асинхронно
                 const voiceWrap = document.createElement('div');
                 voiceWrap.className = 'msg-voice';
-                const dur = d.voiceDuration||0;
+                const dur = d.voiceDuration || 0;
                 const playBtn = document.createElement('button');
                 playBtn.className = 'voice-play-btn';
-                playBtn.innerHTML = '🔒'; playBtn.title = 'Расшифровка...'; playBtn.disabled = true;
-                const durEl = document.createElement('span'); durEl.className='voice-duration'; durEl.textContent=fmtVoiceTime(dur);
-                voiceWrap.appendChild(playBtn); voiceWrap.appendChild(durEl);
+                playBtn.innerHTML = '🔒';
+                playBtn.title = 'Расшифровка...';
+                playBtn.disabled = true;
+                const durEl = document.createElement('span');
+                durEl.className = 'voice-duration';
+                durEl.textContent = fmtVoiceTime(dur);
+                voiceWrap.appendChild(playBtn);
+                voiceWrap.appendChild(durEl);
                 bubble.appendChild(voiceWrap);
-                if (myPrivateKey) {
-                    const vCipher = pickE2ECipher(d, myUid, 'e2eVoiceForPeer', 'e2eVoiceForMe');
-                    const vFallback = d.e2eVoiceForPeer || d.e2eVoiceForMe;
-                    rsaDecrypt(myPrivateKey, vCipher).then(plainUrl => { const plainB64 = plainUrl; // voiceUrl расшифрован
-                        // Заменяем плейсхолдер на полноценный плеер
-                        playBtn.innerHTML = '<i class="ph ph-play" aria-hidden="true"></i>';
-                        playBtn.disabled = false; playBtn.title = 'Воспроизвести';
-                        const barCount=28; const waveEl=document.createElement('div'); waveEl.className='voice-waveform';
-                        const bars=[]; for(let i=0;i<barCount;i++){const bar=document.createElement('div');bar.className='voice-waveform-bar';const seed=(id.charCodeAt(i%id.length)||5);bar.style.height=(8+((seed*(i+7))%22))+'px';waveEl.appendChild(bar);bars.push(bar);}
-                        voiceWrap.insertBefore(waveEl, durEl);
-                        let audio=null, playTimer=null, isPlaying=false;
-                        function updateBars(p){const pl=Math.floor(p*barCount);bars.forEach((b,i)=>b.classList.toggle('played',i<pl));}
-                        function stopAudio(){if(audio){audio.pause();audio=null;}clearInterval(playTimer);isPlaying=false;playBtn.innerHTML='<i class="ph ph-play" aria-hidden="true"></i>';durEl.textContent=fmtVoiceTime(dur);updateBars(0);}
-                        playBtn.addEventListener('click',()=>{
-                            if(isPlaying){stopAudio();return;}
-                            audio=new Audio(plainB64); audio.onended=stopAudio;
-                            audio.play().catch(()=>showToast('Не удалось воспроизвести'));
-                            isPlaying=true; playBtn.innerHTML='<i class="ph ph-pause" aria-hidden="true"></i>';
-                            playTimer=setInterval(()=>{if(!audio)return;const p=dur>0?audio.currentTime/dur:0;durEl.textContent=fmtVoiceTime(Math.floor(audio.currentTime));updateBars(p);},100);
-                        });
-                        waveEl.addEventListener('click',e=>{if(!audio||!dur)return;const rect=waveEl.getBoundingClientRect();audio.currentTime=((e.clientX-rect.left)/rect.width)*dur;});
-                    }).catch(() => {
-                        if (vFallback && vFallback !== vCipher)
-                            rsaDecrypt(myPrivateKey, vFallback).then(p => { playBtn.innerHTML='▶'; playBtn.disabled=false; playBtn.onclick=()=>{new Audio(p).play();}; }).catch(()=>{ playBtn.innerHTML='🔒'; });
-                        else playBtn.innerHTML = '🔒';
+
+                const activateVoicePlayer = (voiceUrl) => {
+                    if (!isSafeMediaSrc(voiceUrl)) {
+                        playBtn.innerHTML = '🔒';
+                        playBtn.title = 'Голосовое не расшифровано';
+                        return;
+                    }
+                    playBtn.innerHTML = '<i class="ph ph-play" aria-hidden="true"></i>';
+                    playBtn.disabled = false;
+                    playBtn.title = 'Воспроизвести';
+                    const barCount = 28;
+                    const waveEl = document.createElement('div');
+                    waveEl.className = 'voice-waveform';
+                    const bars = [];
+                    for (let i = 0; i < barCount; i++) {
+                        const bar = document.createElement('div');
+                        bar.className = 'voice-waveform-bar';
+                        const seed = (id.charCodeAt(i % id.length) || 5);
+                        bar.style.height = (8 + ((seed * (i + 7)) % 22)) + 'px';
+                        waveEl.appendChild(bar);
+                        bars.push(bar);
+                    }
+                    voiceWrap.insertBefore(waveEl, durEl);
+                    let audio = null, playTimer = null, isPlaying = false;
+                    function updateBars(p) { const pl = Math.floor(p * barCount); bars.forEach((b, i) => b.classList.toggle('played', i < pl)); }
+                    function stopAudio() { if (audio) { audio.pause(); audio = null; } clearInterval(playTimer); isPlaying = false; playBtn.innerHTML = '<i class="ph ph-play" aria-hidden="true"></i>'; durEl.textContent = fmtVoiceTime(dur); updateBars(0); }
+                    playBtn.addEventListener('click', () => {
+                        if (isPlaying) { stopAudio(); return; }
+                        audio = new Audio(voiceUrl);
+                        audio.onended = stopAudio;
+                        audio.play().catch(() => showToast('Не удалось воспроизвести'));
+                        isPlaying = true;
+                        playBtn.innerHTML = '<i class="ph ph-pause" aria-hidden="true"></i>';
+                        playTimer = setInterval(() => { if (!audio) return; const p = dur > 0 ? audio.currentTime / dur : 0; durEl.textContent = fmtVoiceTime(Math.floor(audio.currentTime)); updateBars(p); }, 100);
                     });
+                    waveEl.addEventListener('click', e => { if (!audio || !dur) return; const rect = waveEl.getBoundingClientRect(); audio.currentTime = ((e.clientX - rect.left) / rect.width) * dur; });
+                };
+
+                if (myPrivateKey && window.E2E && typeof window.E2E.decryptMessage === 'function') {
+                    decryptMessageCached(id, d)
+                        .then(res => {
+                            if (res && res.voiceObjectUrl) activateVoicePlayer(res.voiceObjectUrl);
+                            else { playBtn.innerHTML = '🔒'; playBtn.title = 'Голосовое не расшифровано'; }
+                        })
+                        .catch(() => { playBtn.innerHTML = '🔒'; playBtn.title = 'Голосовое не расшифровано'; });
                 }
             } else if (d.voiceBase64 || d.voiceUrl) {
                 const voiceWrap = document.createElement('div');
@@ -7269,7 +7388,7 @@ function dataUrlToFile(dataUrl, filename) {
                 musicPlaceholder.style.cssText = 'font-size:.85rem;color:var(--muted);padding:4px 0';
                 bubble.appendChild(musicPlaceholder);
                 if (myPrivateKey && window.E2E && typeof window.E2E.decryptMessage === 'function') {
-                    window.E2E.decryptMessage(d, myUid, myPrivateKey, db, doc, getDoc).then(res => {
+                    decryptMessageCached(id, d).then(res => {
                         if (!res || !res.musicObjectUrl) {
                             musicPlaceholder.textContent = '🔒 Музыка не расшифрована';
                             return;
@@ -7290,36 +7409,35 @@ function dataUrlToFile(dataUrl, filename) {
                 bubble.appendChild(buildMusicBubble(id, d));
             }
 
-                        // Checklist message — поддержка E2E зашифрованных чек-листов
+                        // Checklist message — E2E: расшифровываем через общий decryptMessage.
             if (currentChatMode === 'dm' && (d.e2eChecklistForPeer || d.e2eChecklistForMe)) {
                 const clPlaceholder = document.createElement('div');
                 clPlaceholder.textContent = '🔒 Чек-лист (расшифровка...)';
                 clPlaceholder.style.cssText = 'font-size:.85rem;color:var(--muted);padding:4px 0';
                 bubble.appendChild(clPlaceholder);
-                if (myPrivateKey) {
-                    const clCipher = pickE2ECipher(d, myUid, 'e2eChecklistForPeer', 'e2eChecklistForMe');
-                    const clFallback = d.e2eChecklistForPeer || d.e2eChecklistForMe;
-                    rsaDecrypt(myPrivateKey, clCipher).then(plainJson => {
-                        try {
-                            const parsed = JSON.parse(plainJson);
-                            const fakeChecklist = { title: parsed.title||'', items: parsed.items||[], done: {} };
-                            const clEl = buildChecklistBubble(id, fakeChecklist, isMe);
-                            clPlaceholder.replaceWith(clEl);
-                        } catch(e) { clPlaceholder.textContent = '🔒 Чек-лист (ошибка данных)'; }
-                    }).catch(() => {
-                        if (clFallback && clFallback !== clCipher)
-                            rsaDecrypt(myPrivateKey, clFallback).then(p => {
-                                try { const parsed=JSON.parse(p); clPlaceholder.replaceWith(buildChecklistBubble(id,{title:parsed.title||'',items:parsed.items||[],done:{}},isMe)); } catch(e){}
-                            }).catch(()=>{ clPlaceholder.textContent='🔒 Чек-лист'; });
-                        else clPlaceholder.textContent='🔒 Чек-лист';
-                    });
+                if (myPrivateKey && window.E2E && typeof window.E2E.decryptMessage === 'function') {
+                    decryptMessageCached(id, d)
+                        .then(res => {
+                            if (res && res.checklist) {
+                                const cl = {
+                                    title: res.checklist.title || '',
+                                    items: Array.isArray(res.checklist.items) ? res.checklist.items : [],
+                                    done: res.checklist.done || {}
+                                };
+                                clPlaceholder.replaceWith(buildChecklistBubble(id, cl, isMe));
+                            } else {
+                                clPlaceholder.textContent = '🔒 Чек-лист не расшифрован';
+                            }
+                        })
+                        .catch(() => { clPlaceholder.textContent = '🔒 Чек-лист не расшифрован'; });
                 }
             } else if (d.checklist) {
                 bubble.appendChild(buildChecklistBubble(id, d.checklist, isMe));
             }
 
-            // Text body (skip if empty / poll / music / checklist)
-            if ((d.text || hasE2E) && !d.pollId && !d.musicBase64 && !d.musicUrl && !d.checklist) {
+            // Text body (skip if empty / poll / music / checklist / E2E-only attachments)
+            const hasE2EAttachment = currentChatMode === 'dm' && !!(d.e2eImgForPeer || d.e2eImgForMe || d.e2eVoiceForPeer || d.e2eVoiceForMe || d.e2eMusicForPeer || d.e2eMusicForMe || d.e2eChecklistForPeer || d.e2eChecklistForMe);
+            if ((d.text || (hasE2E && !hasE2EAttachment)) && !d.pollId && !d.musicBase64 && !d.musicUrl && !d.checklist) {
                 const bodyEl = renderMessageBody(decryptedText);
                 if (hasE2E) bodyEl.setAttribute('data-e2e-text', '1');
                 bubble.appendChild(bodyEl);
@@ -7475,68 +7593,74 @@ function dataUrlToFile(dataUrl, filename) {
                 chatEmpty.style.display='none';
                 const docs=snapshot.docs;
 
-                // Build map of currently rendered msg-rows by data-id
+                // Build map of currently rendered msg-rows by data-id.
+                // Важно: не перерисовываем уже расшифрованные E2E-медиа при каждом onSnapshot.
+                // Иначе старые player/blob-URL заменяются свежими placeholder'ами "🔒", а async decrypt
+                // срабатывает на detached fragment. Это и давало "всё стало под замками" после отправки.
+                const existingOrderedBefore=[...chatMessages.querySelectorAll('.msg-row[data-id]')];
                 const existingRows={};
-                chatMessages.querySelectorAll('.msg-row[data-id]').forEach(el=>{
-                    existingRows[el.dataset.id]=el;
-                });
+                existingOrderedBefore.forEach(el=>{ existingRows[el.dataset.id]=el; });
 
-                // Track which ids should exist after this update
                 const newIds=new Set(docs.map(d=>d.id));
+                const canIncrementalAppendOrUpdate = existingOrderedBefore.length <= docs.length &&
+                    existingOrderedBefore.every((el,i)=>docs[i] && docs[i].id===el.dataset.id);
 
-                // Remove rows that no longer exist
+                // Remove rows that no longer exist. If order/deletion changed, the fallback below will rebuild fully.
                 Object.entries(existingRows).forEach(([id,el])=>{
                     if (!newIds.has(id)) {
-                        // also remove preceding date separator if it belongs to this row
                         const prev=el.previousSibling;
                         if (prev&&prev.classList&&prev.classList.contains('msg-date-sep')) prev.remove();
                         el.remove();
                     }
                 });
 
-                // Full re-render into a fragment, then reconcile
-                const frag=document.createDocumentFragment();
-                docs.forEach((docSnap,i)=>{
-                    const rows=renderMessageRow(docSnap,docs[i-1]||null);
-                    rows.forEach(r=>frag.appendChild(r));
-                });
+                if (canIncrementalAppendOrUpdate) {
+                    docs.forEach((docSnap,i)=>{
+                        const id=docSnap.id;
+                        const d=docSnap.data();
+                        const oldRow=existingRows[id];
+                        const renderKey=e2eMessageCacheKey(id,d);
 
-                // If existing rendered set matches exactly (same ids in order), do targeted updates only
-                const fragRows=[...frag.querySelectorAll('.msg-row[data-id]')];
-                const existingOrdered=[...chatMessages.querySelectorAll('.msg-row[data-id]')];
-                const sameOrder=fragRows.length===existingOrdered.length&&
-                    fragRows.every((r,i)=>r.dataset.id===existingOrdered[i].dataset.id);
+                        // Полностью пропускаем неизменённые строки. Сохраняются уже расшифрованные
+                        // audio/music/image элементы, objectURL и обработчики плеера.
+                        if (oldRow && oldRow.dataset.renderKey===renderKey) return;
 
-                if (sameOrder && fragRows.length > 0) {
-                    // Only replace rows whose text/edited content changed (skip image rows to avoid flicker)
-                    fragRows.forEach((newRow,i)=>{
-                        const oldRow=existingOrdered[i];
-                        const newBubble=newRow.querySelector('.msg-bubble');
-                        const oldBubble=oldRow.querySelector('.msg-bubble');
-                        if (newBubble&&oldBubble) {
-                            // Only update if no image (avoid reload flicker) and content differs
-                            const hasImg=oldBubble.querySelector('.msg-img');
-                            if (!hasImg && newBubble.innerHTML!==oldBubble.innerHTML) {
-                                oldBubble.innerHTML=newBubble.innerHTML;
-                            } else if (!hasImg) {
-                                // update class (e.g. edited badge) if needed
-                                oldRow.className=newRow.className;
-                            }
+                        const rows=renderMessageRow(docSnap,docs[i-1]||null);
+                        if (oldRow) {
+                            // Меняем именно DOM-ноду, а не innerHTML: async decrypt callbacks остаются привязаны
+                            // к видимой строке, а не к временной строке во фрагменте.
+                            const msgRow=rows.find(r=>r.classList&&r.classList.contains('msg-row'));
+                            if (msgRow) oldRow.replaceWith(msgRow);
+                        } else {
+                            rows.forEach(r=>chatMessages.appendChild(r));
                         }
                     });
                 } else {
-                    // Order changed or new messages added — do full replacement but preserve img src
-                    const imgCache={};
+                    // Order changed / deletion / non-prefix update — full rebuild.
+                    // Preserve already loaded media srcs where possible to reduce flicker.
+                    const mediaCache={};
                     chatMessages.querySelectorAll('.msg-row[data-id]').forEach(el=>{
                         const img=el.querySelector('.msg-img');
-                        if (img&&img.src) imgCache[el.dataset.id]=img.src;
+                        const audio=el.querySelector('audio');
+                        if (img&&img.src) mediaCache[el.dataset.id]={ type:'img', src:img.src };
+                        else if (audio&&audio.src) mediaCache[el.dataset.id]={ type:'audio', src:audio.src };
                     });
+
                     chatMessages.querySelectorAll('.msg-row,.msg-date-sep').forEach(n=>n.remove());
-                    // Restore cached img srcs in fragment before inserting
+                    const frag=document.createDocumentFragment();
+                    docs.forEach((docSnap,i)=>{
+                        const rows=renderMessageRow(docSnap,docs[i-1]||null);
+                        rows.forEach(r=>frag.appendChild(r));
+                    });
                     frag.querySelectorAll('.msg-row[data-id]').forEach(el=>{
-                        if (imgCache[el.dataset.id]) {
+                        const cached=mediaCache[el.dataset.id];
+                        if (!cached) return;
+                        if (cached.type==='img') {
                             const img=el.querySelector('.msg-img');
-                            if (img) img.src=imgCache[el.dataset.id];
+                            if (img) img.src=cached.src;
+                        } else if (cached.type==='audio') {
+                            const audio=el.querySelector('audio');
+                            if (audio) audio.src=cached.src;
                         }
                     });
                     chatMessages.appendChild(frag);
@@ -7571,7 +7695,8 @@ function dataUrlToFile(dataUrl, filename) {
                     // Расшифровываем и кешируем
                     const snap = snapshot.docs.find(d => d.id === msgId);
                     if (!snap) return;
-                    const plain = await decryptDM(snap.data(), myUid);
+                    const dec = await decryptMessageCached(msgId, snap.data());
+                    const plain = (dec && typeof dec.text === 'string') ? dec.text : await decryptDM(snap.data(), myUid);
                     _e2eDecryptedCache.set(msgId, plain);
                     rowEl.dataset.plain = plain;
                     bodyEl.innerHTML = '';
@@ -8233,18 +8358,33 @@ function dataUrlToFile(dataUrl, filename) {
             for (const file of selected) {
                 try {
                     showToast(`⏳ Загружаю фото ${sentCount+1}/${selected.length}…`);
-                    // Загружаем оригинал на Cloudinary — без сжатия и потери качества
-                    const imageUrl = await uploadToCloudinary(file);
-                    if (!imageUrl) { showToast('❌ Ошибка загрузки фото'); continue; }
                     const baseMsg = { uid: u.uid, author: displayNick(u), text: '', createdAt: serverTimestamp(), edited: false };
                     if (currentChatMode === 'group') {
+                        // В общем чате медиа остаётся обычным moderated media, без E2EE.
+                        const imageUrl = await uploadToCloudinary(file);
+                        if (!imageUrl) { showToast('❌ Ошибка загрузки фото'); continue; }
                         await addDoc(messagesCol, { ...baseMsg, imageUrl });
                     } else {
-                        const cid = currentDMConvId;
-                        const imgE2e = await encryptDM(imageUrl, currentDMPeerUid, u.uid);
-                        const dmImgMsg = { ...baseMsg, e2eImgForPeer: imgE2e.forPeer, e2eImgForMe: imgE2e.forMe };
-                        await addDoc(collection(db, 'dmConvs', cid, 'messages'), dmImgMsg);
-                        await setDoc(doc(db,'dmConvs',cid), {lastText:'🖼 Фото', lastAt: serverTimestamp(), [`unread.${currentDMPeerUid}`]: increment(1)}, {merge:true});
+                        if (!currentDMConvId || !currentDMPeerUid) throw new Error('ЛС не выбрано');
+                        const ok = await ensureDME2EUnlocked(u.uid);
+                        if (!ok || !myPrivateKey) throw new Error('ЛС не разблокированы мастер-паролем');
+                        await window.E2E.sendDirectMessage({
+                            convId: currentDMConvId,
+                            peerUid: currentDMPeerUid,
+                            myUid: u.uid,
+                            authorName: displayNick(u),
+                            myPrivateKey,
+                            imageFile: file,
+                            firestoreDb: db,
+                            fsCollection: collection,
+                            fsAddDoc: addDoc,
+                            fsSetDoc: setDoc,
+                            fsDoc: doc,
+                            fsGetDoc: getDoc,
+                            fsServerTimestamp: serverTimestamp,
+                            fsIncrement: increment,
+                            uploadToCloudinary: window.E2E.uploadViaBackend || uploadToCloudinary
+                        });
                     }
                     sentCount++;
                 } catch(e) { showToast('Ошибка: '+e.message); }
@@ -8311,26 +8451,26 @@ musicSendBtn.addEventListener('click', async () => {
     musicSendBtn.textContent = '⏳ Загружаю 0%...';
     try {
         const authorNameForRules = await getAuthorNameForRules(u);
-        const url = await uploadToCloudinary(_pendingMusicFile, percent => {
-            musicSendBtn.textContent = `⏳ Загружаю ${percent}%...`;
-        });
-        if (!url || !url.startsWith('https://')) throw new Error('Cloudinary не вернул ссылку на музыку');
-
-        const msg = {
-            uid: u.uid,
-            author: authorNameForRules,
-            text: '',
-            musicUrl: url,
-            musicTitle: _pendingMusicTitle || _pendingMusicFile.name.replace(/\.[^.]+$/, ''),
-            musicDuration: Math.round(_pendingMusicDur || 0),
-            musicMime: _pendingMusicFile.type,
-            createdAt: serverTimestamp(),
-            edited: false,
-        };
 
         if (currentChatMode === 'group') {
-            await addDoc(messagesCol, msg);
+            const url = await uploadToCloudinary(_pendingMusicFile, percent => {
+                musicSendBtn.textContent = `⏳ Загружаю ${percent}%...`;
+            });
+            if (!url || !url.startsWith('https://')) throw new Error('Cloudinary не вернул ссылку на музыку');
+
+            await addDoc(messagesCol, {
+                uid: u.uid,
+                author: authorNameForRules,
+                text: '',
+                musicUrl: url,
+                musicTitle: _pendingMusicTitle || _pendingMusicFile.name.replace(/\.[^.]+$/, ''),
+                musicDuration: Math.round(_pendingMusicDur || 0),
+                musicMime: _pendingMusicFile.type,
+                createdAt: serverTimestamp(),
+                edited: false,
+            });
         } else {
+            musicSendBtn.textContent = '⏳ Шифрую музыку…';
             if (!currentDMConvId || !currentDMPeerUid) throw new Error('ЛС не выбрано');
             const ok = await ensureDME2EUnlocked(u.uid);
             if (!ok || !myPrivateKey) throw new Error('ЛС не разблокированы мастер-кодом');
@@ -8354,7 +8494,7 @@ musicSendBtn.addEventListener('click', async () => {
                 fsGetDoc: getDoc,
                 fsServerTimestamp: serverTimestamp,
                 fsIncrement: increment,
-                uploadToCloudinary: e2e.uploadViaBackend
+                uploadToCloudinary: e2e.uploadViaBackend || uploadToCloudinary
             });
         }
 
@@ -8426,14 +8566,26 @@ musicSendBtn.addEventListener('click', async () => {
             try {
                 if (currentChatMode === 'group') await addDoc(messagesCol, msg);
                 else {
-                    const cid = currentDMConvId;
-                    // E2E: шифруем содержимое чек-листа как JSON-строку
-                    const checkJson = JSON.stringify({ title, items });
-                    const checkE2e = await encryptDM(checkJson, currentDMPeerUid, u.uid);
-                    const dmCheckMsg = { uid: u.uid, author: displayNick(u), text: '', createdAt: serverTimestamp(), edited: false,
-                        e2eChecklistForPeer: checkE2e.forPeer, e2eChecklistForMe: checkE2e.forMe };
-                    await addDoc(collection(db,'dmConvs',cid,'messages'), dmCheckMsg);
-                    await setDoc(doc(db,'dmConvs',cid), {lastText:'✅ '+(title||'Чек-лист'), lastAt:serverTimestamp(), [`unread.${currentDMPeerUid}`]:increment(1)},{merge:true});
+                    if (!currentDMConvId || !currentDMPeerUid) throw new Error('ЛС не выбрано');
+                    const ok = await ensureDME2EUnlocked(u.uid);
+                    if (!ok || !myPrivateKey) throw new Error('ЛС не разблокированы мастер-паролем');
+                    await window.E2E.sendDirectMessage({
+                        convId: currentDMConvId,
+                        peerUid: currentDMPeerUid,
+                        myUid: u.uid,
+                        authorName: displayNick(u),
+                        myPrivateKey,
+                        checklist: { title, items, done: {} },
+                        firestoreDb: db,
+                        fsCollection: collection,
+                        fsAddDoc: addDoc,
+                        fsSetDoc: setDoc,
+                        fsDoc: doc,
+                        fsGetDoc: getDoc,
+                        fsServerTimestamp: serverTimestamp,
+                        fsIncrement: increment,
+                        uploadToCloudinary: window.E2E.uploadViaBackend || uploadToCloudinary
+                    });
                 }
                 initChecklistRows();
                 showToast('✅ Чек-лист отправлен!');
@@ -8476,23 +8628,38 @@ musicSendBtn.addEventListener('click', async () => {
                             stickToBottom = true;
                             showToast('⏳ Загружаю голосовое…');
                             const voiceFile = new File([blob], `voice_${Date.now()}.webm`, {type: mimeType});
-                            const voiceUrl = await uploadToCloudinary(voiceFile, percent => {
-                                showToast(`⏳ Загружаю голосовое ${percent}%...`);
-                            });
-                            if (!voiceUrl || !voiceUrl.startsWith('https://')) throw new Error('Cloudinary не вернул ссылку на голосовое');
-                            const baseMsg = { uid:u.uid, author:displayNick(u), text:'',
-                                createdAt:serverTimestamp(), edited:false,
-                                voiceUrl, voiceDuration:dur, voiceMime:mimeType };
                             if (currentChatMode === 'group') {
+                                const voiceUrl = await uploadToCloudinary(voiceFile, percent => {
+                                    showToast(`⏳ Загружаю голосовое ${percent}%...`);
+                                });
+                                if (!voiceUrl || !voiceUrl.startsWith('https://')) throw new Error('Cloudinary не вернул ссылку на голосовое');
+                                const baseMsg = { uid:u.uid, author:displayNick(u), text:'',
+                                    createdAt:serverTimestamp(), edited:false,
+                                    voiceUrl, voiceDuration:dur, voiceMime:mimeType };
                                 await addDoc(messagesCol, baseMsg);
                             } else {
-                                const voiceE2e = await encryptDM(voiceUrl, currentDMPeerUid, u.uid);
-                                const dmMsg = { uid:u.uid, author:displayNick(u), text:'',
-                                    createdAt:serverTimestamp(), edited:false,
-                                    e2eVoiceForPeer: voiceE2e.forPeer, e2eVoiceForMe: voiceE2e.forMe,
-                                    voiceDuration:dur, voiceMime:mimeType };
-                                await addDoc(collection(db, 'dmConvs', currentDMConvId, 'messages'), dmMsg);
-                                await setDoc(doc(db, 'dmConvs', currentDMConvId), {lastText: '🎤 Голосовое', lastAt: serverTimestamp(), [`unread.${currentDMPeerUid}`]: increment(1)}, {merge: true});
+                                if (!currentDMConvId || !currentDMPeerUid) throw new Error('ЛС не выбрано');
+                                const ok = await ensureDME2EUnlocked(u.uid);
+                                if (!ok || !myPrivateKey) throw new Error('ЛС не разблокированы мастер-паролем');
+                                await window.E2E.sendDirectMessage({
+                                    convId: currentDMConvId,
+                                    peerUid: currentDMPeerUid,
+                                    myUid: u.uid,
+                                    authorName: displayNick(u),
+                                    myPrivateKey,
+                                    voiceFile,
+                                    voiceDuration: dur,
+                                    voiceMime: mimeType,
+                                    firestoreDb: db,
+                                    fsCollection: collection,
+                                    fsAddDoc: addDoc,
+                                    fsSetDoc: setDoc,
+                                    fsDoc: doc,
+                                    fsGetDoc: getDoc,
+                                    fsServerTimestamp: serverTimestamp,
+                                    fsIncrement: increment,
+                                    uploadToCloudinary: window.E2E.uploadViaBackend || uploadToCloudinary
+                                });
                             }
                         } catch(e) { showToast('Ошибка: ' + e.message); }
                     })();
@@ -8611,7 +8778,7 @@ musicSendBtn.addEventListener('click', async () => {
             const hasImg = !!(pendingImageFile || pendingImageUrl);
             if (!text && !hasImg){globalStatus.textContent='Введите текст или выберите картинку';globalStatus.classList.add('is-error');return;}
             // Если есть файл но ещё не загружен на Cloudinary — загружаем сейчас
-            if (pendingImageFile && !pendingImageUrl) {
+            if (currentChatMode === 'group' && pendingImageFile && !pendingImageUrl) {
                 globalStatus.textContent = '⏳ Загружаю фото…';
                 try {
                     pendingImageUrl = await uploadToCloudinary(pendingImageFile, pct => {
@@ -8678,42 +8845,30 @@ musicSendBtn.addEventListener('click', async () => {
                         };
                         await addDoc(messagesCol,msgData);
                     } else {
-                        // ЛС — E2E шифрование
-                        const e2e = await encryptDM(text, currentDMPeerUid, u.uid);
-                        // Шифруем цитату (replyTo.text) тоже — иначе она хранится открытым текстом
-                        let encryptedReplyTo = undefined;
-                        if (replyingTo) {
-                            const replySnippet = replyingTo.text.slice(0, 100);
-                            const replyE2e = await encryptDM(replySnippet, currentDMPeerUid, u.uid);
-                            encryptedReplyTo = {
-                                id: replyingTo.id,
-                                author: replyingTo.author,
-                                text: '',
-                                e2eForPeer: replyE2e.forPeer,
-                                e2eForMe:   replyE2e.forMe,
-                            };
-                        }
-                        // Шифруем URL изображения если оно есть (сам файл на Cloudinary)
-                        let encryptedImg = undefined;
-                        if (hasImg && pendingImageUrl) {
-                            // Шифруем только URL (короткая строка) — файл на Cloudinary
-                            const imgE2e = await encryptDM(pendingImageUrl, currentDMPeerUid, u.uid);
-                            encryptedImg = { e2eImgForPeer: imgE2e.forPeer, e2eImgForMe: imgE2e.forMe };
-                        }
-                        msgData={
-                            uid:u.uid, author:displayNick(u),
-                            text: '', // не храним plaintext
-                            e2eForPeer: e2e.forPeer,
-                            e2eForMe:   e2e.forMe,
-                            ...(e2e.sig ? { e2eSig: e2e.sig, e2eSigAlg: e2e.alg || 'ECDSA-P384-SHA384' } : {}),
-                            createdAt:serverTimestamp(), edited:false,
-                            ...(encryptedImg || {}),
-                            ...(encryptedReplyTo ? {replyTo: encryptedReplyTo} : {})
-                        };
-                        await addDoc(collection(db,'dmConvs',currentDMConvId,'messages'),msgData);
-                        const convRef=doc(db,'dmConvs',currentDMConvId);
-                        const previewText = hasImg ? (text ? text : '🖼 Картинка') : '🔒 Сообщение';
-                        await setDoc(convRef,{lastText:previewText,lastAt:serverTimestamp(),[`unread.${currentDMPeerUid}`]:increment(1)},{merge:true});
+                        // ЛС — единый E2E-путь. Медиа шифруется локально как encrypted blob,
+                        // затем грузится как raw. Plaintext URL/файл в Firestore не сохраняется.
+                        if (!currentDMConvId || !currentDMPeerUid) throw new Error('ЛС не выбрано');
+                        const ok = await ensureDME2EUnlocked(u.uid);
+                        if (!ok || !myPrivateKey) throw new Error('ЛС не разблокированы мастер-паролем');
+                        await window.E2E.sendDirectMessage({
+                            convId: currentDMConvId,
+                            peerUid: currentDMPeerUid,
+                            myUid: u.uid,
+                            authorName: displayNick(u),
+                            myPrivateKey,
+                            text,
+                            imageFile: pendingImageFile || null,
+                            replyTo: replyingTo ? { id: replyingTo.id, author: replyingTo.author, text: replyingTo.text || '' } : null,
+                            firestoreDb: db,
+                            fsCollection: collection,
+                            fsAddDoc: addDoc,
+                            fsSetDoc: setDoc,
+                            fsDoc: doc,
+                            fsGetDoc: getDoc,
+                            fsServerTimestamp: serverTimestamp,
+                            fsIncrement: increment,
+                            uploadToCloudinary: window.E2E.uploadViaBackend || uploadToCloudinary
+                        });
                     }
                     cancelReply(); lastOutboundAt=Date.now();
                     chatInput.value=''; chatInput.style.height='auto';
@@ -8869,7 +9024,8 @@ musicSendBtn.addEventListener('click', async () => {
             if (_pinnedUnsub){_pinnedUnsub();_pinnedUnsub=null;}
             if (pollsUnsub){pollsUnsub();pollsUnsub=null;}
             peerHasRead=false;
-            _e2eDecryptedCache.clear(); // сбрасываем кеш расшифровки при смене чата
+            _e2eDecryptedCache.clear();
+            _e2eMessageDecryptCache.clear(); // сбрасываем кеш расшифровки при смене чата
             pinnedMsgId=null; _pinnedBannerLastText=''; _pinnedBannerDismissed=null;
             pinnedBanner.classList.remove('is-on');
             clearImagePreview();
@@ -8987,7 +9143,7 @@ musicSendBtn.addEventListener('click', async () => {
             resetDME2ESession();
             authFormBlock.classList.add('hidden'); authGate.classList.add('hidden'); appRoot.classList.remove('hidden');
             try { startChatForUser(); } catch(e){ _dbgLog('startChat:error',e.message); }
-            try { applyChatWallpaper(); } catch(_) {}
+            try { applyUiAppearance(); } catch(_) {}
             try { buildSidebarList(); } catch(e){ _dbgLog('buildSidebar:error',e.message); }
         });
     </script>
