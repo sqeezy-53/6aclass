@@ -11,7 +11,7 @@
     <meta http-equiv="Content-Security-Policy"
           content="
             default-src 'self';
-            script-src  'self' 'sha256-MXsSqBU1YZ0oCJ1qbc3HqyjyS/wXa6S2fSuOis06pUg=' 'sha256-FARTdYhn1xEkKumY8CCScDq9pCBflz0dxkTRZtkQt9s=' 'sha256-NS5D/qXO1bxR/X6jAKFs9z3nZ9OXs/00bacETCNBQ44=' 'sha256-/VksjiXVTLPV56dhociBODcdecS9lAITszTepXH6kFM=' https://www.gstatic.com https://apis.google.com;
+            script-src  'self' 'sha256-MXsSqBU1YZ0oCJ1qbc3HqyjyS/wXa6S2fSuOis06pUg=' 'sha256-FARTdYhn1xEkKumY8CCScDq9pCBflz0dxkTRZtkQt9s=' 'sha256-XfejXU7oYcJG55sYmXhQOzfWu4GlOCpinMhROU+F53w=' 'sha256-trmv2noiW/CeI7YCxw99ZJq49xw85fSTgzowUqK2vbo=' https://www.gstatic.com https://apis.google.com;
             script-src-attr 'none';
             style-src   'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com https://cdn.jsdelivr.net;
             font-src    'self' https://fonts.gstatic.com https://cdn.jsdelivr.net;
@@ -1790,7 +1790,7 @@ window.E2E = {
   detectCipherAlg,
 };
 
-console.info('[E2E] Security module v2.1 загружен');
+console.info('[E2E] Security module v2.2 загружен');
 
     </script>
 
@@ -4257,7 +4257,7 @@ console.info('[E2E] Security module v2.1 загружен');
                 'e2eImgForPeer','e2eImgForMe',
                 'e2eVoiceForPeer','e2eVoiceForMe','voiceDuration','voiceMime',
                 'e2eMusicForPeer','e2eMusicForMe','musicDuration','musicMime',
-                'e2eChecklistForPeer','e2eChecklistForMe','edited'
+                'e2eChecklistForPeer','e2eChecklistForMe','edited','readBy','pinned'
             ];
             const fingerprint = fields.map(k => `${k}=${msgData?.[k] ?? ''}`).join('\u001f');
             return `${currentDMConvId || 'dm'}:${msgId || 'noid'}:${e2eCacheHash(fingerprint)}`;
@@ -7060,6 +7060,7 @@ function dataUrlToFile(dataUrl, filename) {
             let decryptedText = hasE2E ? '🔒' : safeDecrypt(d.text || '');
 
             row.dataset.msgId=id; row.dataset.id=id; row.dataset.plain=decryptedText;
+            row.dataset.renderKey=e2eMessageCacheKey(id,d);
             row.setAttribute('data-has-e2e', hasE2E ? '1' : '0');
 
             const av=document.createElement('div');
@@ -7514,68 +7515,74 @@ function dataUrlToFile(dataUrl, filename) {
                 chatEmpty.style.display='none';
                 const docs=snapshot.docs;
 
-                // Build map of currently rendered msg-rows by data-id
+                // Build map of currently rendered msg-rows by data-id.
+                // Важно: не перерисовываем уже расшифрованные E2E-медиа при каждом onSnapshot.
+                // Иначе старые player/blob-URL заменяются свежими placeholder'ами "🔒", а async decrypt
+                // срабатывает на detached fragment. Это и давало "всё стало под замками" после отправки.
+                const existingOrderedBefore=[...chatMessages.querySelectorAll('.msg-row[data-id]')];
                 const existingRows={};
-                chatMessages.querySelectorAll('.msg-row[data-id]').forEach(el=>{
-                    existingRows[el.dataset.id]=el;
-                });
+                existingOrderedBefore.forEach(el=>{ existingRows[el.dataset.id]=el; });
 
-                // Track which ids should exist after this update
                 const newIds=new Set(docs.map(d=>d.id));
+                const canIncrementalAppendOrUpdate = existingOrderedBefore.length <= docs.length &&
+                    existingOrderedBefore.every((el,i)=>docs[i] && docs[i].id===el.dataset.id);
 
-                // Remove rows that no longer exist
+                // Remove rows that no longer exist. If order/deletion changed, the fallback below will rebuild fully.
                 Object.entries(existingRows).forEach(([id,el])=>{
                     if (!newIds.has(id)) {
-                        // also remove preceding date separator if it belongs to this row
                         const prev=el.previousSibling;
                         if (prev&&prev.classList&&prev.classList.contains('msg-date-sep')) prev.remove();
                         el.remove();
                     }
                 });
 
-                // Full re-render into a fragment, then reconcile
-                const frag=document.createDocumentFragment();
-                docs.forEach((docSnap,i)=>{
-                    const rows=renderMessageRow(docSnap,docs[i-1]||null);
-                    rows.forEach(r=>frag.appendChild(r));
-                });
+                if (canIncrementalAppendOrUpdate) {
+                    docs.forEach((docSnap,i)=>{
+                        const id=docSnap.id;
+                        const d=docSnap.data();
+                        const oldRow=existingRows[id];
+                        const renderKey=e2eMessageCacheKey(id,d);
 
-                // If existing rendered set matches exactly (same ids in order), do targeted updates only
-                const fragRows=[...frag.querySelectorAll('.msg-row[data-id]')];
-                const existingOrdered=[...chatMessages.querySelectorAll('.msg-row[data-id]')];
-                const sameOrder=fragRows.length===existingOrdered.length&&
-                    fragRows.every((r,i)=>r.dataset.id===existingOrdered[i].dataset.id);
+                        // Полностью пропускаем неизменённые строки. Сохраняются уже расшифрованные
+                        // audio/music/image элементы, objectURL и обработчики плеера.
+                        if (oldRow && oldRow.dataset.renderKey===renderKey) return;
 
-                if (sameOrder && fragRows.length > 0) {
-                    // Only replace rows whose text/edited content changed (skip image rows to avoid flicker)
-                    fragRows.forEach((newRow,i)=>{
-                        const oldRow=existingOrdered[i];
-                        const newBubble=newRow.querySelector('.msg-bubble');
-                        const oldBubble=oldRow.querySelector('.msg-bubble');
-                        if (newBubble&&oldBubble) {
-                            // Only update if no image (avoid reload flicker) and content differs
-                            const hasImg=oldBubble.querySelector('.msg-img');
-                            if (!hasImg && newBubble.innerHTML!==oldBubble.innerHTML) {
-                                oldBubble.innerHTML=newBubble.innerHTML;
-                            } else if (!hasImg) {
-                                // update class (e.g. edited badge) if needed
-                                oldRow.className=newRow.className;
-                            }
+                        const rows=renderMessageRow(docSnap,docs[i-1]||null);
+                        if (oldRow) {
+                            // Меняем именно DOM-ноду, а не innerHTML: async decrypt callbacks остаются привязаны
+                            // к видимой строке, а не к временной строке во фрагменте.
+                            const msgRow=rows.find(r=>r.classList&&r.classList.contains('msg-row'));
+                            if (msgRow) oldRow.replaceWith(msgRow);
+                        } else {
+                            rows.forEach(r=>chatMessages.appendChild(r));
                         }
                     });
                 } else {
-                    // Order changed or new messages added — do full replacement but preserve img src
-                    const imgCache={};
+                    // Order changed / deletion / non-prefix update — full rebuild.
+                    // Preserve already loaded media srcs where possible to reduce flicker.
+                    const mediaCache={};
                     chatMessages.querySelectorAll('.msg-row[data-id]').forEach(el=>{
                         const img=el.querySelector('.msg-img');
-                        if (img&&img.src) imgCache[el.dataset.id]=img.src;
+                        const audio=el.querySelector('audio');
+                        if (img&&img.src) mediaCache[el.dataset.id]={ type:'img', src:img.src };
+                        else if (audio&&audio.src) mediaCache[el.dataset.id]={ type:'audio', src:audio.src };
                     });
+
                     chatMessages.querySelectorAll('.msg-row,.msg-date-sep').forEach(n=>n.remove());
-                    // Restore cached img srcs in fragment before inserting
+                    const frag=document.createDocumentFragment();
+                    docs.forEach((docSnap,i)=>{
+                        const rows=renderMessageRow(docSnap,docs[i-1]||null);
+                        rows.forEach(r=>frag.appendChild(r));
+                    });
                     frag.querySelectorAll('.msg-row[data-id]').forEach(el=>{
-                        if (imgCache[el.dataset.id]) {
+                        const cached=mediaCache[el.dataset.id];
+                        if (!cached) return;
+                        if (cached.type==='img') {
                             const img=el.querySelector('.msg-img');
-                            if (img) img.src=imgCache[el.dataset.id];
+                            if (img) img.src=cached.src;
+                        } else if (cached.type==='audio') {
+                            const audio=el.querySelector('audio');
+                            if (audio) audio.src=cached.src;
                         }
                     });
                     chatMessages.appendChild(frag);

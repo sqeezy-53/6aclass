@@ -1739,4 +1739,4 @@ window.E2E = {
   detectCipherAlg,
 };
 
-console.info('[E2E] Security module v2.1 загружен');
+console.info('[E2E] Security module v2.2 загружен');
