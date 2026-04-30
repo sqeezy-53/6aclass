@@ -35,7 +35,7 @@ const E2E_CIPHER_V3     = 'ECDH-P384-AES-GCM';
 const E2E_CIPHER_V4     = 'RATCHET-LITE-P384-HKDF-AESGCM';
 const E2E_RATCHET_MAX_SKIP = 64;          // сколько пропущенных message-keys держим для out-of-order сообщений
 const E2E_TRUSTED_ORIGINS = new Set(['https://6aclass.online']);
-const E2E_STRICT_NEW_MESSAGES = true;      // Новые ЛС: только современный ECDH/Ratchet-Lite, RSA только legacy-read
+const E2E_STRICT_NEW_MESSAGES = false;     // Transitional: Ratchet/ECDH when available; RSA fallback only for old accounts without ECDH
 const E2E_MASTER_MIN_LENGTH = 12;
 const E2E_AUTOLOCK_MS = 15 * 60 * 1000;    // 15 минут бездействия
 const E2E_DEVICE_ID_KEY = 'chat6a_e2e_device_id_v1';
@@ -1013,7 +1013,12 @@ function setTrustedPeerKey(peerUid, data) {
 }
 async function ensurePeerKeyTrusted(peerUid, peerData) {
   const current = peerData.ecdhKeyFingerprint || (peerData.ecdhPublicKey ? await fingerprintPublicKeyB64(peerData.ecdhPublicKey) : null);
-  if (!current) throw new Error('У собеседника нет современного E2E-ключа. Попросите его обновить ключи.');
+  if (!current) {
+    if (!E2E_STRICT_NEW_MESSAGES && peerData.publicKey) {
+      return { ok: true, legacy: true, fingerprint: 'legacy-rsa' };
+    }
+    throw new Error('У собеседника нет современного E2E-ключа. Попросите его обновить ключи.');
+  }
   const prev = getTrustedPeerKey(peerUid);
   if (!prev) {
     setTrustedPeerKey(peerUid, { ecdhKeyFingerprint: current });

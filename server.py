@@ -49,7 +49,7 @@ CLOUDINARY_API_KEY = os.environ.get("CLOUDINARY_API_KEY", "")
 CLOUDINARY_API_SECRET = os.environ.get("CLOUDINARY_API_SECRET", "")
 ALLOWED_ORIGINS = [o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "https://6aclass.online").split(",") if o.strip()]
 
-REQUIRE_FIREBASE_AUTH = os.environ.get("REQUIRE_FIREBASE_AUTH", "1") == "1"
+REQUIRE_FIREBASE_AUTH = os.environ.get("REQUIRE_FIREBASE_AUTH", "0") == "1"
 REQUIRE_SIGNED_CLOUDINARY_UPLOAD = os.environ.get("REQUIRE_SIGNED_CLOUDINARY_UPLOAD", "1") == "1"
 TRUST_PROXY_HEADERS = os.environ.get("TRUST_PROXY_HEADERS", "0") == "1"
 ADMIN_UIDS = {x.strip() for x in os.environ.get("ADMIN_UIDS", "").split(",") if x.strip()}

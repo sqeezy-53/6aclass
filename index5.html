@@ -11,12 +11,12 @@
     <meta http-equiv="Content-Security-Policy"
           content="
             default-src 'self';
-            script-src  'self' 'sha256-dy2HtklB1G0Uu+QqHcmv6L9H+B9YF/E3Qk5DogUNRHw=' 'sha256-FARTdYhn1xEkKumY8CCScDq9pCBflz0dxkTRZtkQt9s=' 'sha256-bjcUstLrmeh0n4rjwJjXj5kfwhupxnikFiiCbT3kVkw=' 'sha256-3g1FsXqe/7IZcn6BpIcfHEg7KwdLXzfmv553L8VpKRw=' https://www.gstatic.com https://apis.google.com;
+            script-src  'self' 'sha256-dy2HtklB1G0Uu+QqHcmv6L9H+B9YF/E3Qk5DogUNRHw=' 'sha256-FARTdYhn1xEkKumY8CCScDq9pCBflz0dxkTRZtkQt9s=' 'sha256-wVplV+WHm6oU/QnpgS0quVhsfnGJpS8DJFK7jD5danc=' 'sha256-Iio9D5Fa3ofiFtJC/452p1WSlKXyB0Mb0FCp7A+rK9o=' https://www.gstatic.com https://apis.google.com;
             script-src-attr 'none';
             style-src   'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com https://cdn.jsdelivr.net;
             font-src    'self' https://fonts.gstatic.com https://cdn.jsdelivr.net;
             img-src     'self' data: blob: https:;
-            media-src   'self' blob: https:;
+            media-src   'self' data: blob: https:;
             connect-src 'self' https://sixaclass.onrender.com https://*.firebaseio.com https://*.googleapis.com https://www.gstatic.com wss://*.firebaseio.com;
             object-src  'none';
             base-uri    'self';
@@ -94,7 +94,7 @@ const E2E_CIPHER_V3     = 'ECDH-P384-AES-GCM';
 const E2E_CIPHER_V4     = 'RATCHET-LITE-P384-HKDF-AESGCM';
 const E2E_RATCHET_MAX_SKIP = 64;          // сколько пропущенных message-keys держим для out-of-order сообщений
 const E2E_TRUSTED_ORIGINS = new Set(['https://6aclass.online']);
-const E2E_STRICT_NEW_MESSAGES = true;      // Новые ЛС: только современный ECDH/Ratchet-Lite, RSA только legacy-read
+const E2E_STRICT_NEW_MESSAGES = false;     // Transitional: Ratchet/ECDH when available; RSA fallback only for old accounts without ECDH
 const E2E_MASTER_MIN_LENGTH = 12;
 const E2E_AUTOLOCK_MS = 15 * 60 * 1000;    // 15 минут бездействия
 const E2E_DEVICE_ID_KEY = 'chat6a_e2e_device_id_v1';
@@ -1072,7 +1072,12 @@ function setTrustedPeerKey(peerUid, data) {
 }
 async function ensurePeerKeyTrusted(peerUid, peerData) {
   const current = peerData.ecdhKeyFingerprint || (peerData.ecdhPublicKey ? await fingerprintPublicKeyB64(peerData.ecdhPublicKey) : null);
-  if (!current) throw new Error('У собеседника нет современного E2E-ключа. Попросите его обновить ключи.');
+  if (!current) {
+    if (!E2E_STRICT_NEW_MESSAGES && peerData.publicKey) {
+      return { ok: true, legacy: true, fingerprint: 'legacy-rsa' };
+    }
+    throw new Error('У собеседника нет современного E2E-ключа. Попросите его обновить ключи.');
+  }
   const prev = getTrustedPeerKey(peerUid);
   if (!prev) {
     setTrustedPeerKey(peerUid, { ecdhKeyFingerprint: current });
@@ -7370,8 +7375,14 @@ function dataUrlToFile(dataUrl, filename) {
                 bubble.appendChild(buildChecklistBubble(id, d.checklist, isMe));
             }
 
-            // Text body (skip if empty / poll / music / checklist)
-            if ((d.text || hasE2E) && !d.pollId && !d.musicBase64 && !d.musicUrl && !d.checklist) {
+            // Text body (skip if empty / poll / music / checklist / E2E-only attachments)
+            const hasE2EOnlyAttachment = currentChatMode === 'dm' && (
+                d.e2eImgForPeer || d.e2eImgForMe ||
+                d.e2eVoiceForPeer || d.e2eVoiceForMe ||
+                d.e2eMusicForPeer || d.e2eMusicForMe ||
+                d.e2eChecklistForPeer || d.e2eChecklistForMe
+            );
+            if ((d.text || hasE2E) && !hasE2EOnlyAttachment && !d.pollId && !d.musicBase64 && !d.musicUrl && !d.checklist) {
                 const bodyEl = renderMessageBody(decryptedText);
                 if (hasE2E) bodyEl.setAttribute('data-e2e-text', '1');
                 bubble.appendChild(bodyEl);
@@ -7390,7 +7401,7 @@ function dataUrlToFile(dataUrl, filename) {
             }
 
             // URL preview (только для расшифрованных, не для плейсхолдера)
-            if ((d.text||hasE2E)&&!d.pollId&&!d.musicBase64&&!d.musicUrl&&!d.checklist&&!hasE2E&&!decryptedText.match(GIF_URL)) buildUrlPreview(decryptedText, bubble);
+            if ((d.text||hasE2E)&&!hasE2EOnlyAttachment&&!d.pollId&&!d.musicBase64&&!d.musicUrl&&!d.checklist&&!hasE2E&&!decryptedText.match(GIF_URL)) buildUrlPreview(decryptedText, bubble);
 
             // Footer
             const foot=document.createElement('div'); foot.className='msg-footer';
