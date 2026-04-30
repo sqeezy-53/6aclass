@@ -11,13 +11,13 @@
     <meta http-equiv="Content-Security-Policy"
           content="
             default-src 'self';
-            script-src  'self' 'sha256-dy2HtklB1G0Uu+QqHcmv6L9H+B9YF/E3Qk5DogUNRHw=' 'sha256-FARTdYhn1xEkKumY8CCScDq9pCBflz0dxkTRZtkQt9s=' 'sha256-wVplV+WHm6oU/QnpgS0quVhsfnGJpS8DJFK7jD5danc=' 'sha256-Iio9D5Fa3ofiFtJC/452p1WSlKXyB0Mb0FCp7A+rK9o=' https://www.gstatic.com https://apis.google.com;
+            script-src  'self' 'sha256-dy2HtklB1G0Uu+QqHcmv6L9H+B9YF/E3Qk5DogUNRHw=' 'sha256-FARTdYhn1xEkKumY8CCScDq9pCBflz0dxkTRZtkQt9s=' 'sha256-ORKSjTiJd8sEV6Cc03Wcg2T0J7ouqhUnZjkOPQUPJtY=' 'sha256-oI9mE5uoJFaMgMNfqibtFPIQCsimmzJT3047TZS+SBY=' https://www.gstatic.com https://apis.google.com;
             script-src-attr 'none';
             style-src   'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com https://cdn.jsdelivr.net;
             font-src    'self' https://fonts.gstatic.com https://cdn.jsdelivr.net;
             img-src     'self' data: blob: https:;
             media-src   'self' data: blob: https:;
-            connect-src 'self' https://sixaclass.onrender.com https://*.firebaseio.com https://*.googleapis.com https://www.gstatic.com wss://*.firebaseio.com;
+            connect-src 'self' https://sixaclass.onrender.com https://res.cloudinary.com https://*.cloudinary.com https://*.firebaseio.com https://*.googleapis.com https://www.gstatic.com wss://*.firebaseio.com;
             object-src  'none';
             base-uri    'self';
             form-action 'self';
@@ -1611,22 +1611,31 @@ async function sendDirectMessage(params) {
     throw new Error(`[e2e] Недопустимые поля: ${unknownFields.join(', ')}`);
 
   // ── Сохраняем в Firestore ──
-  await fsAddDoc(fsCollection(firestoreDb, 'dmConvs', convId, 'messages'), msgData);
+  try {
+    await fsAddDoc(fsCollection(firestoreDb, 'dmConvs', convId, 'messages'), msgData);
+  } catch (e) {
+    console.error('[e2e] DM message create failed', { error: e, msgData });
+    throw e;
+  }
 
   // Обновляем метаданные диалога
   const previewText = imageFile ? '🖼 Изображение'
                     : voiceFile ? '🎙 Голосовое'
                     : musicFile ? '🎵 Музыка'
                     : '🔒 Сообщение';
-  await fsSetDoc(
-    fsDoc(firestoreDb, 'dmConvs', convId),
-    {
-      lastText: previewText,
-      lastAt:   fsServerTimestamp(),
-      [`unread.${peerUid}`]: fsIncrement(1)
-    },
-    { merge: true }
-  );
+  try {
+    await fsSetDoc(
+      fsDoc(firestoreDb, 'dmConvs', convId),
+      {
+        lastText: previewText,
+        lastAt:   fsServerTimestamp(),
+        [`unread.${peerUid}`]: fsIncrement(1)
+      },
+      { merge: true }
+    );
+  } catch (e) {
+    console.warn('[e2e] DM metadata update failed; message was created', e);
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -7085,6 +7094,15 @@ function dataUrlToFile(dataUrl, filename) {
             return ts.toDate().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
         }
 
+
+        function isUsableMediaSrc(src){
+            if (typeof src !== 'string') return false;
+            const s = src.trim();
+            if (!s) return false;
+            if (s.startsWith('[🔒') || s.includes('Не удалось расшифровать')) return false;
+            return s.startsWith('blob:') || s.startsWith('data:') || s.startsWith('https://') || s.startsWith('http://');
+        }
+
         function renderMessageRow(docSnap,prevDocSnap){
             const id=docSnap.id, d=docSnap.data();
             const myUid=auth.currentUser?String(auth.currentUser.uid):'';
@@ -7174,36 +7192,33 @@ function dataUrlToFile(dataUrl, filename) {
             // Forwarded badge
             if (d.forwarded){const fw=document.createElement('div');fw.style.cssText='font-size:.72rem;color:var(--accent);margin-bottom:4px;font-weight:600';fw.textContent='↗️ Переслано';bubble.appendChild(fw);}
 
-            // Image (if any) — E2E: расшифровываем Cloudinary URL, затем показываем img
+            // Image (if any) — E2E: расшифровываем encrypted blob через window.E2E.decryptMessage()
             if (currentChatMode === 'dm' && (d.e2eImgForPeer || d.e2eImgForMe)) {
                 const msgImg = document.createElement('img');
                 msgImg.className = 'msg-img'; msgImg.alt = '🖼 Загрузка…'; msgImg.loading = 'lazy';
                 msgImg.style.cssText = 'min-width:80px;min-height:60px;background:var(--surface-3)';
-                if (myPrivateKey) {
-                    const imgCipher = pickE2ECipher(d, myUid, 'e2eImgForPeer', 'e2eImgForMe');
-                    const imgFallback = d.e2eImgForPeer || d.e2eImgForMe;
-                    const applyUrl = (url) => {
+                bubble.appendChild(msgImg);
+                if (myPrivateKey && window.E2E && typeof window.E2E.decryptMessage === 'function') {
+                    window.E2E.decryptMessage(d, myUid, myPrivateKey, db, doc, getDoc).then(res => {
+                        const url = res && res.imageObjectUrl;
+                        if (!isUsableMediaSrc(url)) { msgImg.alt = '🔒 Изображение не расшифровано'; return; }
                         msgImg.src = url;
                         msgImg.alt = '🖼';
                         msgImg.style.cssText = '';
                         msgImg.addEventListener('click', e => { e.stopPropagation(); openLightbox(url); });
-                    };
-                    rsaDecrypt(myPrivateKey, imgCipher).then(applyUrl).catch(() => {
-                        if (imgFallback && imgFallback !== imgCipher)
-                            rsaDecrypt(myPrivateKey, imgFallback).then(applyUrl).catch(()=>{ msgImg.alt='🔒 Изображение'; });
-                        else msgImg.alt = '🔒 Изображение';
-                    });
+                    }).catch(() => { msgImg.alt = '🔒 Изображение не расшифровано'; });
                 } else { msgImg.alt = '🔒 Изображение'; }
-                bubble.appendChild(msgImg);
             } else if (d.imageBase64 || d.imageUrl) {
                 const imgSrc = d.imageUrl || d.imageBase64;
-                const msgImg = document.createElement('img');
-                msgImg.className = 'msg-img';
-                msgImg.src = imgSrc;
-                msgImg.alt = '🖼';
-                msgImg.loading = 'lazy';
-                msgImg.addEventListener('click', e => { e.stopPropagation(); openLightbox(imgSrc); });
-                bubble.appendChild(msgImg);
+                if (isUsableMediaSrc(imgSrc)) {
+                    const msgImg = document.createElement('img');
+                    msgImg.className = 'msg-img';
+                    msgImg.src = imgSrc;
+                    msgImg.alt = '🖼';
+                    msgImg.loading = 'lazy';
+                    msgImg.addEventListener('click', e => { e.stopPropagation(); openLightbox(imgSrc); });
+                    bubble.appendChild(msgImg);
+                }
             }
 
             // Voice message (if any) — поддержка E2E зашифрованных голосовых в ЛС
@@ -7218,10 +7233,10 @@ function dataUrlToFile(dataUrl, filename) {
                 const durEl = document.createElement('span'); durEl.className='voice-duration'; durEl.textContent=fmtVoiceTime(dur);
                 voiceWrap.appendChild(playBtn); voiceWrap.appendChild(durEl);
                 bubble.appendChild(voiceWrap);
-                if (myPrivateKey) {
-                    const vCipher = pickE2ECipher(d, myUid, 'e2eVoiceForPeer', 'e2eVoiceForMe');
-                    const vFallback = d.e2eVoiceForPeer || d.e2eVoiceForMe;
-                    rsaDecrypt(myPrivateKey, vCipher).then(plainUrl => { const plainB64 = plainUrl; // voiceUrl расшифрован
+                if (myPrivateKey && window.E2E && typeof window.E2E.decryptMessage === 'function') {
+                    window.E2E.decryptMessage(d, myUid, myPrivateKey, db, doc, getDoc).then(res => {
+                        const plainB64 = res && res.voiceObjectUrl;
+                        if (!isUsableMediaSrc(plainB64)) { playBtn.innerHTML = '🔒'; playBtn.title = 'Не удалось расшифровать'; return; }
                         // Заменяем плейсхолдер на полноценный плеер
                         playBtn.innerHTML = '<i class="ph ph-play" aria-hidden="true"></i>';
                         playBtn.disabled = false; playBtn.title = 'Воспроизвести';
@@ -7239,11 +7254,7 @@ function dataUrlToFile(dataUrl, filename) {
                             playTimer=setInterval(()=>{if(!audio)return;const p=dur>0?audio.currentTime/dur:0;durEl.textContent=fmtVoiceTime(Math.floor(audio.currentTime));updateBars(p);},100);
                         });
                         waveEl.addEventListener('click',e=>{if(!audio||!dur)return;const rect=waveEl.getBoundingClientRect();audio.currentTime=((e.clientX-rect.left)/rect.width)*dur;});
-                    }).catch(() => {
-                        if (vFallback && vFallback !== vCipher)
-                            rsaDecrypt(myPrivateKey, vFallback).then(p => { playBtn.innerHTML='▶'; playBtn.disabled=false; playBtn.onclick=()=>{new Audio(p).play();}; }).catch(()=>{ playBtn.innerHTML='🔒'; });
-                        else playBtn.innerHTML = '🔒';
-                    });
+                    }).catch(() => { playBtn.innerHTML = '🔒'; playBtn.title = 'Не удалось расшифровать'; });
                 }
             } else if (d.voiceBase64 || d.voiceUrl) {
                 const voiceWrap = document.createElement('div');
@@ -7289,7 +7300,9 @@ function dataUrlToFile(dataUrl, filename) {
                 }
                 playBtn.addEventListener('click', ()=>{
                     if (isPlaying) { stopAudio(); return; }
-                    audio = new Audio(d.voiceUrl || d.voiceBase64);
+                    const legacyVoiceSrc = d.voiceUrl || d.voiceBase64;
+                    if (!isUsableMediaSrc(legacyVoiceSrc)) { showToast('Голосовое не расшифровано'); return; }
+                    audio = new Audio(legacyVoiceSrc);
                     audio.onended = stopAudio;
                     audio.play().catch(()=>showToast('Не удалось воспроизвести'));
                     isPlaying=true;
@@ -7344,7 +7357,8 @@ function dataUrlToFile(dataUrl, filename) {
                     musicPlaceholder.textContent = '🔒 Музыка';
                 }
             } else if (d.musicBase64 || d.musicUrl) {
-                bubble.appendChild(buildMusicBubble(id, d));
+                const legacyMusicSrc = d.musicUrl || d.musicBase64;
+                if (isUsableMediaSrc(legacyMusicSrc)) bubble.appendChild(buildMusicBubble(id, d));
             }
 
                         // Checklist message — поддержка E2E зашифрованных чек-листов

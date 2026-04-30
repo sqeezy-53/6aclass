@@ -1552,22 +1552,31 @@ async function sendDirectMessage(params) {
     throw new Error(`[e2e] Недопустимые поля: ${unknownFields.join(', ')}`);
 
   // ── Сохраняем в Firestore ──
-  await fsAddDoc(fsCollection(firestoreDb, 'dmConvs', convId, 'messages'), msgData);
+  try {
+    await fsAddDoc(fsCollection(firestoreDb, 'dmConvs', convId, 'messages'), msgData);
+  } catch (e) {
+    console.error('[e2e] DM message create failed', { error: e, msgData });
+    throw e;
+  }
 
   // Обновляем метаданные диалога
   const previewText = imageFile ? '🖼 Изображение'
                     : voiceFile ? '🎙 Голосовое'
                     : musicFile ? '🎵 Музыка'
                     : '🔒 Сообщение';
-  await fsSetDoc(
-    fsDoc(firestoreDb, 'dmConvs', convId),
-    {
-      lastText: previewText,
-      lastAt:   fsServerTimestamp(),
-      [`unread.${peerUid}`]: fsIncrement(1)
-    },
-    { merge: true }
-  );
+  try {
+    await fsSetDoc(
+      fsDoc(firestoreDb, 'dmConvs', convId),
+      {
+        lastText: previewText,
+        lastAt:   fsServerTimestamp(),
+        [`unread.${peerUid}`]: fsIncrement(1)
+      },
+      { merge: true }
+    );
+  } catch (e) {
+    console.warn('[e2e] DM metadata update failed; message was created', e);
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════
