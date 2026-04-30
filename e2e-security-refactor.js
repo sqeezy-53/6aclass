@@ -216,6 +216,94 @@ async function hasStoredPrivateKey(uid) {
   return blob instanceof Uint8Array && blob.length > 44;
 }
 
+/**
+ * Удаляет локальные E2E-ключи текущего устройства.
+ * Важно: это НЕ удаляет старые сообщения из Firestore, но старые ЛС уже не расшифруются.
+ */
+async function deleteLocalE2EKeys(uid) {
+  await idbDelete(`e2e_privkey_${uid}`);
+  await idbDelete(`e2e_salt_${uid}`);
+  await idbDelete(`e2e_pubkey_${uid}`);
+}
+
+/**
+ * Проверяет, что приватный ключ подходит к публичному ключу.
+ * Простыми словами: шифруем тестовую строку публичным ключом и пробуем открыть приватным.
+ */
+async function verifyPrivateKeyMatchesPublic(privateKey, publicKeyB64) {
+  if (!privateKey || !publicKeyB64) return false;
+  try {
+    const pubKey = await importPublicKey(publicKeyB64);
+    const testCt = await rsaEncrypt(pubKey, 'e2e_key_check');
+    const testPlain = await rsaDecrypt(privateKey, testCt);
+    return testPlain === 'e2e_key_check';
+  } catch (e) {
+    return false;
+  }
+}
+
+/**
+ * Берёт публичный ключ из Firebase, а если его там нет — из IndexedDB.
+ * Если нашли только локальный публичный ключ, публикуем его обратно в Firebase.
+ */
+async function getOrRepairPublicKey(uid, firestoreDb, fsDoc, fsGetDoc, fsSetDoc) {
+  const snap = await fsGetDoc(fsDoc(firestoreDb, 'users', uid));
+  let publicKeyB64 = snap.data()?.publicKey ?? null;
+
+  if (!publicKeyB64) {
+    const localPublic = await idbGet(`e2e_pubkey_${uid}`);
+    if (typeof localPublic === 'string' && localPublic.length > 20) {
+      publicKeyB64 = localPublic;
+      await fsSetDoc(fsDoc(firestoreDb, 'users', uid), { publicKey: publicKeyB64 }, { merge: true });
+    }
+  }
+
+  return publicKeyB64;
+}
+
+/**
+ * Меняет мастер-пароль без смены RSA-ключей.
+ * Старые ЛС остаются читаемыми, потому что приватный ключ тот же самый.
+ */
+async function changeMasterPassword(uid, oldPassword, newPassword) {
+  const privateKey = await loadPrivateKey(uid, oldPassword);
+  if (!privateKey) throw new Error('old_password_invalid');
+  await savePrivateKey(uid, privateKey, newPassword);
+  return privateKey;
+}
+
+/**
+ * Полный сброс E2E-ключей.
+ * Старые ЛС, зашифрованные на старый публичный ключ, расшифровать уже нельзя.
+ */
+async function resetE2EKeyPair(uid, firestoreDb, fsDoc, fsSetDoc, password) {
+  await deleteLocalE2EKeys(uid);
+
+  const pair = await generateKeyPair();
+  const publicKeyB64 = await exportPublicKey(pair.publicKey);
+
+  await idbSet(`e2e_pubkey_${uid}`, publicKeyB64);
+  await savePrivateKey(uid, pair.privateKey, password);
+  await fsSetDoc(fsDoc(firestoreDb, 'users', uid), { publicKey: publicKeyB64 }, { merge: true });
+
+  console.warn('[e2e] Ключевая пара сброшена. Старые ЛС могут не читаться.');
+  return { privateKey: pair.privateKey, publicKeyB64 };
+}
+
+async function resetE2EKeyPairWithPrompt(uid, firestoreDb, fsDoc, fsSetDoc) {
+  const ok = confirm(
+    'Сбросить E2E-ключи?\n\n' +
+    'Это поможет, если мастер-пароль забыт или ключ сломан.\n' +
+    'Минус: старые ЛС, зашифрованные старым ключом, могут больше не открываться.\n\n' +
+    'Новые ЛС после сброса будут работать.'
+  );
+  if (!ok) return { privateKey: null, publicKeyB64: null };
+
+  const newPassword = await promptMasterPassword('reset');
+  return resetE2EKeyPair(uid, firestoreDb, fsDoc, fsSetDoc, newPassword);
+}
+
+
 /* ═══════════════════════════════════════════════════════════════
    § 3  RSA-OAEP + AES-GCM — текстовое гибридное шифрование
 ═══════════════════════════════════════════════════════════════ */
@@ -430,12 +518,16 @@ function hexToBuffer(hex) {
  * Возвращает Promise<string> — введённый пароль.
  * При отмене выбрасывает Error('cancelled').
  *
- * @param {'create'|'unlock'} mode
+ * mode:
+ *   create — первый мастер-пароль
+ *   unlock — открыть ЛС
+ *   reset  — новый мастер-пароль после сброса ключей
+ *
+ * @param {'create'|'unlock'|'reset'} mode
  * @returns {Promise<string>}
  */
 function promptMasterPassword(mode) {
   return new Promise((resolve, reject) => {
-    // Создаём модалку программно, чтобы не зависеть от существующей разметки
     const overlay = document.createElement('div');
     overlay.style.cssText = `
       position:fixed;inset:0;background:rgba(0,0,0,.7);
@@ -446,26 +538,33 @@ function promptMasterPassword(mode) {
     const card = document.createElement('div');
     card.style.cssText = `
       background:var(--surface,#1a1a2e);color:var(--text,#e8edf8);
-      border-radius:20px;padding:32px 28px;max-width:380px;width:90%;
+      border-radius:20px;padding:32px 28px;max-width:410px;width:90%;
       box-shadow:0 24px 72px rgba(0,0,0,.6);font-family:var(--font-body,'DM Sans',sans-serif);
     `;
 
-    const isCreate = mode === 'create';
+    const isCreate = mode === 'create' || mode === 'reset';
+    const isReset  = mode === 'reset';
+    const title = isReset ? '♻️ Новый мастер-пароль'
+                : isCreate ? '🔑 Создать мастер-пароль'
+                : '🔐 Введите мастер-пароль';
+
+    const description = isReset
+      ? 'Сейчас будет создана новая E2E-ключевая пара. Старые ЛС могут не открываться, но новые сообщения снова заработают.'
+      : isCreate
+        ? 'Этот пароль защищает ваши E2E-ключи. Он нужен для ЛС. Запишите его: без него старые ЛС нельзя будет открыть.'
+        : 'Для доступа к ЛС введите мастер-пароль. Его можно сменить, если помните старый. Если забыли — можно сбросить ключи.';
+
     card.innerHTML = `
-      <h3 style="margin:0 0 8px;font-size:1.2rem;font-weight:700;">
-        ${isCreate ? '🔑 Создать мастер-пароль' : '🔐 Введите мастер-пароль'}
-      </h3>
+      <h3 style="margin:0 0 8px;font-size:1.2rem;font-weight:700;">${title}</h3>
       <p style="margin:0 0 20px;font-size:.88rem;color:var(--muted,#7d8da6);line-height:1.5;">
-        ${isCreate
-          ? 'Этот пароль защищает ваши E2E-ключи. Он <strong style="color:var(--danger,#f87171)">не восстанавливается</strong> — сохраните его в надёжном месте.'
-          : 'Для доступа к переписке введите мастер-пароль, заданный при регистрации.'}
+        ${description}
       </p>
       <input id="mp-input" type="password" autocomplete="current-password"
-        placeholder="Мастер-пароль"
+        placeholder="${isCreate ? 'Новый мастер-пароль' : 'Мастер-пароль'}"
         style="width:100%;box-sizing:border-box;padding:12px 16px;border-radius:12px;
                border:1.5px solid var(--border-strong,rgba(255,255,255,.1));
                background:var(--surface-2,#141927);color:var(--text,#e8edf8);
-               font-size:1rem;outline:none;margin-bottom:${isCreate ? '12px' : '20px'}">
+               font-size:1rem;outline:none;margin-bottom:${isCreate ? '12px' : '14px'}">
       ${isCreate ? `
         <input id="mp-input2" type="password" autocomplete="new-password"
           placeholder="Повторите пароль"
@@ -473,14 +572,25 @@ function promptMasterPassword(mode) {
                  border:1.5px solid var(--border-strong,rgba(255,255,255,.1));
                  background:var(--surface-2,#141927);color:var(--text,#e8edf8);
                  font-size:1rem;outline:none;margin-bottom:20px">
-      ` : ''}
+      ` : `
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin:0 0 16px;">
+          <button id="mp-change" type="button"
+            style="padding:7px 10px;border-radius:10px;border:1px solid var(--border-strong,rgba(255,255,255,.1));background:transparent;color:var(--accent,#63b3ff);cursor:pointer;font-size:.78rem;font-weight:700;">
+            Сменить пароль
+          </button>
+          <button id="mp-reset" type="button"
+            style="padding:7px 10px;border-radius:10px;border:1px solid rgba(248,113,113,.35);background:rgba(248,113,113,.08);color:var(--danger,#f87171);cursor:pointer;font-size:.78rem;font-weight:700;">
+            Забыл пароль / сбросить ключи
+          </button>
+        </div>
+      `}
       <p id="mp-err" style="color:var(--danger,#f87171);font-size:.82rem;margin:0 0 12px;display:none;"></p>
       <div style="display:flex;gap:10px;justify-content:flex-end;">
         <button id="mp-cancel" style="padding:10px 20px;border-radius:12px;border:1.5px solid var(--border-strong,rgba(255,255,255,.1));background:transparent;color:var(--muted,#7d8da6);cursor:pointer;font-size:.9rem;">
           Отмена
         </button>
         <button id="mp-ok" style="padding:10px 22px;border-radius:12px;border:none;background:var(--accent,#63b3ff);color:#030b18;font-weight:700;cursor:pointer;font-size:.9rem;">
-          ${isCreate ? 'Создать' : 'Войти'}
+          ${isCreate ? 'Сохранить' : 'Войти'}
         </button>
       </div>
     `;
@@ -494,25 +604,29 @@ function promptMasterPassword(mode) {
 
     const showErr = msg => { errEl.textContent = msg; errEl.style.display = 'block'; };
     const hideErr = ()  => { errEl.style.display = 'none'; };
-
     const cleanup = () => overlay.remove();
 
     card.querySelector('#mp-cancel').addEventListener('click', () => {
       cleanup(); reject(new Error('cancelled'));
     });
 
+    const changeBtn = card.querySelector('#mp-change');
+    if (changeBtn) changeBtn.addEventListener('click', () => {
+      cleanup(); reject(new Error('change_requested'));
+    });
+
+    const resetBtn = card.querySelector('#mp-reset');
+    if (resetBtn) resetBtn.addEventListener('click', () => {
+      cleanup(); reject(new Error('reset_requested'));
+    });
+
     card.querySelector('#mp-ok').addEventListener('click', () => {
       const pwd = input.value;
       if (!pwd || pwd.length < 8) { showErr('Минимум 8 символов'); return; }
-      if (isCreate) {
-        if (pwd !== input2.value) { showErr('Пароли не совпадают'); return; }
-      }
-      hideErr();
-      cleanup();
-      resolve(pwd);
+      if (isCreate && pwd !== input2.value) { showErr('Пароли не совпадают'); return; }
+      hideErr(); cleanup(); resolve(pwd);
     });
 
-    // Enter submit
     [input, input2].filter(Boolean).forEach(el =>
       el.addEventListener('keydown', e => {
         if (e.key === 'Enter') card.querySelector('#mp-ok').click();
@@ -522,6 +636,79 @@ function promptMasterPassword(mode) {
     input.focus();
   });
 }
+
+/**
+ * Окно смены мастер-пароля: старый пароль + новый пароль + повтор.
+ * Смена не меняет RSA-ключи, поэтому старые ЛС остаются читаемыми.
+ */
+function promptChangeMasterPassword() {
+  return new Promise((resolve, reject) => {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = `
+      position:fixed;inset:0;background:rgba(0,0,0,.7);
+      display:flex;align-items:center;justify-content:center;
+      z-index:99999;backdrop-filter:blur(4px);
+    `;
+
+    const card = document.createElement('div');
+    card.style.cssText = `
+      background:var(--surface,#1a1a2e);color:var(--text,#e8edf8);
+      border-radius:20px;padding:32px 28px;max-width:410px;width:90%;
+      box-shadow:0 24px 72px rgba(0,0,0,.6);font-family:var(--font-body,'DM Sans',sans-serif);
+    `;
+
+    card.innerHTML = `
+      <h3 style="margin:0 0 8px;font-size:1.2rem;font-weight:700;">🔁 Смена мастер-пароля</h3>
+      <p style="margin:0 0 18px;font-size:.88rem;color:var(--muted,#7d8da6);line-height:1.5;">
+        Введи старый пароль и новый. ЛС не потеряются, потому что меняется только пароль-обёртка вокруг приватного ключа.
+      </p>
+      <input id="mp-old" type="password" autocomplete="current-password" placeholder="Старый мастер-пароль"
+        style="width:100%;box-sizing:border-box;padding:12px 16px;border-radius:12px;border:1.5px solid var(--border-strong,rgba(255,255,255,.1));background:var(--surface-2,#141927);color:var(--text,#e8edf8);font-size:1rem;outline:none;margin-bottom:10px">
+      <input id="mp-new" type="password" autocomplete="new-password" placeholder="Новый мастер-пароль"
+        style="width:100%;box-sizing:border-box;padding:12px 16px;border-radius:12px;border:1.5px solid var(--border-strong,rgba(255,255,255,.1));background:var(--surface-2,#141927);color:var(--text,#e8edf8);font-size:1rem;outline:none;margin-bottom:10px">
+      <input id="mp-new2" type="password" autocomplete="new-password" placeholder="Повторите новый пароль"
+        style="width:100%;box-sizing:border-box;padding:12px 16px;border-radius:12px;border:1.5px solid var(--border-strong,rgba(255,255,255,.1));background:var(--surface-2,#141927);color:var(--text,#e8edf8);font-size:1rem;outline:none;margin-bottom:14px">
+      <p id="mp-err" style="color:var(--danger,#f87171);font-size:.82rem;margin:0 0 12px;display:none;"></p>
+      <div style="display:flex;gap:10px;justify-content:flex-end;">
+        <button id="mp-cancel" style="padding:10px 20px;border-radius:12px;border:1.5px solid var(--border-strong,rgba(255,255,255,.1));background:transparent;color:var(--muted,#7d8da6);cursor:pointer;font-size:.9rem;">Отмена</button>
+        <button id="mp-ok" style="padding:10px 22px;border-radius:12px;border:none;background:var(--accent,#63b3ff);color:#030b18;font-weight:700;cursor:pointer;font-size:.9rem;">Сменить</button>
+      </div>
+    `;
+
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+
+    const oldEl = card.querySelector('#mp-old');
+    const newEl = card.querySelector('#mp-new');
+    const new2El = card.querySelector('#mp-new2');
+    const errEl = card.querySelector('#mp-err');
+    const showErr = msg => { errEl.textContent = msg; errEl.style.display = 'block'; };
+    const cleanup = () => overlay.remove();
+
+    card.querySelector('#mp-cancel').addEventListener('click', () => {
+      cleanup(); reject(new Error('cancelled'));
+    });
+
+    card.querySelector('#mp-ok').addEventListener('click', () => {
+      const oldPassword = oldEl.value;
+      const newPassword = newEl.value;
+      if (!oldPassword || oldPassword.length < 8) { showErr('Старый пароль слишком короткий'); return; }
+      if (!newPassword || newPassword.length < 8) { showErr('Новый пароль: минимум 8 символов'); return; }
+      if (newPassword !== new2El.value) { showErr('Новые пароли не совпадают'); return; }
+      if (oldPassword === newPassword) { showErr('Новый пароль должен отличаться от старого'); return; }
+      cleanup(); resolve({ oldPassword, newPassword });
+    });
+
+    [oldEl, newEl, new2El].forEach(el =>
+      el.addEventListener('keydown', e => {
+        if (e.key === 'Enter') card.querySelector('#mp-ok').click();
+      })
+    );
+
+    oldEl.focus();
+  });
+}
+
 
 /* ═══════════════════════════════════════════════════════════════
    § 6  initE2EForUser — РЕФАКТОРИНГ (мастер-пароль)
@@ -550,12 +737,41 @@ async function initE2EForUser(uid, firestoreDb, fsDoc, fsGetDoc, fsSetDoc) {
   // ── Сценарий B: ключ сохранён — разблокируем паролем ──
   if (hasKey) {
     let attempts = 0;
+
     while (attempts < 3) {
       let password;
       try {
         password = await promptMasterPassword('unlock');
       } catch (e) {
-        // Пользователь нажал «Отмена» — работаем без E2E (только чтение)
+        if (e.message === 'reset_requested') {
+          try {
+            return await resetE2EKeyPairWithPrompt(uid, firestoreDb, fsDoc, fsSetDoc);
+          } catch (err) {
+            console.warn('[e2e] Сброс ключей отменён или не удался:', err);
+            return { privateKey: null, publicKeyB64: null };
+          }
+        }
+
+        if (e.message === 'change_requested') {
+          try {
+            const { oldPassword, newPassword } = await promptChangeMasterPassword();
+            const privateKey = await changeMasterPassword(uid, oldPassword, newPassword);
+            const publicKeyB64 = await getOrRepairPublicKey(uid, firestoreDb, fsDoc, fsGetDoc, fsSetDoc);
+
+            if (!publicKeyB64) throw new Error('public_key_missing');
+            const ok = await verifyPrivateKeyMatchesPublic(privateKey, publicKeyB64);
+            if (!ok) throw new Error('public_private_mismatch');
+
+            alert('Мастер-пароль изменён. Старые ЛС остались доступными.');
+            return { privateKey, publicKeyB64 };
+          } catch (err) {
+            console.warn('[e2e] Не удалось сменить мастер-пароль:', err);
+            alert('Не удалось сменить пароль. Скорее всего, старый пароль введён неверно.');
+            continue;
+          }
+        }
+
+        // Пользователь нажал «Отмена» — работаем без E2E
         console.warn('[e2e] Пользователь отменил ввод пароля — E2E недоступен');
         return { privateKey: null, publicKeyB64: null };
       }
@@ -564,53 +780,40 @@ async function initE2EForUser(uid, firestoreDb, fsDoc, fsGetDoc, fsSetDoc) {
         const privateKey = await loadPrivateKey(uid, password);
         if (!privateKey) throw new Error('null key');
 
-        // Проверяем совпадение с публичным ключом в Firebase
-        const snap           = await fsGetDoc(fsDoc(firestoreDb, 'users', uid));
-        const storedPubB64   = snap.data()?.publicKey ?? null;
+        const publicKeyB64 = await getOrRepairPublicKey(uid, firestoreDb, fsDoc, fsGetDoc, fsSetDoc);
+        if (!publicKeyB64) throw new Error('public_key_missing');
 
-        if (storedPubB64) {
-          const pubKey    = await importPublicKey(storedPubB64);
-          const testCt    = await rsaEncrypt(pubKey, 'e2e_ok');
-          const testPlain = await rsaDecrypt(privateKey, testCt);
+        const ok = await verifyPrivateKeyMatchesPublic(privateKey, publicKeyB64);
+        if (!ok) throw new Error('public_private_mismatch');
 
-          if (testPlain === 'e2e_ok') {
-            console.info('[e2e] Ключи разблокированы и верифицированы');
-            return { privateKey, publicKeyB64: storedPubB64 };
-          }
-        } else {
-          // Публичного ключа нет в Firebase — публикуем свой
-          const pubKeyImported = await crypto.subtle.exportKey(
-            'spki',
-            // Нам нужен публичный ключ — пересоздадим из JWK
-            // Простейший способ: экспортируем приватный→JWK, извлекаем n/e → строим публичный
-            privateKey  // placeholder — см. NOTE ниже
-          );
-          // NOTE: Web Crypto не позволяет «вытащить» публичный ключ из CryptoKey private.
-          // Корректный путь — при сохранении дублировать публичный ключ в IDB.
-          // Если публичного нет — инициируем перегенерацию.
-          throw new Error('no_public_in_firebase');
-        }
+        console.info('[e2e] Ключи разблокированы и верифицированы');
+        return { privateKey, publicKeyB64 };
       } catch (err) {
         attempts++;
-        if (err.message === 'no_public_in_firebase') break; // → перегенерация
-        if (err.name === 'OperationError') {
-          // AES-GCM провалился → неверный пароль
-          console.warn(`[e2e] Неверный пароль (попытка ${attempts}/3)`);
-          if (attempts >= 3) {
-            alert('Неверный пароль 3 раза. E2E-переписка недоступна на этом устройстве.');
+        console.warn(`[e2e] Не удалось открыть ключ (попытка ${attempts}/3):`, err);
+
+        if (attempts >= 3) {
+          const reset = confirm(
+            'Мастер-пароль не подошёл 3 раза или ключ сломан.\n\n' +
+            'Сбросить E2E-ключи? Старые ЛС могут перестать открываться, зато новые ЛС заработают.'
+          );
+          if (!reset) return { privateKey: null, publicKeyB64: null };
+
+          try {
+            const newPassword = await promptMasterPassword('reset');
+            return await resetE2EKeyPair(uid, firestoreDb, fsDoc, fsSetDoc, newPassword);
+          } catch (resetErr) {
+            console.warn('[e2e] Сброс ключей отменён или не удался:', resetErr);
             return { privateKey: null, publicKeyB64: null };
           }
-        } else {
-          console.error('[e2e] Ошибка загрузки ключа:', err);
-          break;
         }
       }
     }
-    // Если дошли сюда — ключевая пара не совпала → перегенерация
-    console.warn('[e2e] Несоответствие ключей — генерируем новую пару');
+
+    return { privateKey: null, publicKeyB64: null };
   }
 
-  // ── Сценарий A: первый вход или перегенерация ──
+  // ── Сценарий A: первый вход ──
   let password;
   try {
     password = await promptMasterPassword('create');
@@ -619,17 +822,11 @@ async function initE2EForUser(uid, firestoreDb, fsDoc, fsGetDoc, fsSetDoc) {
     return { privateKey: null, publicKeyB64: null };
   }
 
-  // Генерируем новую пару RSA-OAEP 2048
   const pair         = await generateKeyPair();
   const publicKeyB64 = await exportPublicKey(pair.publicKey);
 
-  // Сохраняем публичный ключ в IDB (для последующей верификации)
   await idbSet(`e2e_pubkey_${uid}`, publicKeyB64);
-
-  // Сохраняем приватный ключ в IDB (зашифрованный мастер-паролем)
   await savePrivateKey(uid, pair.privateKey, password);
-
-  // Публикуем публичный ключ в Firebase
   await fsSetDoc(fsDoc(firestoreDb, 'users', uid), { publicKey: publicKeyB64 }, { merge: true });
 
   console.info('[e2e] Новая ключевая пара сгенерирована и сохранена');
@@ -1047,6 +1244,10 @@ async function uploadViaBackend(blob, onProgress, type = 'raw') {
 window.E2E = {
   // Ключи
   initE2EForUser,
+  changeMasterPassword,
+  resetE2EKeyPair,
+  deleteLocalE2EKeys,
+  promptChangeMasterPassword,
   savePrivateKey,
   loadPrivateKey,
   hasStoredPrivateKey,
