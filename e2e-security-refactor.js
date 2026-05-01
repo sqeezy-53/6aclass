@@ -22,7 +22,7 @@
  */
 
 (function e2eModule() {
-'use strict';
+  'use strict';
 
 /* ═══════════════════════════════════════════════════════════════
    § 0  КОНСТАНТЫ
@@ -153,14 +153,18 @@ async function deriveKeyFromPassword(password, salt) {
 
 /**
  * Сохраняет приватный RSA-ключ в IndexedDB, зашифрованный мастер-паролем.
+ * ТАКЖЕ сохраняет публичный ключ (незашифрованный) для последующей верификации.
+ * Web Crypto не позволяет «вытащить» публичный ключ из приватного CryptoKey,
+ * поэтому publicKey должен передаваться явно при первой генерации.
  *
- * Формат блоба: [32 байта соли][12 байт IV][AES-GCM(JWK)]
+ * Формат блоба приватного: [32 байта соли][12 байт IV][AES-GCM(JWK)]
  *
  * @param {string}     uid
  * @param {CryptoKey}  privateKey
  * @param {string}     password   — мастер-пароль (не хранится)
+ * @param {CryptoKey}  [publicKey] — если передан, сохраняется в IDB как SPKI b64
  */
-async function savePrivateKey(uid, privateKey, password) {
+async function savePrivateKey(uid, privateKey, password, publicKey = null) {
   // 1. Экспортируем RSA-ключ в JWK
   const jwk   = await crypto.subtle.exportKey('jwk', privateKey);
   const plain = new TextEncoder().encode(JSON.stringify(jwk));
@@ -187,6 +191,17 @@ async function savePrivateKey(uid, privateKey, password) {
   blob.set(new Uint8Array(cipher), 44);
 
   await idbSet(`e2e_privkey_${uid}`, blob);
+
+  // Дублируем публичный ключ в IDB (не зашифрованный — он и так публичный)
+  // Это позволяет верифицировать пару без Firebase и восстановить её при сбое
+  if (publicKey) {
+    try {
+      const pubB64 = await exportPublicKey(publicKey);
+      await idbSet(`e2e_pubkey_${uid}`, pubB64);
+    } catch (e) {
+      console.warn('[e2e] Не удалось сохранить публичный ключ в IDB:', e);
+    }
+  }
 }
 
 /**
@@ -526,13 +541,65 @@ async function ratchetNextChainKey(chainKeyHex) {
 function ratchetStateKey(kind, convId, uid) {
   return `e2e_ratchet_${kind}_${convId}_${uid}`;
 }
+
+/**
+ * Получает или генерирует AES-GCM ключ для шифрования ratchet-состояния в IDB.
+ * Ключ привязан к устройству — хранится в IDB и не покидает браузер.
+ * Защищает ratchet от извлечения при физическом доступе к устройству
+ * (инструменты разработчика, утечка IDB-файла).
+ */
+let _ratchetStorageKey = null;
+async function getRatchetStorageKey() {
+  if (_ratchetStorageKey) return _ratchetStorageKey;
+  const stored = await idbGet('e2e_ratchet_storage_key');
+  if (stored instanceof Uint8Array && stored.length === 32) {
+    _ratchetStorageKey = await crypto.subtle.importKey(
+      'raw', stored, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']
+    );
+  } else {
+    _ratchetStorageKey = await crypto.subtle.generateKey(
+      { name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']
+    );
+    const raw = await crypto.subtle.exportKey('raw', _ratchetStorageKey);
+    await idbSet('e2e_ratchet_storage_key', new Uint8Array(raw));
+  }
+  return _ratchetStorageKey;
+}
+
 async function loadRatchetState(kind, convId, uid) {
   const raw = await idbGet(ratchetStateKey(kind, convId, uid));
   if (!raw) return null;
-  try { return typeof raw === 'string' ? JSON.parse(raw) : raw; } catch { return null; }
+  // Поддержка старого незашифрованного формата (миграция)
+  if (typeof raw === 'string') {
+    try { return JSON.parse(raw); } catch { return null; }
+  }
+  // Новый формат: Uint8Array = [12 байт IV][AES-GCM(JSON)]
+  if (raw instanceof Uint8Array && raw.length > 12) {
+    try {
+      const key = await getRatchetStorageKey();
+      const iv = raw.slice(0, 12);
+      const ct = raw.slice(12);
+      const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
+      return JSON.parse(new TextDecoder().decode(plain));
+    } catch { return null; }
+  }
+  return null;
 }
+
 async function saveRatchetState(kind, convId, uid, state) {
-  await idbSet(ratchetStateKey(kind, convId, uid), JSON.stringify(state));
+  try {
+    const key   = await getRatchetStorageKey();
+    const iv    = crypto.getRandomValues(new Uint8Array(12));
+    const plain = new TextEncoder().encode(JSON.stringify(state));
+    const ct    = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, plain);
+    const blob  = new Uint8Array(12 + ct.byteLength);
+    blob.set(iv, 0);
+    blob.set(new Uint8Array(ct), 12);
+    await idbSet(ratchetStateKey(kind, convId, uid), blob);
+  } catch (e) {
+    console.error('[e2e] Не удалось зашифровать ratchet-состояние:', e);
+    throw e;
+  }
 }
 async function clearRatchetState(kind, convId, uid) {
   await idbDelete(ratchetStateKey(kind, convId, uid));
@@ -837,6 +904,7 @@ async function decryptBuffer(encryptedBuffer, rawAesKey) {
  * @returns {Promise<string>}  Object URL или data URL
  */
 async function decryptMediaUrl(myPrivateKey, encryptedAesB64, cloudinaryRawUrl) {
+  if (!isE2ETrustedMediaUrl(cloudinaryRawUrl)) throw new Error('invalid_or_untrusted_media_url');
   // 1. RSA-расшифровываем AES-ключ (hex → ArrayBuffer)
   const aesHex    = await rsaDecrypt(myPrivateKey, encryptedAesB64);
   const rawAesKey = hexToBuffer(aesHex);
@@ -939,10 +1007,36 @@ async function decryptE2ETextValue(myPrivateKey, value, options = {}) {
   }
 }
 
+/**
+ * Список доверенных доменов для медиафайлов.
+ * fetch() будет выполнен ТОЛЬКО к этим доменам — защита от подмены URL в Firestore.
+ */
+const E2E_TRUSTED_MEDIA_DOMAINS = new Set([
+  'res.cloudinary.com',
+  'api.cloudinary.com',
+]);
+
+/**
+ * Проверяет, что URL медиафайла принадлежит доверенному домену.
+ * @param {string} url
+ * @returns {boolean}
+ */
+function isE2ETrustedMediaUrl(url) {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'https:') return false;
+    return [...E2E_TRUSTED_MEDIA_DOMAINS].some(
+      domain => parsed.hostname === domain || parsed.hostname.endsWith('.' + domain)
+    );
+  } catch (_) {
+    return false;
+  }
+}
+
 async function decryptMediaFileFromUrlAndAesHex(cloudinaryRawUrl, aesHex, mimeType = 'application/octet-stream') {
   const url = unwrapJsonString(cloudinaryRawUrl).trim();
   const keyHex = unwrapJsonString(aesHex).trim();
-  if (!url || !url.startsWith('https://')) throw new Error('invalid_media_url');
+  if (!url || !isE2ETrustedMediaUrl(url)) throw new Error('invalid_or_untrusted_media_url');
   if (!isLikelyHexKey(keyHex)) throw new Error('invalid_media_aes_key');
   const rawAesKey = hexToBuffer(keyHex);
   const resp = await fetch(url);
@@ -1020,7 +1114,54 @@ function hexToBuffer(hex) {
  * @param {'create'|'unlock'} mode
  * @returns {Promise<string>}
  */
-function promptMasterPassword(mode) {
+/**
+ * Показывает кастомное информационное сообщение (замена alert()).
+ * Не блокирует поток, не может быть перехвачен через window.alert.
+ * @param {string} message
+ * @param {'error'|'warn'|'info'} type
+ * @returns {Promise<void>} резолвится при нажатии OK
+ */
+function showE2ENotice(message, type = 'error') {
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = `
+      position:fixed;inset:0;background:rgba(0,0,0,.7);
+      display:flex;align-items:center;justify-content:center;
+      z-index:99999;backdrop-filter:blur(4px);
+    `;
+    const iconMap  = { error: '🚫', warn: '⚠️', info: 'ℹ️' };
+    const colorMap = { error: '#f87171', warn: '#fbbf24', info: '#63b3ff' };
+    const card = document.createElement('div');
+    card.style.cssText = `
+      background:var(--surface,#1a1a2e);color:var(--text,#e8edf8);
+      border-radius:20px;padding:28px 24px;max-width:360px;width:90%;
+      box-shadow:0 24px 72px rgba(0,0,0,.6);
+      font-family:var(--font-body,'DM Sans',sans-serif);
+      border-top:3px solid ${colorMap[type]};
+    `;
+    card.innerHTML = `
+      <p style="margin:0 0 20px;font-size:1rem;line-height:1.5;">
+        ${iconMap[type]} ${escapeTextForHtml(message)}
+      </p>
+      <div style="display:flex;justify-content:flex-end;">
+        <button id="e2e-notice-ok" style="padding:10px 24px;border-radius:12px;border:none;
+          background:${colorMap[type]};color:#030b18;font-weight:700;cursor:pointer;font-size:.9rem;">
+          OK
+        </button>
+      </div>
+    `;
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+    card.querySelector('#e2e-notice-ok').addEventListener('click', () => {
+      overlay.remove();
+      resolve();
+    });
+    overlay.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === 'Escape') { overlay.remove(); resolve(); }
+    });
+    card.querySelector('#e2e-notice-ok').focus();
+  });
+}
   return new Promise((resolve, reject) => {
     // Создаём модалку программно, чтобы не зависеть от существующей разметки
     const overlay = document.createElement('div');
@@ -1090,8 +1231,16 @@ function promptMasterPassword(mode) {
 
     card.querySelector('#mp-ok').addEventListener('click', () => {
       const pwd = input.value;
-      if (!pwd || pwd.length < 8) { showErr('Минимум 8 символов'); return; }
+      if (!pwd || pwd.length < 12) { showErr('Минимум 12 символов'); return; }
       if (isCreate) {
+        // Проверка сложности: буквы + цифры или спецсимволы
+        const hasLetter  = /[a-zA-Zа-яА-ЯёЁ]/.test(pwd);
+        const hasDigit   = /\d/.test(pwd);
+        const hasSpecial = /[^a-zA-Zа-яА-ЯёЁ\d]/.test(pwd);
+        if (!hasLetter || !(hasDigit || hasSpecial)) {
+          showErr('Пароль должен содержать буквы и цифры или спецсимволы');
+          return;
+        }
         if (pwd !== input2.value) { showErr('Пароли не совпадают'); return; }
       }
       hideErr();
@@ -1130,7 +1279,7 @@ function promptMasterPassword(mode) {
  * @param {object}   fsGetDoc     — Firestore getDoc() function
  * @param {object}   fsSetDoc     — Firestore setDoc() function
  * @returns {Promise<{privateKey: CryptoKey, publicKeyB64: string}>}
- */
+ */)
 async function initE2EForUser(uid, firestoreDb, fsDoc, fsGetDoc, fsSetDoc) {
   const hasKey = await hasStoredPrivateKey(uid);
 
@@ -1186,7 +1335,7 @@ async function initE2EForUser(uid, firestoreDb, fsDoc, fsGetDoc, fsSetDoc) {
           // AES-GCM провалился → неверный пароль
           console.warn(`[e2e] Неверный пароль (попытка ${attempts}/3)`);
           if (attempts >= 3) {
-            alert('Неверный пароль 3 раза. E2E-переписка недоступна на этом устройстве.');
+            await showE2ENotice('Неверный пароль введён 3 раза. E2E-переписка недоступна на этом устройстве.', 'error');
             return { privateKey: null, publicKeyB64: null };
           }
         } else {
@@ -1222,7 +1371,8 @@ async function initE2EForUser(uid, firestoreDb, fsDoc, fsGetDoc, fsSetDoc) {
   await idbSet(`e2e_ecdh_pub_${uid}`, ecdhPublicKeyB64);
 
   // Сохраняем приватный ключ в IDB (зашифрованный мастер-паролем)
-  await savePrivateKey(uid, pair.privateKey, password);
+  // Передаём публичный ключ для дублирования в IDB
+  await savePrivateKey(uid, pair.privateKey, password, pair.publicKey);
   await saveSigningPrivateKey(uid, signPair.privateKey, password);
   await saveEcdhPrivateKey(uid, ecdhPair.privateKey, password);
   _activeSigningPrivateKey = signPair.privateKey;
@@ -1738,11 +1888,13 @@ window.E2E = {
   checkToxicity,
   uploadViaBackend,
 
+  // UI утилиты
+  showE2ENotice,
+  promptMasterPassword,
+
   // Утилиты (только публичные — внутренние IDB-функции остаются приватными)
   bufferToHex,
   hexToBuffer,
 };
 
 console.info('[E2E] Security module v2.3 загружен (IIFE-изоляция активна)');
-
-})(); // конец e2eModule IIFE

@@ -62,43 +62,75 @@ logging.basicConfig(
 )
 logger = logging.getLogger("chat6a")
 
-# ── Rate limiting (простая in-memory реализация) ─────────────────
-# ВНИМАНИЕ: in-memory rate limiting сбрасывается при перезапуске сервера
-# и не работает при нескольких воркерах uvicorn (--workers N).
-# Для production с несколькими воркерами используй Redis + slowapi:
-#   pip install slowapi redis
-#   from slowapi import Limiter
-#   from slowapi.util import get_remote_address
-#   limiter = Limiter(key_func=get_remote_address, storage_uri="redis://localhost:6379")
-# Текущая реализация подходит для одного воркера (--workers 1).
-_rate_buckets: dict[str, list[float]] = {}
-_rate_lock = None  # asyncio.Lock инициализируется при старте (см. lifespan)
+import asyncio
+
+# ── Rate limiting ─────────────────────────────────────────────────
+# Использует Redis если REDIS_URL задан в .env (рекомендуется для production
+# с несколькими воркерами uvicorn --workers N).
+# При отсутствии Redis — in-memory fallback (работает только с 1 воркером).
+REDIS_URL          = os.environ.get("REDIS_URL", "")
 RATE_LIMIT_WINDOW  = 60   # секунд
 RATE_LIMIT_MAX_REQ = 30   # запросов за окно
 
-def check_rate_limit(client_ip: str, endpoint: str) -> bool:
+_redis_client = None
+_rate_buckets: dict[str, list[float]] = {}  # fallback
+
+async def _get_redis():
+    global _redis_client
+    if _redis_client is not None:
+        return _redis_client
+    if not REDIS_URL:
+        return None
+    try:
+        import redis.asyncio as aioredis
+        _redis_client = aioredis.from_url(REDIS_URL, decode_responses=True)
+        await _redis_client.ping()
+        logger.info("[rate] Redis подключён: %s", REDIS_URL.split("@")[-1])
+    except Exception as e:
+        logger.warning("[rate] Redis недоступен, используем in-memory fallback: %s", e)
+        _redis_client = None
+    return _redis_client
+
+async def check_rate_limit(client_ip: str, endpoint: str) -> bool:
     """
     Возвращает True если лимит НЕ превышен.
-    Потокобезопасность: работает корректно в одном asyncio event loop.
-    При нескольких воркерах замени на Redis-based реализацию (см. комментарий выше).
+    Redis-режим: атомарный sliding window через ZADD/ZREMRANGEBYSCORE — работает
+    при любом числе воркеров.
+    Fallback (in-memory): корректен только при одном воркере.
     """
-    key = f"{client_ip}:{endpoint}"
+    key = f"rl:{client_ip}:{endpoint}"
     now = time.time()
+
+    redis = await _get_redis()
+    if redis is not None:
+        try:
+            pipe = redis.pipeline()
+            pipe.zremrangebyscore(key, 0, now - RATE_LIMIT_WINDOW)
+            pipe.zadd(key, {str(now): now})
+            pipe.zcard(key)
+            pipe.expire(key, RATE_LIMIT_WINDOW + 1)
+            results = await pipe.execute()
+            count = results[2]
+            return count <= RATE_LIMIT_MAX_REQ
+        except Exception as e:
+            logger.warning("[rate] Redis ошибка, fallback: %s", e)
+
+    # In-memory fallback
     bucket = _rate_buckets.get(key, [])
-    # Удаляем старые метки
     bucket = [t for t in bucket if now - t < RATE_LIMIT_WINDOW]
     if len(bucket) >= RATE_LIMIT_MAX_REQ:
-        _rate_buckets[key] = bucket  # сохраняем очищенный список
+        _rate_buckets[key] = bucket
         return False
     bucket.append(now)
     _rate_buckets[key] = bucket
-    # Периодически чистим словарь от давно неактивных IP (защита от memory leak)
     if len(_rate_buckets) > 10_000:
-        stale_keys = [k for k, v in _rate_buckets.items()
-                      if all(now - t >= RATE_LIMIT_WINDOW for t in v)]
-        for k in stale_keys:
+        stale = [k for k, v in _rate_buckets.items()
+                 if all(now - t >= RATE_LIMIT_WINDOW for t in v)]
+        for k in stale:
             del _rate_buckets[k]
     return True
+
+
 
 def get_client_ip(request: Request) -> str:
     """
@@ -187,7 +219,7 @@ async def moderate(request: Request, body: ModerateRequest):
     client_ip = get_client_ip(request)
 
     # Rate limiting
-    if not check_rate_limit(client_ip, "moderate"):
+    if not await check_rate_limit(client_ip, "moderate"):
         logger.warning(f"[moderate] Rate limit exceeded for {client_ip}")
         raise HTTPException(status_code=429, detail="Слишком много запросов")
 
@@ -292,7 +324,7 @@ async def upload(
     """
     client_ip = get_client_ip(request)
 
-    if not check_rate_limit(client_ip, "upload"):
+    if not await check_rate_limit(client_ip, "upload"):
         logger.warning(f"[upload] Rate limit exceeded for {client_ip}")
         raise HTTPException(status_code=429, detail="Слишком много запросов")
 
@@ -406,7 +438,7 @@ def _cloudinary_sign(params: dict) -> str:
 async def security_alert(request: Request):
     """Принимает клиентские security/audit события. Не раскрывает детали наружу."""
     client_ip = get_client_ip(request)
-    if not check_rate_limit(client_ip, "security-alert"):
+    if not await check_rate_limit(client_ip, "security-alert"):
         raise HTTPException(status_code=429, detail="Слишком много запросов")
     try:
         data = await request.json()
