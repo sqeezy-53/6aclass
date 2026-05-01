@@ -11,7 +11,7 @@
     <meta http-equiv="Content-Security-Policy"
           content="
             default-src 'self';
-            script-src  'self' 'sha256-BbBQ/aq4tSK3yZ2NYcjpZZHgWcEfDcsQC4e7i4GDgxk=' 'sha256-FARTdYhn1xEkKumY8CCScDq9pCBflz0dxkTRZtkQt9s=' 'sha256-XfejXU7oYcJG55sYmXhQOzfWu4GlOCpinMhROU+F53w=' 'sha256-78fgKc+FljFzMeg3Bnzth1L1rY/SjmYAOBz5Oif+poY=' https://www.gstatic.com https://apis.google.com;
+            script-src  'self' 'sha256-BbBQ/aq4tSK3yZ2NYcjpZZHgWcEfDcsQC4e7i4GDgxk=' 'sha256-FARTdYhn1xEkKumY8CCScDq9pCBflz0dxkTRZtkQt9s=' 'sha256-XfejXU7oYcJG55sYmXhQOzfWu4GlOCpinMhROU+F53w=' 'sha256-erncze7q0oTRJNNMYP0ZxVzNT2HYSbzZnElvE7bG1ao=' https://www.gstatic.com https://apis.google.com;
             script-src-attr 'none';
             style-src   'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com https://cdn.jsdelivr.net;
             font-src    'self' https://fonts.gstatic.com https://cdn.jsdelivr.net;
@@ -3453,6 +3453,228 @@ console.info('[E2E] Security module v2.2 загружен');
             }
         }
 
+
+        /* ═══════════════════════════════════════
+           HOTFIX V6 — profile save + calmer premium skeuomorphism
+           Fixes: missing profileTheme on save, clipped profile header, dense sidebar,
+           overdone glossy blocks and message corner artifacts.
+        ═══════════════════════════════════════ */
+        #profileModal .settings-drawer {
+            isolation: isolate;
+        }
+        #profileModal .settings-hero {
+            min-height: 132px;
+            overflow: visible !important;
+        }
+        #profileModal .settings-hero-title {
+            line-height: 1.12 !important;
+            overflow: visible !important;
+            text-overflow: clip !important;
+        }
+        #profileModal .settings-hero-sub {
+            line-height: 1.45 !important;
+        }
+        #profileModal .settings-tab-row {
+            flex-wrap: nowrap !important;
+            overflow-x: auto !important;
+            overflow-y: visible !important;
+            scrollbar-width: none;
+        }
+        #profileModal .settings-tab-row::-webkit-scrollbar { display: none; }
+        #profileModal .settings-tab-btn {
+            flex: 0 0 auto;
+            min-width: 146px;
+        }
+
+        html[data-ui-style="skeuo"] body::before {
+            opacity: .45 !important;
+            mix-blend-mode: soft-light !important;
+        }
+        html[data-ui-style="skeuo"] .tg-sidebar {
+            --sidebar-w: 326px;
+            background:
+                linear-gradient(180deg, rgba(255,255,255,.18), rgba(255,255,255,.05) 38%, rgba(0,0,0,.04)),
+                linear-gradient(180deg, var(--sidebar-bg), var(--surface-2)) !important;
+            box-shadow: inset -1px 0 0 rgba(255,255,255,.20), 7px 0 24px rgba(0,0,0,.10) !important;
+        }
+        html[data-ui-style="skeuo"] .sidebar-list {
+            padding: 8px 8px 20px !important;
+            gap: 0 !important;
+        }
+        html[data-ui-style="skeuo"] .section-title {
+            margin: 16px 16px 7px !important;
+            opacity: .86;
+        }
+        html[data-ui-style="skeuo"] .chat-list-item {
+            margin: 6px 6px !important;
+            padding: 13px 14px !important;
+            min-height: 76px !important;
+            border-radius: 22px !important;
+            background:
+                linear-gradient(180deg, rgba(255,255,255,.30), rgba(255,255,255,.12) 42%, rgba(0,0,0,.035)),
+                var(--surface-2) !important;
+            border: 1px solid rgba(255,255,255,.28) !important;
+            box-shadow:
+                inset 0 1px 0 rgba(255,255,255,.50),
+                inset 0 -10px 18px rgba(0,0,0,.07),
+                0 3px 10px rgba(0,0,0,.08) !important;
+        }
+        html[data-ui-style="skeuo"] .chat-list-item:hover {
+            transform: translateY(-1px) !important;
+            filter: brightness(1.025) saturate(1.02) !important;
+        }
+        html[data-ui-style="skeuo"] .chat-list-item.is-active {
+            box-shadow:
+                inset 4px 0 0 var(--accent),
+                inset 0 1px 0 rgba(255,255,255,.55),
+                inset 0 -10px 18px rgba(0,0,0,.08),
+                0 3px 12px rgba(0,0,0,.10) !important;
+        }
+        html[data-ui-style="skeuo"] .cli-avatar {
+            width: 52px !important;
+            height: 52px !important;
+            margin-right: 14px !important;
+        }
+        html[data-ui-style="skeuo"] .cli-name {
+            font-size: .98rem !important;
+            line-height: 1.18 !important;
+        }
+        html[data-ui-style="skeuo"] .cli-last {
+            margin-top: 4px !important;
+            line-height: 1.25 !important;
+        }
+
+        html[data-ui-style="skeuo"] .settings-drawer,
+        html[data-ui-style="skeuo"] .modal-box,
+        html[data-ui-style="skeuo"] .user-profile-modal {
+            background:
+                linear-gradient(180deg, rgba(255,255,255,.20), rgba(255,255,255,.07) 18%, var(--surface) 100%) !important;
+            border: 1px solid rgba(255,255,255,.24) !important;
+            box-shadow:
+                inset 0 1px 0 rgba(255,255,255,.48),
+                inset 0 -18px 30px rgba(0,0,0,.08),
+                0 32px 92px rgba(0,0,0,.34) !important;
+        }
+        html[data-ui-style="skeuo"] .settings-hero {
+            padding: 24px 28px !important;
+            margin: 0 0 12px !important;
+            border-radius: 24px !important;
+            background:
+                linear-gradient(180deg, rgba(255,255,255,.34), rgba(255,255,255,.12) 48%, rgba(0,0,0,.035)),
+                linear-gradient(135deg, var(--surface-2), var(--surface)) !important;
+            border: 1px solid rgba(255,255,255,.30) !important;
+            box-shadow:
+                inset 0 1px 0 rgba(255,255,255,.55),
+                inset 0 -12px 22px rgba(0,0,0,.08),
+                0 10px 28px rgba(0,0,0,.13) !important;
+        }
+        html[data-ui-style="skeuo"] .settings-tab-row {
+            padding: 10px 8px 18px !important;
+            gap: 12px !important;
+        }
+        html[data-ui-style="skeuo"] .settings-tab-btn {
+            min-width: 142px !important;
+            height: 52px !important;
+            border-radius: 18px !important;
+            background:
+                linear-gradient(180deg, rgba(255,255,255,.30), rgba(255,255,255,.12) 46%, rgba(0,0,0,.035)),
+                var(--surface-2) !important;
+            border: 1px solid rgba(255,255,255,.28) !important;
+            box-shadow:
+                inset 0 1px 0 rgba(255,255,255,.48),
+                inset 0 -8px 16px rgba(0,0,0,.08),
+                0 4px 12px rgba(0,0,0,.10) !important;
+        }
+        html[data-ui-style="skeuo"] .settings-tab-btn.is-active {
+            color: var(--accent) !important;
+            border-color: color-mix(in srgb, var(--accent) 55%, rgba(255,255,255,.32)) !important;
+            transform: none !important;
+            filter: none !important;
+            box-shadow:
+                inset 0 1px 0 rgba(255,255,255,.55),
+                inset 0 -8px 16px rgba(0,0,0,.08),
+                0 0 0 3px var(--accent-dim),
+                0 5px 14px rgba(0,0,0,.10) !important;
+        }
+        html[data-ui-style="skeuo"] .settings-content {
+            padding-top: 14px !important;
+        }
+
+        html[data-ui-style="skeuo"] .skin-card--skeuo {
+            border-radius: 24px !important;
+            border: 1px solid rgba(255,255,255,.34) !important;
+            box-shadow:
+                inset 0 1px 0 rgba(255,255,255,.44),
+                inset 0 -18px 28px rgba(0,0,0,.18),
+                0 10px 24px rgba(0,0,0,.16) !important;
+        }
+        html[data-ui-style="skeuo"] .skin-card--skeuo::before {
+            background:
+                radial-gradient(ellipse at 24% 12%, rgba(255,255,255,.42), rgba(255,255,255,.15) 22%, transparent 46%),
+                linear-gradient(180deg, rgba(255,255,255,.25), transparent 45%, rgba(0,0,0,.20)) !important;
+        }
+        html[data-ui-style="skeuo"] .skin-card--skeuo::after {
+            display: none !important;
+        }
+
+        html[data-ui-style="skeuo"] .msg-bubble,
+        html[data-ui-style="skeuo"] .msg-bubble--me,
+        html[data-ui-style="skeuo"] .msg-bubble--other {
+            border-radius: 22px !important;
+            border: 1px solid rgba(255,255,255,.24) !important;
+            box-shadow:
+                inset 0 1px 0 rgba(255,255,255,.36),
+                inset 0 -9px 17px rgba(0,0,0,.10),
+                0 7px 18px rgba(0,0,0,.16) !important;
+        }
+        html[data-ui-style="skeuo"] .msg-bubble::before {
+            background:
+                linear-gradient(180deg, rgba(255,255,255,.18), transparent 48%, rgba(0,0,0,.06)) !important;
+            mix-blend-mode: normal !important;
+            opacity: .55 !important;
+        }
+        html[data-ui-style="skeuo"] .msg-bubble::after,
+        html[data-ui-style="skeuo"] .msg-bubble--me::after,
+        html[data-ui-style="skeuo"] .msg-bubble--other::after {
+            content: none !important;
+            display: none !important;
+        }
+        html[data-ui-style="skeuo"] .msg-row {
+            margin-block: 7px !important;
+        }
+
+        html[data-ui-style="skeuo"] .input-footer {
+            background:
+                linear-gradient(180deg, rgba(255,255,255,.18), rgba(255,255,255,.06)),
+                var(--surface-glass) !important;
+            border-top: 1px solid rgba(255,255,255,.24) !important;
+            box-shadow: 0 -10px 26px rgba(0,0,0,.10) !important;
+        }
+        html[data-ui-style="skeuo"] .compose-shell {
+            background:
+                linear-gradient(180deg, rgba(255,255,255,.30), rgba(255,255,255,.10) 50%, rgba(0,0,0,.035)),
+                var(--surface-2) !important;
+            border: 1px solid rgba(255,255,255,.30) !important;
+            box-shadow:
+                inset 0 1px 0 rgba(255,255,255,.52),
+                inset 0 -8px 14px rgba(0,0,0,.08),
+                0 8px 20px rgba(0,0,0,.12) !important;
+        }
+        html[data-ui-style="skeuo"] .compose-input,
+        html[data-ui-style="skeuo"] .chat-input {
+            background: transparent !important;
+            box-shadow: none !important;
+            color: var(--text) !important;
+        }
+        @media (max-width: 760px) {
+            html[data-ui-style="skeuo"] .tg-sidebar { --sidebar-w: 312px; }
+            html[data-ui-style="skeuo"] .chat-list-item { min-height: 70px !important; padding: 11px 12px !important; }
+            html[data-ui-style="skeuo"] .cli-avatar { width: 48px !important; height: 48px !important; }
+            #profileModal .settings-hero { min-height: 118px; }
+            #profileModal .settings-tab-btn { min-width: 128px; }
+        }
+
+
     </style>
 </head>
 <body>
@@ -6154,9 +6376,11 @@ function dataUrlToFile(dataUrl, filename) {
             }
             if(errEl) errEl.style.display='none';
 
-            const bio    = document.getElementById('profileBio').value.trim();
+            const profileBioNode = document.getElementById('profileBio');
+            const bio    = profileBioNode ? profileBioNode.value.trim() : (userProfile.bio || '');
             const status = document.querySelector('.status-chip.is-active')?.dataset.status||'online';
-            const theme  = document.getElementById('profileTheme').value;
+            const profileThemeNode = document.getElementById('profileTheme');
+            const theme  = profileThemeNode ? profileThemeNode.value : (localStorage.getItem(THEME_KEY) || document.documentElement.getAttribute('data-theme') || 'dark');
 
             _profileSaveLock = true;
             const saveBtn = document.getElementById('profileSave');
@@ -6202,7 +6426,7 @@ function dataUrlToFile(dataUrl, filename) {
                 try { saveUiAppearanceFromControls(); } catch(_) {}
                 renderSidebarUser();
                 try { pingOnline(); } catch(_){}
-                document.getElementById('profileModal').classList.remove('is-open');
+                document.getElementById('profileModal')?.classList.remove('is-open');
                 showToast('✅ Ник и профиль обновлены');
                 _dbgLog('profile:save', {nick:rawName, status, theme});
             } catch(e) {
