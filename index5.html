@@ -3675,7 +3675,257 @@ console.info('[E2E] Security module v2.2 загружен');
         }
 
 
-    </style>
+    
+        /* ═══════════════════════════════════════
+           HOTFIX V7 — stable skeuomorphic polish
+           Fixes: profile tab layout, sticky toast, heavy skeuo buttons, message tails.
+        ═══════════════════════════════════════ */
+        .toast {
+            opacity: 0 !important;
+            visibility: hidden !important;
+            transform: translateX(-50%) translateY(calc(100% + 84px)) scale(.985) !important;
+            transition:
+                transform .28s cubic-bezier(.22,.9,.32,1),
+                opacity .18s ease,
+                visibility 0s linear .28s !important;
+            will-change: transform, opacity;
+        }
+        .toast.is-visible {
+            opacity: 1 !important;
+            visibility: visible !important;
+            transform: translateX(-50%) translateY(0) scale(1) !important;
+            transition:
+                transform .32s cubic-bezier(.22,1.16,.32,1),
+                opacity .18s ease,
+                visibility 0s linear 0s !important;
+        }
+
+        #profileModal .settings-drawer {
+            display: flex !important;
+            flex-direction: column !important;
+            padding: 28px 32px 24px !important;
+            overflow: hidden !important;
+        }
+        #profileModal .settings-hero {
+            display: flex !important;
+            align-items: center !important;
+            gap: 22px !important;
+            min-height: 0 !important;
+            height: auto !important;
+            padding: 22px 24px !important;
+            margin: 0 0 18px !important;
+            overflow: visible !important;
+            flex: 0 0 auto !important;
+        }
+        #profileModal .profile-av-big {
+            width: 88px !important;
+            height: 88px !important;
+            flex: 0 0 88px !important;
+        }
+        #profileModal .settings-hero-info {
+            min-width: 0 !important;
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: center !important;
+        }
+        #profileModal .settings-hero-title {
+            font-size: clamp(1.45rem, 3vw, 2.05rem) !important;
+            line-height: 1.05 !important;
+            margin: 0 0 6px !important;
+            overflow: visible !important;
+            white-space: nowrap !important;
+            text-overflow: ellipsis !important;
+        }
+        #profileModal .settings-hero-sub {
+            font-size: .93rem !important;
+            line-height: 1.35 !important;
+            max-width: 100% !important;
+        }
+        #profileModal #btnChangeAvatarInProfile {
+            margin-top: 10px !important;
+            align-self: flex-start !important;
+        }
+        #profileModal .settings-tab-row {
+            display: flex !important;
+            align-items: center !important;
+            gap: 6px !important;
+            padding: 6px !important;
+            margin: 0 0 18px !important;
+            border-radius: 22px !important;
+            overflow-x: auto !important;
+            overflow-y: hidden !important;
+            flex: 0 0 auto !important;
+        }
+        #profileModal .settings-tab-btn {
+            flex: 1 0 132px !important;
+            min-width: 132px !important;
+            height: 46px !important;
+            min-height: 46px !important;
+            padding: 0 18px !important;
+            border-radius: 17px !important;
+            transform: none !important;
+            white-space: nowrap !important;
+            line-height: 1 !important;
+        }
+        #profileModal .settings-content {
+            min-height: 0 !important;
+            flex: 1 1 auto !important;
+            overflow: auto !important;
+            padding-top: 2px !important;
+        }
+
+        html[data-ui-style="skeuo"] {
+            --skeuo-hi: rgba(255,255,255,.34);
+            --skeuo-mid: rgba(255,255,255,.12);
+            --skeuo-low: rgba(0,0,0,.09);
+        }
+        html[data-ui-style="skeuo"] .settings-drawer,
+        html[data-ui-style="skeuo"] .modal-box,
+        html[data-ui-style="skeuo"] .user-profile-modal {
+            background:
+                linear-gradient(180deg, rgba(255,255,255,.11), rgba(255,255,255,.035) 18%, var(--surface) 100%) !important;
+            border: 1px solid color-mix(in srgb, var(--accent) 18%, rgba(255,255,255,.20)) !important;
+            box-shadow:
+                inset 0 1px 0 rgba(255,255,255,.34),
+                inset 0 -18px 36px rgba(0,0,0,.10),
+                0 30px 90px rgba(0,0,0,.34) !important;
+        }
+        html[data-ui-style="skeuo"] .settings-hero {
+            background:
+                linear-gradient(180deg, rgba(255,255,255,.22), rgba(255,255,255,.08) 50%, rgba(0,0,0,.025)),
+                linear-gradient(135deg, color-mix(in srgb, var(--accent) 20%, var(--surface-2)), var(--surface) 75%) !important;
+            border: 1px solid color-mix(in srgb, var(--accent) 22%, rgba(255,255,255,.26)) !important;
+            border-radius: 30px !important;
+            box-shadow:
+                inset 0 1px 0 rgba(255,255,255,.42),
+                inset 0 -10px 22px rgba(0,0,0,.08),
+                0 14px 32px rgba(0,0,0,.14) !important;
+        }
+        html[data-ui-style="skeuo"] .settings-hero::before {
+            content: '';
+            position: absolute;
+            left: 24px;
+            top: 10px;
+            width: 36%;
+            height: 46%;
+            border-radius: 999px;
+            background: linear-gradient(180deg, rgba(255,255,255,.28), rgba(255,255,255,0));
+            filter: blur(8px);
+            pointer-events: none;
+            opacity: .48;
+        }
+        html[data-ui-style="skeuo"] .settings-tab-row {
+            background:
+                linear-gradient(180deg, rgba(0,0,0,.10), rgba(255,255,255,.08)),
+                color-mix(in srgb, var(--surface) 78%, var(--accent) 10%) !important;
+            border: 1px solid rgba(255,255,255,.16) !important;
+            box-shadow:
+                inset 0 1px 0 rgba(255,255,255,.20),
+                inset 0 10px 20px rgba(0,0,0,.08) !important;
+        }
+        html[data-ui-style="skeuo"] .settings-tab-btn {
+            color: color-mix(in srgb, var(--text) 82%, var(--muted)) !important;
+            background: transparent !important;
+            border: 1px solid transparent !important;
+            box-shadow: none !important;
+            text-shadow: none !important;
+            font-weight: 800 !important;
+        }
+        html[data-ui-style="skeuo"] .settings-tab-btn:hover {
+            background: rgba(255,255,255,.08) !important;
+            filter: none !important;
+        }
+        html[data-ui-style="skeuo"] .settings-tab-btn.is-active {
+            color: var(--accent) !important;
+            background:
+                linear-gradient(180deg, rgba(255,255,255,.30), rgba(255,255,255,.08) 52%, rgba(0,0,0,.035)),
+                var(--surface-2) !important;
+            border: 1px solid color-mix(in srgb, var(--accent) 30%, rgba(255,255,255,.28)) !important;
+            box-shadow:
+                inset 0 1px 0 rgba(255,255,255,.40),
+                inset 0 -7px 14px rgba(0,0,0,.08),
+                0 4px 12px rgba(0,0,0,.10) !important;
+            transform: none !important;
+        }
+        html[data-ui-style="skeuo"] .chat-list-item {
+            margin: 5px 8px !important;
+            min-height: 68px !important;
+            padding: 10px 13px !important;
+            border-radius: 18px !important;
+            background:
+                linear-gradient(180deg, rgba(255,255,255,.18), rgba(255,255,255,.06) 48%, rgba(0,0,0,.025)),
+                color-mix(in srgb, var(--surface-2) 88%, var(--accent) 8%) !important;
+            border: 1px solid rgba(255,255,255,.18) !important;
+            box-shadow:
+                inset 0 1px 0 rgba(255,255,255,.28),
+                inset 0 -7px 14px rgba(0,0,0,.06),
+                0 2px 8px rgba(0,0,0,.07) !important;
+        }
+        html[data-ui-style="skeuo"] .chat-list-item.is-active {
+            background:
+                linear-gradient(180deg, rgba(255,255,255,.22), rgba(255,255,255,.08) 52%, rgba(0,0,0,.03)),
+                color-mix(in srgb, var(--surface-2) 76%, var(--accent) 18%) !important;
+            box-shadow:
+                inset 4px 0 0 var(--accent),
+                inset 0 1px 0 rgba(255,255,255,.32),
+                inset 0 -7px 14px rgba(0,0,0,.07),
+                0 3px 10px rgba(0,0,0,.09) !important;
+        }
+        html[data-ui-style="skeuo"] .cli-avatar {
+            width: 48px !important;
+            height: 48px !important;
+            margin-right: 12px !important;
+        }
+        html[data-ui-style="skeuo"] .msg-bubble,
+        html[data-ui-style="skeuo"] .msg-bubble--me,
+        html[data-ui-style="skeuo"] .msg-bubble--other {
+            overflow: hidden !important;
+            border-radius: 24px !important;
+            border: 1px solid rgba(255,255,255,.20) !important;
+            box-shadow:
+                inset 0 1px 0 rgba(255,255,255,.28),
+                inset 0 -8px 18px rgba(0,0,0,.10),
+                0 6px 16px rgba(0,0,0,.15) !important;
+        }
+        html[data-ui-style="skeuo"] .msg-bubble::after,
+        html[data-ui-style="skeuo"] .msg-bubble--me::after,
+        html[data-ui-style="skeuo"] .msg-bubble--other::after,
+        html[data-ui-style="skeuo"][data-ui-bubble="tail"] .msg-bubble--me::after,
+        html[data-ui-style="skeuo"][data-ui-bubble="tail"] .msg-bubble--other::after {
+            content: none !important;
+            display: none !important;
+            border: 0 !important;
+        }
+        html[data-ui-style="skeuo"] .input-footer {
+            background:
+                linear-gradient(180deg, rgba(255,255,255,.14), rgba(255,255,255,.045)),
+                color-mix(in srgb, var(--surface) 84%, var(--accent) 8%) !important;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,.22), 0 -10px 26px rgba(0,0,0,.12) !important;
+        }
+        html[data-ui-style="skeuo"] .compose-shell {
+            background:
+                linear-gradient(180deg, rgba(255,255,255,.24), rgba(255,255,255,.08) 48%, rgba(0,0,0,.025)),
+                var(--surface-2) !important;
+            border-radius: 24px !important;
+            box-shadow:
+                inset 0 1px 0 rgba(255,255,255,.36),
+                inset 0 -7px 15px rgba(0,0,0,.08),
+                0 7px 18px rgba(0,0,0,.12) !important;
+        }
+        html[data-ui-style="skeuo"] .skin-card--skeuo::after {
+            width: 74px !important;
+            height: 42px !important;
+            opacity: .46 !important;
+            filter: blur(5px) !important;
+        }
+        @media (max-width: 760px) {
+            #profileModal .settings-drawer { padding: 20px 16px !important; }
+            #profileModal .settings-hero { gap: 14px !important; padding: 18px !important; }
+            #profileModal .profile-av-big { width: 66px !important; height: 66px !important; flex-basis: 66px !important; }
+            #profileModal .settings-tab-btn { flex-basis: 120px !important; min-width: 120px !important; }
+        }
+
+</style>
 </head>
 <body>
 
