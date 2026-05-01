@@ -8,14 +8,20 @@
  * ║  3. Строгое соответствие Firestore Rules (dmHasE2EPayload)      ║
  * ║  4. API-ключи вынесены на бэкенд (Perspective → server.py)      ║
  * ║  5. IndexedDB для крупных бинарных данных                        ║
+ * ║  6. IIFE-обёртка: внутренние функции скрыты от глобального scope ║
  * ╚══════════════════════════════════════════════════════════════════╝
  *
  * Подключение: вставь этот файл в <head> или <body> после Firebase SDK,
- * но ДО основного скрипта чата. Все функции экспортируются в window.E2E.
+ * но ДО основного скрипта чата. Публичный API экспортируется в window.E2E.
+ *
+ * БЕЗОПАСНОСТЬ: все внутренние функции (idbGet, idbSet, deriveKeyFromPassword
+ * и т.д.) изолированы внутри IIFE и недоступны из window / других скриптов.
+ * Наружу экспортируется только window.E2E с явным публичным API.
  *
  * Зависимости: Firebase Auth, Firebase Firestore, Web Crypto API
  */
 
+(function e2eModule() {
 'use strict';
 
 /* ═══════════════════════════════════════════════════════════════
@@ -1684,6 +1690,9 @@ async function uploadViaBackend(blob, onProgress, type = 'raw') {
 
 /* ═══════════════════════════════════════════════════════════════
    § 11  ЭКСПОРТ В ГЛОБАЛЬНЫЙ ОБЪЕКТ window.E2E
+   Только публичные функции попадают наружу.
+   Внутренние утилиты (idbGet, idbSet, deriveKeyFromPassword и др.)
+   остаются приватными внутри IIFE и недоступны из window.
 ═══════════════════════════════════════════════════════════════ */
 
 window.E2E = {
@@ -1729,14 +1738,11 @@ window.E2E = {
   checkToxicity,
   uploadViaBackend,
 
-  // Утилиты
+  // Утилиты (только публичные — внутренние IDB-функции остаются приватными)
   bufferToHex,
   hexToBuffer,
-  openIDB,
-  idbGet,
-  idbSet,
-  idbDelete,
-  detectCipherAlg,
 };
 
-console.info('[E2E] Security module v2.2 загружен');
+console.info('[E2E] Security module v2.3 загружен (IIFE-изоляция активна)');
+
+})(); // конец e2eModule IIFE

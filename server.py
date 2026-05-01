@@ -63,29 +63,60 @@ logging.basicConfig(
 logger = logging.getLogger("chat6a")
 
 # ── Rate limiting (простая in-memory реализация) ─────────────────
-# Для production используй Redis + slowapi или аналог
+# ВНИМАНИЕ: in-memory rate limiting сбрасывается при перезапуске сервера
+# и не работает при нескольких воркерах uvicorn (--workers N).
+# Для production с несколькими воркерами используй Redis + slowapi:
+#   pip install slowapi redis
+#   from slowapi import Limiter
+#   from slowapi.util import get_remote_address
+#   limiter = Limiter(key_func=get_remote_address, storage_uri="redis://localhost:6379")
+# Текущая реализация подходит для одного воркера (--workers 1).
 _rate_buckets: dict[str, list[float]] = {}
+_rate_lock = None  # asyncio.Lock инициализируется при старте (см. lifespan)
 RATE_LIMIT_WINDOW  = 60   # секунд
 RATE_LIMIT_MAX_REQ = 30   # запросов за окно
 
 def check_rate_limit(client_ip: str, endpoint: str) -> bool:
-    """Возвращает True если лимит НЕ превышен."""
+    """
+    Возвращает True если лимит НЕ превышен.
+    Потокобезопасность: работает корректно в одном asyncio event loop.
+    При нескольких воркерах замени на Redis-based реализацию (см. комментарий выше).
+    """
     key = f"{client_ip}:{endpoint}"
     now = time.time()
     bucket = _rate_buckets.get(key, [])
     # Удаляем старые метки
     bucket = [t for t in bucket if now - t < RATE_LIMIT_WINDOW]
     if len(bucket) >= RATE_LIMIT_MAX_REQ:
+        _rate_buckets[key] = bucket  # сохраняем очищенный список
         return False
     bucket.append(now)
     _rate_buckets[key] = bucket
+    # Периодически чистим словарь от давно неактивных IP (защита от memory leak)
+    if len(_rate_buckets) > 10_000:
+        stale_keys = [k for k, v in _rate_buckets.items()
+                      if all(now - t >= RATE_LIMIT_WINDOW for t in v)]
+        for k in stale_keys:
+            del _rate_buckets[k]
     return True
 
 def get_client_ip(request: Request) -> str:
-    """Извлекает IP клиента с учётом reverse-proxy заголовков."""
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
+    """
+    Извлекает реальный IP клиента.
+    БЕЗОПАСНОСТЬ: X-Forwarded-For может подделываться клиентом.
+    Если используется reverse-proxy (nginx/Caddy), доверяй только
+    последнему IP в цепочке — он добавляется самим прокси и не
+    может быть подделан клиентом.
+    Если приложение запущено без reverse-proxy — используй client.host напрямую.
+    Установи TRUSTED_PROXY=true в .env только если сервер за nginx/Caddy.
+    """
+    trusted_proxy = os.environ.get("TRUSTED_PROXY", "false").lower() == "true"
+    if trusted_proxy:
+        forwarded = request.headers.get("X-Forwarded-For", "")
+        if forwarded:
+            # Последний IP добавляет доверенный прокси — он не может быть подделан
+            ips = [ip.strip() for ip in forwarded.split(",")]
+            return ips[-1] if ips else (request.client.host if request.client else "unknown")
     return request.client.host if request.client else "unknown"
 
 # ── FastAPI приложение ───────────────────────────────────────────
@@ -298,13 +329,28 @@ async def upload(
         f"/{resource_type}/upload"
     )
 
-    form_data = {
-        "upload_preset": CLOUDINARY_UPLOAD_PRESET,
-        # Для signed uploads (безопаснее) используй timestamp + signature
-        # "timestamp": str(int(time.time())),
-        # "signature": _cloudinary_sign({"timestamp": ..., "upload_preset": ...}),
-        # "api_key":   CLOUDINARY_API_KEY,
-    }
+    # ── Signed upload (безопаснее unsigned preset) ──────────────────
+    # Подпись гарантирует, что загружать могут только запросы от нашего бэкенда.
+    # Даже если кто-то узнает cloud_name и upload_preset — без подписи загрузка
+    # будет отклонена. Требует CLOUDINARY_API_KEY и CLOUDINARY_API_SECRET в .env.
+    use_signed = bool(CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET)
+    ts = int(time.time())
+
+    if use_signed:
+        sign_params = {"timestamp": str(ts), "upload_preset": CLOUDINARY_UPLOAD_PRESET}
+        signature = _cloudinary_sign(sign_params)
+        form_data = {
+            "upload_preset": CLOUDINARY_UPLOAD_PRESET,
+            "timestamp": str(ts),
+            "signature": signature,
+            "api_key":   CLOUDINARY_API_KEY,
+        }
+    else:
+        # Fallback: unsigned preset (менее безопасно, работает без API Secret)
+        logger.warning("[upload] CLOUDINARY_API_SECRET не задан — используется unsigned upload")
+        form_data = {
+            "upload_preset": CLOUDINARY_UPLOAD_PRESET,
+        }
 
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
