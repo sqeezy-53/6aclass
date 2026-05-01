@@ -11,7 +11,7 @@
     <meta http-equiv="Content-Security-Policy"
           content="
             default-src 'self';
-            script-src  'self' 'sha256-BbBQ/aq4tSK3yZ2NYcjpZZHgWcEfDcsQC4e7i4GDgxk=' 'sha256-7hpVw28Zo+5INU8LMyhs3E1LhBVrBLS3vHyEqe3Ustk=' 'sha256-c+UcrSOvVy+Guhz5azKL1WWvDOx4EScqRjbGB+XD22c=' 'sha256-OiJDVskvZzqF5R3Epz2vbGNPscZ0jkKUSiHQ+nPp7yE=' https://www.gstatic.com https://apis.google.com;
+            script-src  'self' 'sha256-r+u0okChkaq7hSOl6ctiyvMWhoLiQ3YcSu3HJvU9maI=' 'sha256-7hpVw28Zo+5INU8LMyhs3E1LhBVrBLS3vHyEqe3Ustk=' 'sha256-c+UcrSOvVy+Guhz5azKL1WWvDOx4EScqRjbGB+XD22c=' 'sha256-n1QTSTMOK5He+QNmK/qiMtUWaRsqTAHWkLviscTY5dY=' https://www.gstatic.com https://apis.google.com;
             script-src-attr 'none';
             style-src   'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com https://cdn.jsdelivr.net;
             font-src    'self' https://fonts.gstatic.com https://cdn.jsdelivr.net;
@@ -21,10 +21,9 @@
             object-src  'none';
             base-uri    'self';
             form-action 'self';
-            frame-ancestors 'self';
             upgrade-insecure-requests;
           ">
-    <!-- §1 · Запрет рендеринга в iframe (Clickjacking protection) -->
+    <!-- §1 · Clickjacking protection: frame-ancestors должен задаваться серверным CSP-заголовком, не meta-тегом -->
     <!-- §1 · Запрет MIME-sniffing -->
     <meta http-equiv="X-Content-Type-Options" content="nosniff">
     <!-- §1 · Referrer минимизация -->
