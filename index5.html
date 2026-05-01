@@ -49,6 +49,10 @@
             root.setAttribute('data-ui-density', localStorage.getItem('index6a_ui_density_v1') || 'comfortable');
             root.setAttribute('data-ui-motion', localStorage.getItem('index6a_ui_motion_v1') || 'balanced');
             root.setAttribute('data-ui-glass', localStorage.getItem('index6a_ui_glass_v1') || 'on');
+            root.setAttribute('data-ui-contrast', localStorage.getItem('index6a_ui_contrast_v1') || 'normal');
+            root.setAttribute('data-ui-texture', localStorage.getItem('index6a_ui_texture_v1') || 'subtle');
+            root.setAttribute('data-ui-bubble', localStorage.getItem('index6a_ui_bubble_v1') || 'tail');
+            root.setAttribute('data-ui-performance', localStorage.getItem('index6a_ui_performance_v1') || 'auto');
         })();
     </script>
 
@@ -4265,6 +4269,162 @@ console.info('[E2E] Security module v2.4 загружен (auth, pinning, safe m
         html[data-ui-style="pixel"]{--radius-xs:0;--radius-sm:0;--radius:0;--radius-lg:0;--radius-bubble-me:0;--radius-bubble-other:0;image-rendering:pixelated}html[data-ui-style="pixel"] body,html[data-ui-style="pixel"] input,html[data-ui-style="pixel"] textarea,html[data-ui-style="pixel"] button{font-family:'Courier New',monospace!important}html[data-ui-style="pixel"] .tg-sidebar,html[data-ui-style="pixel"] .sidebar-header,html[data-ui-style="pixel"] .tg-chat-header,html[data-ui-style="pixel"] .input-footer,html[data-ui-style="pixel"] .compose-shell,html[data-ui-style="pixel"] .chat-list-item,html[data-ui-style="pixel"] .settings-drawer,html[data-ui-style="pixel"] .modal-box,html[data-ui-style="pixel"] .msg-bubble,html[data-ui-style="pixel"] .btn,html[data-ui-style="pixel"] .icon-btn{border:3px solid var(--border-strong)!important;border-radius:0!important;box-shadow:4px 4px 0 #000!important}html[data-ui-style="pixel"] .msg-bubble--me{background:var(--accent)!important;color:var(--accent-text)!important}
         html[data-ui-style="y2k"] body,html[data-ui-style="y2k"] #appRoot,html[data-ui-style="y2k"] .tg-main{background:radial-gradient(circle at 20% 10%,rgba(255,255,255,.35),transparent 18%),linear-gradient(135deg,var(--bg-base),var(--bg-chat))!important}html[data-ui-style="y2k"] .tg-sidebar,html[data-ui-style="y2k"] .sidebar-header,html[data-ui-style="y2k"] .tg-chat-header,html[data-ui-style="y2k"] .input-footer,html[data-ui-style="y2k"] .compose-shell,html[data-ui-style="y2k"] .chat-list-item,html[data-ui-style="y2k"] .settings-drawer,html[data-ui-style="y2k"] .modal-box,html[data-ui-style="y2k"] .msg-bubble,html[data-ui-style="y2k"] .btn{background:linear-gradient(180deg,rgba(255,255,255,.52),rgba(255,255,255,.16) 38%,var(--surface) 100%)!important;border:1px solid rgba(255,255,255,.48)!important;box-shadow:inset 0 2px 0 rgba(255,255,255,.75),inset 0 -16px 24px rgba(0,0,0,.08),0 16px 42px rgba(139,92,246,.25)!important}html[data-ui-style="y2k"] .msg-bubble--me,html[data-ui-style="y2k"] .btn-primary,html[data-ui-style="y2k"] .btn-send{background:linear-gradient(180deg,#fff,#a5f3fc 32%,#fb7185 66%,#8b5cf6)!important;color:#101827!important}
 
+
+        /* APPEARANCE SECTION DIVIDERS + COMPATIBILITY LAYER */
+        .appearance-intro {
+            margin: 4px 0 18px;
+            color: var(--muted);
+            font-size: .86rem;
+            line-height: 1.55;
+            max-width: 680px;
+        }
+        .appearance-section-divider {
+            position: relative;
+            display: grid;
+            grid-template-columns: auto minmax(0, 1fr);
+            gap: 12px;
+            align-items: center;
+            margin: 24px 0 14px;
+            padding: 12px 14px;
+            border: 1px solid var(--border-strong);
+            border-radius: var(--radius);
+            background:
+                linear-gradient(135deg, color-mix(in srgb, var(--accent) 14%, transparent), transparent 54%),
+                var(--surface-2);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 10px 26px rgba(0,0,0,.12);
+            overflow: hidden;
+        }
+        .appearance-section-divider::after {
+            content: '';
+            position: absolute;
+            left: 52px;
+            right: 14px;
+            top: 50%;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--border-strong), transparent);
+            opacity: .44;
+            pointer-events: none;
+        }
+        .appearance-section-no {
+            width: 30px;
+            height: 30px;
+            border-radius: 999px;
+            display: grid;
+            place-items: center;
+            background: var(--accent);
+            color: var(--accent-text);
+            font-weight: 900;
+            font-size: .84rem;
+            box-shadow: 0 0 0 4px var(--accent-dim);
+            z-index: 1;
+        }
+        .appearance-section-copy {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            min-width: 0;
+            z-index: 1;
+            background: linear-gradient(90deg, var(--surface-2) 0 76%, transparent);
+            padding-right: 12px;
+        }
+        .appearance-section-title {
+            font-family: var(--font-display);
+            font-weight: 900;
+            font-size: .96rem;
+            color: var(--text);
+            letter-spacing: -.01em;
+        }
+        .appearance-section-sub {
+            color: var(--muted);
+            font-size: .76rem;
+            line-height: 1.35;
+        }
+        .appearance-theme-note {
+            margin: -2px 0 12px;
+            padding: 10px 12px;
+            border: 1px dashed var(--border-strong);
+            border-radius: var(--radius-sm);
+            color: var(--muted);
+            background: color-mix(in srgb, var(--surface-2) 78%, transparent);
+            font-size: .78rem;
+            line-height: 1.45;
+        }
+        .appearance-theme-note strong { color: var(--text); }
+        html[data-ui-style="minimal"] .appearance-section-divider {
+            background: var(--surface-2);
+            box-shadow: 0 0 0 3px var(--accent-dim);
+        }
+        html[data-ui-style="skeuo"] .appearance-section-divider {
+            background:
+                radial-gradient(circle at 18% 0%, rgba(255,255,255,.48), transparent 30%),
+                linear-gradient(180deg, rgba(255,255,255,.24), rgba(255,255,255,.06) 45%, var(--surface-2));
+            border-width: 1.5px;
+            box-shadow: inset 0 2px 0 rgba(255,255,255,.36), inset 0 -10px 18px rgba(0,0,0,.12), 0 12px 28px rgba(0,0,0,.18);
+        }
+        html[data-ui-style="brutal"] .appearance-section-divider,
+        html[data-ui-style="pixel"] .appearance-section-divider {
+            border: 3px solid #000;
+            border-radius: 0;
+            box-shadow: 5px 5px 0 #000;
+            background: var(--surface);
+        }
+        html[data-ui-style="cyberpunk"] .appearance-section-divider {
+            border-color: var(--accent);
+            box-shadow: 0 0 22px var(--accent-dim), inset 0 0 20px rgba(0,245,255,.06);
+        }
+        html[data-ui-style="swiss"] .appearance-section-divider {
+            border-radius: 2px;
+            box-shadow: none;
+            background: var(--surface);
+        }
+        html[data-ui-style="swiss"] .appearance-section-title,
+        html[data-ui-style="corporate"] .appearance-section-title {
+            text-transform: uppercase;
+            letter-spacing: .11em;
+            font-size: .82rem;
+        }
+        html[data-ui-style="retro"] .appearance-section-divider {
+            font-family: 'Courier New', monospace;
+            box-shadow: 0 0 0 2px rgba(0,0,0,.18), 0 8px 0 rgba(0,0,0,.08);
+        }
+        html[data-ui-style="y2k"] .appearance-section-divider {
+            background: linear-gradient(180deg, rgba(255,255,255,.58), rgba(255,255,255,.16) 42%, var(--surface));
+        }
+        html[data-ui-performance="lite"] *,
+        html[data-ui-performance="lite"] *::before,
+        html[data-ui-performance="lite"] *::after {
+            animation-duration: .01ms !important;
+            animation-iteration-count: 1 !important;
+            transition-duration: .10s !important;
+            scroll-behavior: auto !important;
+        }
+        html[data-ui-performance="lite"] body::before,
+        html[data-ui-performance="lite"] .auth-orb,
+        html[data-ui-performance="lite"] .msg-bubble::before,
+        html[data-ui-performance="lite"] .skin-card::before {
+            display: none !important;
+        }
+        html[data-ui-performance="lite"] .settings-drawer,
+        html[data-ui-performance="lite"] .modal-box,
+        html[data-ui-performance="lite"] .compose-shell,
+        html[data-ui-performance="lite"] .tg-chat-header,
+        html[data-ui-performance="lite"] .sidebar-header,
+        html[data-ui-performance="lite"] .attach-sheet,
+        html[data-ui-performance="lite"] .ctx-menu {
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
+            box-shadow: 0 8px 22px rgba(0,0,0,.16) !important;
+        }
+        html[data-ui-performance="quality"] .appearance-section-divider {
+            box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 14px 34px rgba(0,0,0,.16), 0 0 0 3px var(--accent-dim);
+        }
+        @media (max-width: 640px) {
+            .appearance-section-divider { grid-template-columns: auto 1fr; padding: 11px 12px; margin-top: 20px; }
+            .appearance-section-divider::after { display: none; }
+            .appearance-section-copy { background: transparent; }
+            .appearance-section-sub { font-size: .74rem; }
+        }
+
 </style>
 </head>
 <body>
@@ -4513,6 +4673,8 @@ console.info('[E2E] Security module v2.4 загружен (auth, pinning, safe m
 
                 <section class="settings-panel" data-settings-panel="appearance">
                     <h3>Внешний вид</h3>
+                    <p class="appearance-intro">Настройки разбиты на удобные блоки. Все значения сохраняются в localStorage и применяются через текущие атрибуты темы/стиля, поэтому они не конфликтуют с уже существующими дизайнами.</p>
+                    <div class="appearance-section-divider" aria-hidden="true"><span class="appearance-section-no">1</span><span class="appearance-section-copy"><span class="appearance-section-title">Стиль</span><span class="appearance-section-sub">Базовый визуальный язык всего интерфейса.</span></span></div>
                     <div class="modal-field appearance-field">
                         <label>Стиль всего чата</label>
                         <div class="appearance-style-grid" id="uiStyleGrid">
@@ -4539,6 +4701,8 @@ console.info('[E2E] Security module v2.4 загружен (auth, pinning, safe m
                             <button type="button" class="appearance-style-card" data-ui-style-choice="y2k"><span class="asc-title">Y2K</span><span class="asc-sub">Глянец, хром, яркие цвета и футуризм начала 2000-х.</span></button>
                         </div>
                     </div>
+                    <div class="appearance-section-divider" aria-hidden="true"><span class="appearance-section-no">2</span><span class="appearance-section-copy"><span class="appearance-section-title">Цвета</span><span class="appearance-section-sub">Палитры для минимализма и скевоморфизма; остальные стили используют свои встроенные цвета.</span></span></div>
+                    <div class="appearance-theme-note"><strong>Совместимость:</strong> если выбран Flat, Material, Cyberpunk, Pixel и другие стили, блок тем не ломается — стиль получит свою системную палитру автоматически.</div>
                     <div class="modal-field appearance-field skin-field" data-skin-field="minimal">
                         <label>Темы минимализма</label>
                         <div class="skin-grid" data-skin-group="minimal">
@@ -4576,14 +4740,28 @@ console.info('[E2E] Security module v2.4 загружен (auth, pinning, safe m
                             <button type="button" class="skin-card skin-card--skeuo" data-ui-skin-choice="sk-slate-glass" style="--skin-a:#111827;--skin-b:#64748b;--skin-c:#dbeafe"><span>Slate Glass</span></button>
                         </div>
                     </div>
+                    <div class="appearance-section-divider" aria-hidden="true"><span class="appearance-section-no">3</span><span class="appearance-section-copy"><span class="appearance-section-title">Сообщения</span><span class="appearance-section-sub">Форма пузырей, плотность и скругления.</span></span></div>
                     <div class="modal-field appearance-field appearance-options-grid">
                         <div><label for="uiRadiusSelect">Скругление сообщений</label><select id="uiRadiusSelect"><option value="sharp">Строже</option><option value="soft">Мягко</option><option value="round">Очень кругло</option><option value="bubble">Пузырьки</option></select></div>
                         <div><label for="uiDensitySelect">Плотность интерфейса</label><select id="uiDensitySelect"><option value="compact">Компактно</option><option value="comfortable">Обычно</option><option value="spacious">Просторно</option></select></div>
-                        <div><label for="uiMotionSelect">Анимации</label><select id="uiMotionSelect"><option value="calm">Спокойные</option><option value="balanced">Нормальные</option><option value="playful">Больше движения</option></select></div>
-                        <div><label for="uiGlassSelect">Стекло / блики</label><select id="uiGlassSelect"><option value="on">Включено</option><option value="off">Минимум</option></select></div>
-                        <div><label for="uiContrastSelect">Контраст текста</label><select id="uiContrastSelect"><option value="normal">Обычный</option><option value="soft">Мягкий</option><option value="high">Сильный</option></select></div>
-                        <div><label for="uiTextureSelect">Материал / текстура</label><select id="uiTextureSelect"><option value="subtle">Аккуратно</option><option value="off">Без текстуры</option><option value="strong">Сильнее</option></select></div>
                         <div><label for="uiBubbleSelect">Форма сообщений</label><select id="uiBubbleSelect"><option value="tail">С хвостиком</option><option value="clean">Без хвостика</option><option value="classic">Классика</option></select></div>
+                    </div>
+                    <div class="appearance-section-divider" aria-hidden="true"><span class="appearance-section-no">4</span><span class="appearance-section-copy"><span class="appearance-section-title">Фон</span><span class="appearance-section-sub">Текстура области чата без старых wallpaper-настроек.</span></span></div>
+                    <div class="modal-field appearance-field appearance-options-grid">
+                        <div><label for="uiTextureSelect">Фон чата</label><select id="uiTextureSelect"><option value="subtle">Аккуратно</option><option value="off">Чистый фон</option><option value="strong">Сильнее</option></select></div>
+                    </div>
+                    <div class="appearance-section-divider" aria-hidden="true"><span class="appearance-section-no">5</span><span class="appearance-section-copy"><span class="appearance-section-title">Анимации</span><span class="appearance-section-sub">Насколько активно двигается интерфейс.</span></span></div>
+                    <div class="modal-field appearance-field appearance-options-grid">
+                        <div><label for="uiMotionSelect">Анимации</label><select id="uiMotionSelect"><option value="calm">Спокойные</option><option value="balanced">Нормальные</option><option value="playful">Больше движения</option></select></div>
+                    </div>
+                    <div class="appearance-section-divider" aria-hidden="true"><span class="appearance-section-no">6</span><span class="appearance-section-copy"><span class="appearance-section-title">Доступность</span><span class="appearance-section-sub">Читаемость текста и контраст.</span></span></div>
+                    <div class="modal-field appearance-field appearance-options-grid">
+                        <div><label for="uiContrastSelect">Контраст текста</label><select id="uiContrastSelect"><option value="normal">Обычный</option><option value="soft">Мягкий</option><option value="high">Сильный</option></select></div>
+                    </div>
+                    <div class="appearance-section-divider" aria-hidden="true"><span class="appearance-section-no">7</span><span class="appearance-section-copy"><span class="appearance-section-title">Производительность</span><span class="appearance-section-sub">Блики, blur и тяжёлые эффекты можно оставить или упростить.</span></span></div>
+                    <div class="modal-field appearance-field appearance-options-grid">
+                        <div><label for="uiGlassSelect">Стекло / блики</label><select id="uiGlassSelect"><option value="on">Включено</option><option value="off">Минимум</option></select></div>
+                        <div><label for="uiPerformanceSelect">Режим эффектов</label><select id="uiPerformanceSelect"><option value="auto">Авто</option><option value="quality">Красиво</option><option value="lite">Экономно</option></select></div>
                     </div>
                 </section>
 
@@ -5432,6 +5610,7 @@ function dataUrlToFile(dataUrl, filename) {
         const UI_CONTRAST_KEY   = 'index6a_ui_contrast_v1';
         const UI_TEXTURE_KEY    = 'index6a_ui_texture_v1';
         const UI_BUBBLE_KEY     = 'index6a_ui_bubble_v1';
+        const UI_PERFORMANCE_KEY = 'index6a_ui_performance_v1';
 
         /* Admin UIDs — add real UIDs here */
         const ADMIN_UIDS = new Set(['iMey77WyBccVB1wVFlqdWlrviLx2']);
@@ -5856,7 +6035,7 @@ function dataUrlToFile(dataUrl, filename) {
 
         /* EXTENDED APPEARANCE SETTINGS */
         const UI_SKIN_DEFAULTS = { minimal:'min-obsidian', skeuo:'sk-blue-gel', flat:'style-flat', material:'style-material', neumo:'style-neumo', glass:'style-glass', brutal:'style-brutal', cyberpunk:'style-cyberpunk', retro:'style-retro', swiss:'style-swiss', bauhaus:'style-bauhaus', maximal:'style-maximal', corporate:'style-corporate', dark:'style-dark', clay:'style-clay', immersive:'style-immersive', pixel:'style-pixel', y2k:'style-y2k' };
-        const UI_SKIN_STYLE = {'min-obsidian':'minimal','min-graphite':'minimal','min-amoled':'minimal','min-nord':'minimal','min-ink':'minimal','min-cyber':'minimal','min-lilac':'minimal','min-rose':'minimal','min-emerald':'minimal','min-snow':'minimal','sk-blue-gel':'skeuo','sk-leather':'skeuo','sk-felt':'skeuo','sk-candy':'skeuo','sk-metal':'skeuo','sk-walnut':'skeuo','sk-aqua':'skeuo','sk-cream':'skeuo'};
+        const UI_SKIN_STYLE = {'min-obsidian':'minimal','min-graphite':'minimal','min-amoled':'minimal','min-midnight':'minimal','min-carbon':'minimal','min-nord':'minimal','min-ink':'minimal','min-cyber':'minimal','min-oceanic':'minimal','min-lilac':'minimal','min-rose':'minimal','min-emerald':'minimal','min-sunset':'minimal','min-snow':'minimal','min-paper':'minimal','sk-blue-gel':'skeuo','sk-leather':'skeuo','sk-felt':'skeuo','sk-candy':'skeuo','sk-metal':'skeuo','sk-walnut':'skeuo','sk-aqua':'skeuo','sk-cream':'skeuo','sk-graphite-gel':'skeuo','sk-ruby':'skeuo','sk-amethyst':'skeuo','sk-slate-glass':'skeuo','style-flat':'flat','style-material':'material','style-neumo':'neumo','style-glass':'glass','style-brutal':'brutal','style-cyberpunk':'cyberpunk','style-retro':'retro','style-swiss':'swiss','style-bauhaus':'bauhaus','style-maximal':'maximal','style-corporate':'corporate','style-dark':'dark','style-clay':'clay','style-immersive':'immersive','style-pixel':'pixel','style-y2k':'y2k'};
         const UI_SKIN_PALETTES = {
           'min-obsidian': {'--bg-base':'#030712','--bg-chat':'#060b16','--sidebar-bg':'#050914','--nav-bg':'rgba(5,9,20,.94)','--surface':'#0b1220','--surface-2':'#111827','--surface-3':'#1f2937','--surface-hover':'#172033','--surface-active':'#1d2b44','--surface-glass':'rgba(10,18,32,.82)','--text':'#f8fafc','--muted':'#94a3b8','--muted-soft':'#64748b','--border':'rgba(148,163,184,.08)','--border-strong':'rgba(148,163,184,.16)','--accent':'#60a5fa','--accent-strong':'#2563eb','--accent-dim':'rgba(96,165,250,.16)','--accent-text':'#031326','--bubble-me-bg':'linear-gradient(145deg,#2563eb,#60a5fa)','--bubble-other-bg':'#111827','--bubble-other-border':'rgba(148,163,184,.13)','--bubble-other-text':'#e5e7eb','--dot-color':'rgba(96,165,250,.035)'},
           'min-graphite': {'--bg-base':'#09090b','--bg-chat':'#0d0d10','--sidebar-bg':'#0b0b0d','--nav-bg':'rgba(10,10,12,.94)','--surface':'#141416','--surface-2':'#1f2024','--surface-3':'#2f3338','--surface-hover':'#272a30','--surface-active':'#343942','--surface-glass':'rgba(20,20,22,.84)','--text':'#f5f5f5','--muted':'#a1a1aa','--muted-soft':'#71717a','--border':'rgba(244,244,245,.08)','--border-strong':'rgba(244,244,245,.16)','--accent':'#e5e7eb','--accent-strong':'#a1a1aa','--accent-dim':'rgba(229,231,235,.12)','--accent-text':'#09090b','--bubble-me-bg':'linear-gradient(145deg,#3f3f46,#d4d4d8)','--bubble-other-bg':'#1f2024','--bubble-other-border':'rgba(244,244,245,.12)','--bubble-other-text':'#f4f4f5','--dot-color':'rgba(244,244,245,.022)'},
@@ -5917,13 +6096,13 @@ function dataUrlToFile(dataUrl, filename) {
           'style-y2k': {'--bg-base':'#f0f9ff','--bg-chat':'#e0f2fe','--sidebar-bg':'#fdf4ff','--nav-bg':'rgba(255,255,255,.82)','--surface':'#ffffff','--surface-2':'#e0f2fe','--surface-3':'#fbcfe8','--surface-hover':'#bae6fd','--surface-active':'#f9a8d4','--surface-glass':'rgba(255,255,255,.72)','--text':'#101827','--muted':'#6b21a8','--muted-soft':'#0e7490','--border':'rgba(255,255,255,.42)','--border-strong':'rgba(139,92,246,.26)','--accent':'#fb7185','--accent-strong':'#8b5cf6','--accent-dim':'rgba(251,113,133,.18)','--accent-text':'#ffffff','--bubble-me-bg':'linear-gradient(180deg,#ffffff,#a5f3fc 32%,#fb7185 66%,#8b5cf6)','--bubble-other-bg':'rgba(255,255,255,.78)','--bubble-other-border':'rgba(139,92,246,.22)','--bubble-other-text':'#101827','--dot-color':'rgba(139,92,246,.035)'}
         });
 
-        function getUiAppearanceSettings(){let style=localStorage.getItem(UI_STYLE_KEY)||'minimal';if(!Object.prototype.hasOwnProperty.call(UI_SKIN_DEFAULTS,style))style='minimal';let skin=localStorage.getItem(UI_SKIN_KEY)||UI_SKIN_DEFAULTS[style];if(UI_SKIN_STYLE[skin]!==style)skin=UI_SKIN_DEFAULTS[style];let radius=localStorage.getItem(UI_RADIUS_KEY)||'soft';let density=localStorage.getItem(UI_DENSITY_KEY)||'comfortable';let motion=localStorage.getItem(UI_MOTION_KEY)||'balanced';let glass=localStorage.getItem(UI_GLASS_KEY)||'on';let contrast=localStorage.getItem(UI_CONTRAST_KEY)||'normal';let texture=localStorage.getItem(UI_TEXTURE_KEY)||'subtle';let bubble=localStorage.getItem(UI_BUBBLE_KEY)||'tail';return{style,skin,radius,density,motion,glass,contrast,texture,bubble};}
+        function getUiAppearanceSettings(){let style=localStorage.getItem(UI_STYLE_KEY)||'minimal';if(!Object.prototype.hasOwnProperty.call(UI_SKIN_DEFAULTS,style))style='minimal';let skin=localStorage.getItem(UI_SKIN_KEY)||UI_SKIN_DEFAULTS[style];if(UI_SKIN_STYLE[skin]!==style)skin=UI_SKIN_DEFAULTS[style];let radius=localStorage.getItem(UI_RADIUS_KEY)||'soft';let density=localStorage.getItem(UI_DENSITY_KEY)||'comfortable';let motion=localStorage.getItem(UI_MOTION_KEY)||'balanced';let glass=localStorage.getItem(UI_GLASS_KEY)||'on';let contrast=localStorage.getItem(UI_CONTRAST_KEY)||'normal';let texture=localStorage.getItem(UI_TEXTURE_KEY)||'subtle';let bubble=localStorage.getItem(UI_BUBBLE_KEY)||'tail';let performance=localStorage.getItem(UI_PERFORMANCE_KEY)||'auto';return{style,skin,radius,density,motion,glass,contrast,texture,bubble,performance};}
         function clearLegacyWallpaperState(){try{localStorage.removeItem('index6a_chat_wallpaper_v3');localStorage.removeItem('index6a_chat_wallpaper_v2');localStorage.removeItem('index6a_chat_wallpaper');}catch(_){} if(typeof clearAdaptiveUiTheme==='function'){try{clearAdaptiveUiTheme();}catch(_){}} if(tgMain){['--chat-wallpaper-bg','--chat-wallpaper-image','--chat-wallpaper-size','--chat-wallpaper-position','--chat-wallpaper-repeat','--chat-wallpaper-attachment'].forEach(k=>tgMain.style.removeProperty(k));}}
-        function applyUiAppearance(settings=getUiAppearanceSettings()){const root=document.documentElement;clearLegacyWallpaperState();root.setAttribute('data-ui-style',settings.style);root.setAttribute('data-ui-skin',settings.skin);root.setAttribute('data-ui-radius',settings.radius);root.setAttribute('data-ui-density',settings.density);root.setAttribute('data-ui-motion',settings.motion);root.setAttribute('data-ui-glass',settings.glass);root.setAttribute('data-ui-contrast',settings.contrast);root.setAttribute('data-ui-texture',settings.texture);root.setAttribute('data-ui-bubble',settings.bubble);root.removeAttribute('data-chat-ui-theme');UI_THEME_VARS_EXT.forEach(k=>root.style.removeProperty(k));Object.entries(UI_SKIN_PALETTES[settings.skin]||{}).forEach(([k,v])=>root.style.setProperty(k,v));if(tgMain){tgMain.style.setProperty('--chat-wallpaper-bg','var(--bg-chat)');tgMain.style.setProperty('--chat-wallpaper-image',settings.texture==='off'?'none':'radial-gradient(var(--dot-color) 1px, transparent 1px)');tgMain.style.setProperty('--chat-wallpaper-size',settings.texture==='strong'?'16px 16px':'24px 24px');}}
-        function persistUiAppearance(settings){localStorage.setItem(UI_STYLE_KEY,settings.style);localStorage.setItem(UI_SKIN_KEY,settings.skin);localStorage.setItem(UI_RADIUS_KEY,settings.radius);localStorage.setItem(UI_DENSITY_KEY,settings.density);localStorage.setItem(UI_MOTION_KEY,settings.motion);localStorage.setItem(UI_GLASS_KEY,settings.glass);localStorage.setItem(UI_CONTRAST_KEY,settings.contrast);localStorage.setItem(UI_TEXTURE_KEY,settings.texture);localStorage.setItem(UI_BUBBLE_KEY,settings.bubble);applyUiAppearance(settings);syncAppearanceControls(settings);}
-        function syncAppearanceControls(settings=getUiAppearanceSettings()){document.querySelectorAll('[data-ui-style-choice]').forEach(btn=>btn.classList.toggle('is-active',btn.dataset.uiStyleChoice===settings.style));document.querySelectorAll('[data-ui-skin-choice]').forEach(btn=>btn.classList.toggle('is-active',btn.dataset.uiSkinChoice===settings.skin));const ids={uiRadiusSelect:'radius',uiDensitySelect:'density',uiMotionSelect:'motion',uiGlassSelect:'glass',uiContrastSelect:'contrast',uiTextureSelect:'texture',uiBubbleSelect:'bubble'};Object.entries(ids).forEach(([id,key])=>{const el=document.getElementById(id);if(el)el.value=settings[key];});const moreBtn=document.getElementById('uiMoreDesignsBtn');const moreGrid=document.getElementById('uiMoreDesignsGrid');if(moreBtn&&moreGrid){const mustShow=!['minimal','skeuo'].includes(settings.style);const savedOpen=localStorage.getItem('index6a_ui_more_designs_open')==='1';const open=mustShow||savedOpen;moreGrid.hidden=!open;moreBtn.setAttribute('aria-expanded',String(open));moreBtn.textContent=open?'Скрыть дизайны':'Ещё дизайны';}}
-        function readAppearanceControls(){const current=getUiAppearanceSettings();return{style:document.querySelector('[data-ui-style-choice].is-active')?.dataset.uiStyleChoice||current.style,skin:document.querySelector('[data-ui-skin-choice].is-active')?.dataset.uiSkinChoice||current.skin,radius:document.getElementById('uiRadiusSelect')?.value||current.radius,density:document.getElementById('uiDensitySelect')?.value||current.density,motion:document.getElementById('uiMotionSelect')?.value||current.motion,glass:document.getElementById('uiGlassSelect')?.value||current.glass,contrast:document.getElementById('uiContrastSelect')?.value||current.contrast,texture:document.getElementById('uiTextureSelect')?.value||current.texture,bubble:document.getElementById('uiBubbleSelect')?.value||current.bubble};}
-        function initAppearanceControls(){applyUiAppearance();syncAppearanceControls();const moreBtn=document.getElementById('uiMoreDesignsBtn');if(moreBtn)moreBtn.addEventListener('click',()=>{const grid=document.getElementById('uiMoreDesignsGrid');const open=grid?grid.hidden:true;localStorage.setItem('index6a_ui_more_designs_open',open?'1':'0');syncAppearanceControls();});document.querySelectorAll('[data-ui-style-choice]').forEach(btn=>btn.addEventListener('click',()=>{const nextStyle=btn.dataset.uiStyleChoice||'minimal';persistUiAppearance({...getUiAppearanceSettings(),style:nextStyle,skin:UI_SKIN_DEFAULTS[nextStyle]||'min-obsidian'});}));document.querySelectorAll('[data-ui-skin-choice]').forEach(btn=>btn.addEventListener('click',()=>{const skin=btn.dataset.uiSkinChoice;if(!skin)return;persistUiAppearance({...getUiAppearanceSettings(),style:UI_SKIN_STYLE[skin]||'minimal',skin});}));['uiRadiusSelect','uiDensitySelect','uiMotionSelect','uiGlassSelect','uiContrastSelect','uiTextureSelect','uiBubbleSelect'].forEach(id=>{const el=document.getElementById(id);if(!el)return;el.addEventListener('change',()=>persistUiAppearance(readAppearanceControls()));});}
+        function applyUiAppearance(settings=getUiAppearanceSettings()){const root=document.documentElement;clearLegacyWallpaperState();root.setAttribute('data-ui-style',settings.style);root.setAttribute('data-ui-skin',settings.skin);root.setAttribute('data-ui-radius',settings.radius);root.setAttribute('data-ui-density',settings.density);root.setAttribute('data-ui-motion',settings.motion);root.setAttribute('data-ui-glass',settings.glass);root.setAttribute('data-ui-contrast',settings.contrast);root.setAttribute('data-ui-texture',settings.texture);root.setAttribute('data-ui-bubble',settings.bubble);root.setAttribute('data-ui-performance',settings.performance||'auto');root.removeAttribute('data-chat-ui-theme');UI_THEME_VARS_EXT.forEach(k=>root.style.removeProperty(k));Object.entries(UI_SKIN_PALETTES[settings.skin]||{}).forEach(([k,v])=>root.style.setProperty(k,v));if(tgMain){tgMain.style.setProperty('--chat-wallpaper-bg','var(--bg-chat)');tgMain.style.setProperty('--chat-wallpaper-image',settings.texture==='off'?'none':'radial-gradient(var(--dot-color) 1px, transparent 1px)');tgMain.style.setProperty('--chat-wallpaper-size',settings.texture==='strong'?'16px 16px':'24px 24px');}}
+        function persistUiAppearance(settings){localStorage.setItem(UI_STYLE_KEY,settings.style);localStorage.setItem(UI_SKIN_KEY,settings.skin);localStorage.setItem(UI_RADIUS_KEY,settings.radius);localStorage.setItem(UI_DENSITY_KEY,settings.density);localStorage.setItem(UI_MOTION_KEY,settings.motion);localStorage.setItem(UI_GLASS_KEY,settings.glass);localStorage.setItem(UI_CONTRAST_KEY,settings.contrast);localStorage.setItem(UI_TEXTURE_KEY,settings.texture);localStorage.setItem(UI_BUBBLE_KEY,settings.bubble);localStorage.setItem(UI_PERFORMANCE_KEY,settings.performance||'auto');applyUiAppearance(settings);syncAppearanceControls(settings);}
+        function syncAppearanceControls(settings=getUiAppearanceSettings()){document.querySelectorAll('[data-ui-style-choice]').forEach(btn=>btn.classList.toggle('is-active',btn.dataset.uiStyleChoice===settings.style));document.querySelectorAll('[data-ui-skin-choice]').forEach(btn=>btn.classList.toggle('is-active',btn.dataset.uiSkinChoice===settings.skin));const ids={uiRadiusSelect:'radius',uiDensitySelect:'density',uiMotionSelect:'motion',uiGlassSelect:'glass',uiContrastSelect:'contrast',uiTextureSelect:'texture',uiBubbleSelect:'bubble',uiPerformanceSelect:'performance'};Object.entries(ids).forEach(([id,key])=>{const el=document.getElementById(id);if(el)el.value=settings[key];});const moreBtn=document.getElementById('uiMoreDesignsBtn');const moreGrid=document.getElementById('uiMoreDesignsGrid');if(moreBtn&&moreGrid){const mustShow=!['minimal','skeuo'].includes(settings.style);const savedOpen=localStorage.getItem('index6a_ui_more_designs_open')==='1';const open=mustShow||savedOpen;moreGrid.hidden=!open;moreBtn.setAttribute('aria-expanded',String(open));moreBtn.textContent=open?'Скрыть дизайны':'Ещё дизайны';}}
+        function readAppearanceControls(){const current=getUiAppearanceSettings();return{style:document.querySelector('[data-ui-style-choice].is-active')?.dataset.uiStyleChoice||current.style,skin:document.querySelector('[data-ui-skin-choice].is-active')?.dataset.uiSkinChoice||current.skin,radius:document.getElementById('uiRadiusSelect')?.value||current.radius,density:document.getElementById('uiDensitySelect')?.value||current.density,motion:document.getElementById('uiMotionSelect')?.value||current.motion,glass:document.getElementById('uiGlassSelect')?.value||current.glass,contrast:document.getElementById('uiContrastSelect')?.value||current.contrast,texture:document.getElementById('uiTextureSelect')?.value||current.texture,bubble:document.getElementById('uiBubbleSelect')?.value||current.bubble,performance:document.getElementById('uiPerformanceSelect')?.value||current.performance};}
+        function initAppearanceControls(){applyUiAppearance();syncAppearanceControls();const moreBtn=document.getElementById('uiMoreDesignsBtn');if(moreBtn)moreBtn.addEventListener('click',()=>{const grid=document.getElementById('uiMoreDesignsGrid');const open=grid?grid.hidden:true;localStorage.setItem('index6a_ui_more_designs_open',open?'1':'0');syncAppearanceControls();});document.querySelectorAll('[data-ui-style-choice]').forEach(btn=>btn.addEventListener('click',()=>{const nextStyle=btn.dataset.uiStyleChoice||'minimal';persistUiAppearance({...getUiAppearanceSettings(),style:nextStyle,skin:UI_SKIN_DEFAULTS[nextStyle]||'min-obsidian'});}));document.querySelectorAll('[data-ui-skin-choice]').forEach(btn=>btn.addEventListener('click',()=>{const skin=btn.dataset.uiSkinChoice;if(!skin)return;persistUiAppearance({...getUiAppearanceSettings(),style:UI_SKIN_STYLE[skin]||'minimal',skin});}));['uiRadiusSelect','uiDensitySelect','uiMotionSelect','uiGlassSelect','uiContrastSelect','uiTextureSelect','uiBubbleSelect','uiPerformanceSelect'].forEach(id=>{const el=document.getElementById(id);if(!el)return;el.addEventListener('change',()=>persistUiAppearance(readAppearanceControls()));});}
         function saveUiAppearanceFromControls(){let settings=readAppearanceControls();if(UI_SKIN_STYLE[settings.skin]!==settings.style)settings.skin=UI_SKIN_DEFAULTS[settings.style];persistUiAppearance(settings);}
         initAppearanceControls();
 
