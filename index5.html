@@ -11,16 +11,17 @@
     <meta http-equiv="Content-Security-Policy"
           content="
             default-src 'self';
-            script-src  'self' 'sha256-BbBQ/aq4tSK3yZ2NYcjpZZHgWcEfDcsQC4e7i4GDgxk=' 'sha256-FARTdYhn1xEkKumY8CCScDq9pCBflz0dxkTRZtkQt9s=' 'sha256-XfejXU7oYcJG55sYmXhQOzfWu4GlOCpinMhROU+F53w=' 'sha256-erncze7q0oTRJNNMYP0ZxVzNT2HYSbzZnElvE7bG1ao=' https://www.gstatic.com https://apis.google.com;
+            script-src  'self' 'sha256-BbBQ/aq4tSK3yZ2NYcjpZZHgWcEfDcsQC4e7i4GDgxk=' 'sha256-7hpVw28Zo+5INU8LMyhs3E1LhBVrBLS3vHyEqe3Ustk=' 'sha256-c+UcrSOvVy+Guhz5azKL1WWvDOx4EScqRjbGB+XD22c=' 'sha256-c5h8GbwcgIP0igMldtYrgJIJ6HIdvZzoMKTF0fkwEx8=' https://www.gstatic.com https://apis.google.com;
             script-src-attr 'none';
             style-src   'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com https://cdn.jsdelivr.net;
             font-src    'self' https://fonts.gstatic.com https://cdn.jsdelivr.net;
-            img-src     'self' data: blob: https:;
-            media-src   'self' data: blob: https:;
-            connect-src 'self' https://sixaclass.onrender.com https://res.cloudinary.com https://*.cloudinary.com https://*.firebaseio.com https://*.googleapis.com https://www.gstatic.com wss://*.firebaseio.com;
+            img-src     'self' data: blob: https://res.cloudinary.com;
+            media-src   'self' data: blob: https://res.cloudinary.com;
+            connect-src 'self' https://sixaclass.onrender.com https://res.cloudinary.com https://*.firebaseio.com https://*.googleapis.com https://www.gstatic.com wss://*.firebaseio.com;
             object-src  'none';
             base-uri    'self';
             form-action 'self';
+            frame-ancestors 'self';
             upgrade-insecure-requests;
           ">
     <!-- §1 · Запрет рендеринга в iframe (Clickjacking protection) -->
@@ -54,8 +55,10 @@
     <!-- E2E Security Module + Backend -->
     <script>
         window.BACKEND_URL = 'https://sixaclass.onrender.com/api';
+        window.CLOUDINARY_CLOUD_NAME = 'dvl3h61wd';
+        window.E2E_CLOUDINARY_CLOUD_NAME = window.CLOUDINARY_CLOUD_NAME;
     </script>
-    <script>
+        <script>
 /**
  * ╔══════════════════════════════════════════════════════════════════╗
  * ║          E2E SECURITY REFACTOR — Чат 6А / 6aclass.online        ║
@@ -66,15 +69,21 @@
  * ║  3. Строгое соответствие Firestore Rules (dmHasE2EPayload)      ║
  * ║  4. API-ключи вынесены на бэкенд (Perspective → server.py)      ║
  * ║  5. IndexedDB для крупных бинарных данных                        ║
+ * ║  6. IIFE-обёртка: внутренние функции скрыты от глобального scope ║
  * ╚══════════════════════════════════════════════════════════════════╝
  *
  * Подключение: вставь этот файл в <head> или <body> после Firebase SDK,
- * но ДО основного скрипта чата. Все функции экспортируются в window.E2E.
+ * но ДО основного скрипта чата. Публичный API экспортируется в window.E2E.
+ *
+ * БЕЗОПАСНОСТЬ: все внутренние функции (idbGet, idbSet, deriveKeyFromPassword
+ * и т.д.) изолированы внутри IIFE и недоступны из window / других скриптов.
+ * Наружу экспортируется только window.E2E с явным публичным API.
  *
  * Зависимости: Firebase Auth, Firebase Firestore, Web Crypto API
  */
 
-'use strict';
+(function e2eModule() {
+  'use strict';
 
 /* ═══════════════════════════════════════════════════════════════
    § 0  КОНСТАНТЫ
@@ -83,7 +92,8 @@
 const E2E_IDB_NAME       = 'e2e_keystore';   // IndexedDB база
 const E2E_IDB_STORE      = 'keys';           // хранилище ключей
 const E2E_IDB_VERSION    = 1;
-const PBKDF2_ITERATIONS  = 310_000;          // OWASP 2023 рекомендация для SHA-256
+const PBKDF2_ITERATIONS  = 600_000;          // OWASP 2025+ baseline for PBKDF2-HMAC-SHA256
+const PBKDF2_LEGACY_ITERATIONS = [310_000];     // old local keystore migration path
 const PBKDF2_HASH        = 'SHA-256';
 const AES_KEY_LENGTH     = 256;              // бит
 const RSA_MOD_LENGTH     = 4096;             // бит — новые RSA-OAEP ключи, legacy 2048 продолжают читаться
@@ -107,6 +117,52 @@ const DM_ALLOWED_FIELDS = new Set([
 
 /* URL Python-бэкенда (server.py) */
 const BACKEND_URL = window.BACKEND_URL || '/api';
+
+/* Конкретный Cloudinary cloud-name, которому доверяется расшифровка медиа.
+   Значение можно переопределить до загрузки модуля: window.E2E_CLOUDINARY_CLOUD_NAME = '...'. */
+const E2E_CLOUDINARY_CLOUD_NAME = String(
+  window.E2E_CLOUDINARY_CLOUD_NAME || window.CLOUDINARY_CLOUD_NAME || 'dvl3h61wd'
+).trim();
+
+const SAFE_DECRYPTED_MEDIA_MIME = new Set([
+  'image/jpeg', 'image/png', 'image/webp', 'image/gif',
+  'audio/webm', 'audio/ogg', 'audio/mpeg', 'audio/mp4',
+  'audio/wav', 'audio/x-wav', 'audio/aac', 'audio/flac',
+  'video/webm',
+]);
+const BLOCKED_DECRYPTED_MEDIA_MIME = new Set([
+  'text/html', 'image/svg+xml', 'application/xhtml+xml', 'application/xml', 'text/xml',
+  'text/javascript', 'application/javascript', 'application/ecmascript',
+]);
+
+function safeDecryptedMediaMime(mimeType) {
+  const normalized = String(mimeType || '').toLowerCase().split(';')[0].trim();
+  if (!normalized || BLOCKED_DECRYPTED_MEDIA_MIME.has(normalized)) return 'application/octet-stream';
+  return SAFE_DECRYPTED_MEDIA_MIME.has(normalized) ? normalized : 'application/octet-stream';
+}
+
+async function getFirebaseIdToken() {
+  try {
+    const candidates = [
+      window.chat6aAuth?.currentUser,
+      window.auth?.currentUser,
+      window.firebase?.auth?.()?.currentUser,
+    ].filter(Boolean);
+    const user = candidates[0];
+    if (user && typeof user.getIdToken === 'function') return await user.getIdToken();
+  } catch (e) {
+    console.warn('[e2e] Не удалось получить Firebase ID token:', e?.message || e);
+  }
+  return '';
+}
+
+async function authJsonHeaders(extra = {}) {
+  const token = await getFirebaseIdToken();
+  return {
+    ...extra,
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
 
 /* ═══════════════════════════════════════════════════════════════
    § 1  IndexedDB — хранилище ключей и зашифрованных данных
@@ -189,13 +245,13 @@ async function idbDelete(key) {
  * @param {Uint8Array} salt       — 32 случайных байта, хранятся в IDB
  * @returns {Promise<CryptoKey>}
  */
-async function deriveKeyFromPassword(password, salt) {
+async function deriveKeyFromPassword(password, salt, iterations = PBKDF2_ITERATIONS) {
   const enc     = new TextEncoder();
   const baseKey = await crypto.subtle.importKey(
     'raw', enc.encode(password), 'PBKDF2', false, ['deriveKey']
   );
   return crypto.subtle.deriveKey(
-    { name: 'PBKDF2', salt, iterations: PBKDF2_ITERATIONS, hash: PBKDF2_HASH },
+    { name: 'PBKDF2', salt, iterations, hash: PBKDF2_HASH },
     baseKey,
     { name: 'AES-GCM', length: AES_KEY_LENGTH },
     false,
@@ -203,16 +259,38 @@ async function deriveKeyFromPassword(password, salt) {
   );
 }
 
+async function decryptWrappedJwkBlob(blob, password) {
+  if (!(blob instanceof Uint8Array) || blob.length < 44) return null;
+  const salt    = blob.slice(0, 32);
+  const iv      = blob.slice(32, 44);
+  const cipher  = blob.slice(44);
+
+  const attempts = [PBKDF2_ITERATIONS, ...PBKDF2_LEGACY_ITERATIONS.filter(v => v !== PBKDF2_ITERATIONS)];
+  let lastError = null;
+  for (const iterations of attempts) {
+    try {
+      const aesKey = await deriveKeyFromPassword(password, salt, iterations);
+      const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, aesKey, cipher);
+      return { jwk: JSON.parse(new TextDecoder().decode(plain)), legacy: iterations !== PBKDF2_ITERATIONS };
+    } catch (e) { lastError = e; }
+  }
+  throw lastError || new Error('wrapped_key_decrypt_failed');
+}
+
 /**
  * Сохраняет приватный RSA-ключ в IndexedDB, зашифрованный мастер-паролем.
+ * ТАКЖЕ сохраняет публичный ключ (незашифрованный) для последующей верификации.
+ * Web Crypto не позволяет «вытащить» публичный ключ из приватного CryptoKey,
+ * поэтому publicKey должен передаваться явно при первой генерации.
  *
- * Формат блоба: [32 байта соли][12 байт IV][AES-GCM(JWK)]
+ * Формат блоба приватного: [32 байта соли][12 байт IV][AES-GCM(JWK)]
  *
  * @param {string}     uid
  * @param {CryptoKey}  privateKey
  * @param {string}     password   — мастер-пароль (не хранится)
+ * @param {CryptoKey}  [publicKey] — если передан, сохраняется в IDB как SPKI b64
  */
-async function savePrivateKey(uid, privateKey, password) {
+async function savePrivateKey(uid, privateKey, password, publicKey = null) {
   // 1. Экспортируем RSA-ключ в JWK
   const jwk   = await crypto.subtle.exportKey('jwk', privateKey);
   const plain = new TextEncoder().encode(JSON.stringify(jwk));
@@ -239,6 +317,17 @@ async function savePrivateKey(uid, privateKey, password) {
   blob.set(new Uint8Array(cipher), 44);
 
   await idbSet(`e2e_privkey_${uid}`, blob);
+
+  // Дублируем публичный ключ в IDB (не зашифрованный — он и так публичный)
+  // Это позволяет верифицировать пару без Firebase и восстановить её при сбое
+  if (publicKey) {
+    try {
+      const pubB64 = await exportPublicKey(publicKey);
+      await idbSet(`e2e_pubkey_${uid}`, pubB64);
+    } catch (e) {
+      console.warn('[e2e] Не удалось сохранить публичный ключ в IDB:', e);
+    }
+  }
 }
 
 /**
@@ -251,23 +340,17 @@ async function savePrivateKey(uid, privateKey, password) {
  */
 async function loadPrivateKey(uid, password) {
   const blob = await idbGet(`e2e_privkey_${uid}`);
-  if (!(blob instanceof Uint8Array) || blob.length < 44) return null;
-
-  const salt    = blob.slice(0, 32);
-  const iv      = blob.slice(32, 44);
-  const cipher  = blob.slice(44);
-
-  const aesKey  = await deriveKeyFromPassword(password, salt);
-
-  // Если пароль неверный — subtle.decrypt выбросит DOMException
-  const plain   = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, aesKey, cipher);
-  const jwk     = JSON.parse(new TextDecoder().decode(plain));
-
-  return crypto.subtle.importKey(
-    'jwk', jwk,
+  const wrapped = await decryptWrappedJwkBlob(blob, password);
+  if (!wrapped) return null;
+  const key = await crypto.subtle.importKey(
+    'jwk', wrapped.jwk,
     { name: 'RSA-OAEP', hash: 'SHA-256' },
     true, ['decrypt']
   );
+  if (wrapped.legacy) {
+    try { await savePrivateKey(uid, key, password); } catch (e) { console.warn('[e2e] key KDF migration failed:', e?.message || e); }
+  }
+  return key;
 }
 
 /**
@@ -332,17 +415,112 @@ async function saveSigningPrivateKey(uid, privateKey, password) {
 }
 async function loadSigningPrivateKey(uid, password) {
   const blob = await idbGet(`e2e_sign_priv_${uid}`);
-  if (!(blob instanceof Uint8Array) || blob.length < 44) return null;
-  const salt = blob.slice(0, 32), iv = blob.slice(32, 44), cipher = blob.slice(44);
-  const aesKey = await deriveKeyFromPassword(password, salt);
-  const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, aesKey, cipher);
-  const jwk = JSON.parse(new TextDecoder().decode(plain));
-  return crypto.subtle.importKey('jwk', jwk, { name: 'ECDSA', namedCurve: E2E_SIGN_CURVE }, true, ['sign']);
+  const wrapped = await decryptWrappedJwkBlob(blob, password);
+  if (!wrapped) return null;
+  const key = await crypto.subtle.importKey('jwk', wrapped.jwk, { name: 'ECDSA', namedCurve: E2E_SIGN_CURVE }, true, ['sign']);
+  if (wrapped.legacy) {
+    try { await saveSigningPrivateKey(uid, key, password); } catch (e) { console.warn('[e2e] signing key KDF migration failed:', e?.message || e); }
+  }
+  return key;
 }
 async function fingerprintPublicKeyB64(b64) {
   const digest = await crypto.subtle.digest('SHA-256', b64ToBytes(b64));
   const hex = Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('').toUpperCase();
   return hex.match(/.{1,4}/g).slice(0, 8).join('-');
+}
+
+let _activeUid = null;
+
+function e2ePinKey(myUid, peerUid, keyName) {
+  return `e2e_pin_${String(myUid || 'anon')}_${String(peerUid || 'unknown')}_${String(keyName || 'key')}`;
+}
+
+function normalizePinnedRecord(value) {
+  if (!value) return null;
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      if (parsed && typeof parsed === 'object') return parsed;
+    } catch (_) {
+      return { b64: value };
+    }
+  }
+  return value && typeof value === 'object' ? value : null;
+}
+
+async function getPinnedPeerPublicKey(peerUid, keyName, firestoreKeyB64, options = {}) {
+  const remote = String(firestoreKeyB64 || '').trim();
+  if (!remote) return { ok: false, reason: `missing_${keyName}` };
+
+  const myUid = String(options.myUid || _activeUid || 'anon');
+  const storageKey = e2ePinKey(myUid, peerUid, keyName);
+  const remoteFingerprint = await fingerprintPublicKeyB64(remote);
+  const existing = normalizePinnedRecord(await idbGet(storageKey));
+
+  if (!existing?.b64) {
+    await idbSet(storageKey, JSON.stringify({
+      v: 1,
+      keyName,
+      peerUid: String(peerUid || ''),
+      b64: remote,
+      fingerprint: remoteFingerprint,
+      firstSeenAt: Date.now(),
+    }));
+    return { ok: true, firstUse: true, key: remote, fingerprint: remoteFingerprint };
+  }
+
+  if (existing.b64 !== remote) {
+    return {
+      ok: false,
+      changed: true,
+      reason: `${keyName}_changed`,
+      keyName,
+      peerUid: String(peerUid || ''),
+      oldFingerprint: existing.fingerprint || await fingerprintPublicKeyB64(existing.b64),
+      newFingerprint: remoteFingerprint,
+    };
+  }
+
+  return { ok: true, firstUse: false, key: existing.b64, fingerprint: existing.fingerprint || remoteFingerprint };
+}
+
+function makePinnedKeyChangedError(pin) {
+  const err = new Error(
+    `[e2e] Публичный ключ пользователя ${pin.peerUid || ''} изменился. ` +
+    `Отправка заблокирована до ручной сверки fingerprint: ${pin.oldFingerprint || 'unknown'} -> ${pin.newFingerprint || 'unknown'}`
+  );
+  err.code = 'E2E_PINNED_KEY_CHANGED';
+  err.keyName = pin.keyName;
+  err.peerUid = pin.peerUid;
+  err.oldFingerprint = pin.oldFingerprint;
+  err.newFingerprint = pin.newFingerprint;
+  return err;
+}
+
+async function requirePinnedPeerPublicKey(peerUid, keyName, firestoreKeyB64, options = {}) {
+  const pin = await getPinnedPeerPublicKey(peerUid, keyName, firestoreKeyB64, options);
+  if (!pin.ok) throw makePinnedKeyChangedError(pin);
+  return pin.key;
+}
+
+async function getPinnedEncryptionKeyBundle(peerUid, myUid, userData = {}) {
+  const out = { ecdhPublicKey: null, rsaPublicKey: null };
+  if (userData.ecdhPublicKey) {
+    out.ecdhPublicKey = await requirePinnedPeerPublicKey(peerUid, 'ecdhPublicKey', userData.ecdhPublicKey, { myUid });
+  }
+  if (userData.publicKey) {
+    out.rsaPublicKey = await requirePinnedPeerPublicKey(peerUid, 'publicKey', userData.publicKey, { myUid });
+  }
+  if (!out.ecdhPublicKey && !out.rsaPublicKey) throw new Error('У пользователя нет E2E public key');
+  return out;
+}
+
+async function clearPinnedPeerKey(peerUid, keyName = 'all', myUid = '') {
+  const owner = String(myUid || _activeUid || 'anon');
+  const keys = keyName === 'all'
+    ? ['publicKey', 'ecdhPublicKey', 'signingPublicKey']
+    : [String(keyName)];
+  await Promise.all(keys.map(k => idbDelete(e2ePinKey(owner, peerUid, k))));
 }
 function canonicalSignaturePayload(uid, text) {
   return JSON.stringify({ v: 1, purpose: 'chat6a-dm-text-signature', uid: String(uid || ''), text: String(text || '') });
@@ -361,10 +539,12 @@ async function verifyDMPlaintextSignature(msgData, plaintext, firestoreDb, fsDoc
     const snap = await fsGetDoc(fsDoc(firestoreDb, 'users', senderUid));
     const signingPublicKey = snap.data()?.signingPublicKey;
     if (!signingPublicKey) return { ok: null, reason: 'sender_has_no_signing_key' };
-    const pub = await importSigningPublicKey(signingPublicKey);
+    const pin = await getPinnedPeerPublicKey(senderUid, 'signingPublicKey', signingPublicKey, { myUid: _activeUid });
+    if (!pin.ok) return { ok: false, reason: pin.reason || 'signing_key_changed', fingerprint: pin.newFingerprint, previousFingerprint: pin.oldFingerprint };
+    const pub = await importSigningPublicKey(pin.key);
     const payload = new TextEncoder().encode(canonicalSignaturePayload(senderUid, plaintext));
     const ok = await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-384' }, pub, b64ToBytes(msgData.e2eSig), payload);
-    return { ok, reason: ok ? 'verified' : 'bad_signature', fingerprint: await fingerprintPublicKeyB64(signingPublicKey) };
+    return { ok, reason: ok ? 'verified' : 'bad_signature', fingerprint: pin.fingerprint, firstUse: !!pin.firstUse };
   } catch (e) { return { ok: false, reason: 'verify_error' }; }
 }
 async function ensureSigningKeyPair(uid, firestoreDb, fsDoc, fsSetDoc, password) {
@@ -417,12 +597,13 @@ async function saveEcdhPrivateKey(uid, privateKey, password) {
 }
 async function loadEcdhPrivateKey(uid, password) {
   const blob = await idbGet(`e2e_ecdh_priv_${uid}`);
-  if (!(blob instanceof Uint8Array) || blob.length < 44) return null;
-  const salt = blob.slice(0, 32), iv = blob.slice(32, 44), cipher = blob.slice(44);
-  const aesKey = await deriveKeyFromPassword(password, salt);
-  const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, aesKey, cipher);
-  const jwk = JSON.parse(new TextDecoder().decode(plain));
-  return crypto.subtle.importKey('jwk', jwk, { name: 'ECDH', namedCurve: E2E_ECDH_CURVE }, true, ['deriveKey']);
+  const wrapped = await decryptWrappedJwkBlob(blob, password);
+  if (!wrapped) return null;
+  const key = await crypto.subtle.importKey('jwk', wrapped.jwk, { name: 'ECDH', namedCurve: E2E_ECDH_CURVE }, true, ['deriveKey']);
+  if (wrapped.legacy) {
+    try { await saveEcdhPrivateKey(uid, key, password); } catch (e) { console.warn('[e2e] ecdh key KDF migration failed:', e?.message || e); }
+  }
+  return key;
 }
 async function ensureEcdhKeyPair(uid, firestoreDb, fsDoc, fsSetDoc, password) {
   let privateKey = null;
@@ -475,8 +656,10 @@ async function encryptForUserPublicKeys({ ecdhPublicKey, rsaPublicKey }, text, o
   // Новые сообщения шифруем повторно-дешифруемым ECDH v3 envelope. RSA — только fallback для
   // старых пользователей без ECDH-ключа.
   if (ecdhPublicKey) return ecdhEncryptForPublicKeyB64(ecdhPublicKey, text);
-  if (rsaPublicKey) return rsaEncrypt(await importPublicKey(rsaPublicKey), text);
-  throw new Error('У пользователя нет E2E public key');
+  // RSA-OAEP remains readable for legacy messages, but is no longer allowed for new sends.
+  // This prevents silently creating non-forward-secret DM history for users without ECDH keys.
+  if (rsaPublicKey && options.allowRsaFallback === true) return rsaEncrypt(await importPublicKey(rsaPublicKey), text);
+  throw new Error('У пользователя нет ECDH public key; RSA fallback отключён для новых сообщений');
 }
 function detectCipherAlg(value) {
   if (typeof value === 'string' && value.trim().startsWith('{')) {
@@ -510,10 +693,12 @@ async function verifyEncryptedMessageSignature(msgData, firestoreDb, fsDoc, fsGe
     const snap = await fsGetDoc(fsDoc(firestoreDb, 'users', senderUid));
     const signingPublicKey = snap.data()?.signingPublicKey;
     if (!signingPublicKey) return { ok: null, reason: 'sender_has_no_signing_key' };
-    const pub = await importSigningPublicKey(signingPublicKey);
+    const pin = await getPinnedPeerPublicKey(senderUid, 'signingPublicKey', signingPublicKey, { myUid: _activeUid });
+    if (!pin.ok) return { ok: false, reason: pin.reason || 'signing_key_changed', fingerprint: pin.newFingerprint, previousFingerprint: pin.oldFingerprint };
+    const pub = await importSigningPublicKey(pin.key);
     const payload = new TextEncoder().encode(canonicalEncryptedPayload(msgData));
     const ok = await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-384' }, pub, b64ToBytes(msgData.e2eSig), payload);
-    return { ok, reason: ok ? 'verified' : 'bad_signature', fingerprint: await fingerprintPublicKeyB64(signingPublicKey) };
+    return { ok, reason: ok ? 'verified' : 'bad_signature', fingerprint: pin.fingerprint, firstUse: !!pin.firstUse };
   } catch (e) { return { ok: false, reason: 'verify_error' }; }
 }
 
@@ -578,13 +763,94 @@ async function ratchetNextChainKey(chainKeyHex) {
 function ratchetStateKey(kind, convId, uid) {
   return `e2e_ratchet_${kind}_${convId}_${uid}`;
 }
+
+/**
+ * Активирует AES-GCM ключ для ratchet-state, выведенный из мастер-пароля.
+ * Ключ не сохраняется на диск: в IDB лежит только соль PBKDF2 и зашифрованный state.
+ * Старый уязвимый ключ e2e_ratchet_storage_key читается один раз для миграции и удаляется.
+ */
+let _ratchetStorageKey = null;
+let _legacyRatchetStorageKey = null;
+let _legacyRatchetPasswordStorageKey = null;
+
+async function deriveRatchetStorageKeyFromPassword(uid, password) {
+  const saltKey = `e2e_ratchet_storage_salt_${uid}`;
+  let salt = await idbGet(saltKey);
+  if (!(salt instanceof Uint8Array) || salt.length !== 32) {
+    salt = crypto.getRandomValues(new Uint8Array(32));
+    await idbSet(saltKey, salt);
+  }
+  return deriveKeyFromPassword(`${String(password)}\u0000chat6a-ratchet-storage-v2`, salt);
+}
+
+async function activateRatchetStorageKey(uid, password) {
+  _activeUid = String(uid || '');
+  _ratchetStorageKey = await deriveRatchetStorageKeyFromPassword(_activeUid, password);
+  _legacyRatchetPasswordStorageKey = null;
+  const saltKey = `e2e_ratchet_storage_salt_${_activeUid}`;
+  const salt = await idbGet(saltKey);
+  if (salt instanceof Uint8Array && salt.length === 32) {
+    try { _legacyRatchetPasswordStorageKey = await deriveKeyFromPassword(`${String(password)}\u0000chat6a-ratchet-storage-v2`, salt, 310_000); } catch (_) {}
+  }
+
+  const legacyRaw = await idbGet('e2e_ratchet_storage_key');
+  if (legacyRaw instanceof Uint8Array && legacyRaw.length === 32) {
+    _legacyRatchetStorageKey = await crypto.subtle.importKey(
+      'raw', legacyRaw, { name: 'AES-GCM' }, false, ['decrypt']
+    );
+    await idbDelete('e2e_ratchet_storage_key');
+  }
+}
+
+async function getRatchetStorageKey() {
+  if (!_ratchetStorageKey) throw new Error('ratchet_storage_locked');
+  return _ratchetStorageKey;
+}
+
+async function decryptRatchetStateBlob(raw, key) {
+  const iv = raw.slice(0, 12);
+  const ct = raw.slice(12);
+  const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
+  return JSON.parse(new TextDecoder().decode(plain));
+}
+
 async function loadRatchetState(kind, convId, uid) {
   const raw = await idbGet(ratchetStateKey(kind, convId, uid));
   if (!raw) return null;
-  try { return typeof raw === 'string' ? JSON.parse(raw) : raw; } catch { return null; }
+
+  if (typeof raw === 'string') {
+    try {
+      const state = JSON.parse(raw);
+      if (_ratchetStorageKey) await saveRatchetState(kind, convId, uid, state);
+      return state;
+    } catch { return null; }
+  }
+
+  if (raw instanceof Uint8Array && raw.length > 12) {
+    if (_ratchetStorageKey) {
+      try { return await decryptRatchetStateBlob(raw, _ratchetStorageKey); } catch (_) {}
+    }
+    for (const candidate of [_legacyRatchetPasswordStorageKey, _legacyRatchetStorageKey]) {
+      if (!candidate) continue;
+      try {
+        const state = await decryptRatchetStateBlob(raw, candidate);
+        if (_ratchetStorageKey) await saveRatchetState(kind, convId, uid, state);
+        return state;
+      } catch (_) {}
+    }
+  }
+  return null;
 }
+
 async function saveRatchetState(kind, convId, uid, state) {
-  await idbSet(ratchetStateKey(kind, convId, uid), JSON.stringify(state));
+  const key   = await getRatchetStorageKey();
+  const iv    = crypto.getRandomValues(new Uint8Array(12));
+  const plain = new TextEncoder().encode(JSON.stringify(state));
+  const ct    = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, plain);
+  const blob  = new Uint8Array(12 + ct.byteLength);
+  blob.set(iv, 0);
+  blob.set(new Uint8Array(ct), 12);
+  await idbSet(ratchetStateKey(kind, convId, uid), blob);
 }
 async function clearRatchetState(kind, convId, uid) {
   await idbDelete(ratchetStateKey(kind, convId, uid));
@@ -889,6 +1155,7 @@ async function decryptBuffer(encryptedBuffer, rawAesKey) {
  * @returns {Promise<string>}  Object URL или data URL
  */
 async function decryptMediaUrl(myPrivateKey, encryptedAesB64, cloudinaryRawUrl) {
+  if (!isE2ETrustedMediaUrl(cloudinaryRawUrl)) throw new Error('invalid_or_untrusted_media_url');
   // 1. RSA-расшифровываем AES-ключ (hex → ArrayBuffer)
   const aesHex    = await rsaDecrypt(myPrivateKey, encryptedAesB64);
   const rawAesKey = hexToBuffer(aesHex);
@@ -991,17 +1258,35 @@ async function decryptE2ETextValue(myPrivateKey, value, options = {}) {
   }
 }
 
+/**
+ * Проверяет, что URL медиафайла принадлежит конкретному Cloudinary cloud-name.
+ * Простая проверка домена res.cloudinary.com недостаточна: у атакующего может быть свой cloud.
+ * @param {string} url
+ * @returns {boolean}
+ */
+function isE2ETrustedMediaUrl(url) {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'https:' || parsed.hostname !== 'res.cloudinary.com') return false;
+    if (!E2E_CLOUDINARY_CLOUD_NAME) return false;
+    return parsed.pathname === `/${E2E_CLOUDINARY_CLOUD_NAME}` ||
+      parsed.pathname.startsWith(`/${E2E_CLOUDINARY_CLOUD_NAME}/`);
+  } catch (_) {
+    return false;
+  }
+}
+
 async function decryptMediaFileFromUrlAndAesHex(cloudinaryRawUrl, aesHex, mimeType = 'application/octet-stream') {
   const url = unwrapJsonString(cloudinaryRawUrl).trim();
   const keyHex = unwrapJsonString(aesHex).trim();
-  if (!url || !url.startsWith('https://')) throw new Error('invalid_media_url');
+  if (!url || !isE2ETrustedMediaUrl(url)) throw new Error('invalid_or_untrusted_media_url');
   if (!isLikelyHexKey(keyHex)) throw new Error('invalid_media_aes_key');
   const rawAesKey = hexToBuffer(keyHex);
   const resp = await fetch(url);
   if (!resp.ok) throw new Error(`Fetch failed: ${resp.status}`);
   const encBuf = await resp.arrayBuffer();
   const plainBuf = await decryptBuffer(encBuf, rawAesKey);
-  return rememberObjectUrl(URL.createObjectURL(new Blob([plainBuf], { type: mimeType || 'application/octet-stream' })));
+  return rememberObjectUrl(URL.createObjectURL(new Blob([plainBuf], { type: safeDecryptedMediaMime(mimeType) })));
 }
 
 async function decryptE2EMediaPayload(myPrivateKey, mediaRaw, mimeType = 'application/octet-stream') {
@@ -1032,14 +1317,17 @@ async function decryptE2EMediaPayload(myPrivateKey, mediaRaw, mimeType = 'applic
       return decryptMediaFileFromUrlAndAesHex(cloudUrl, aesHex, mimeType);
     }
 
-    // If this is an old non-E2E/plain media wrapper, prefer returning the safe URL over hard-locking UI.
-    if (cloudUrl.startsWith('https://') && !aesField) return cloudUrl;
+    // Plain HTTPS media is allowed only from the configured Cloudinary cloud-name.
+    if (cloudUrl.startsWith('https://') && !aesField && isE2ETrustedMediaUrl(cloudUrl)) return cloudUrl;
     return null;
   }
 
   // Direct E2E field that decrypts to a URL, or to a media wrapper from an older deployment.
   const legacyPlain = unwrapJsonString(await decryptE2ETextValue(myPrivateKey, raw)).trim();
-  if (isProbablyPlainMediaUrl(legacyPlain)) return legacyPlain;
+  if (isProbablyPlainMediaUrl(legacyPlain)) {
+    if (legacyPlain.startsWith('https://') && !isE2ETrustedMediaUrl(legacyPlain)) return null;
+    return legacyPlain;
+  }
   const nested = tryParseJsonObject(legacyPlain);
   if (isMediaEnvelopeObject(nested)) return decryptE2EMediaPayload(myPrivateKey, nested, mimeType);
   return null;
@@ -1072,6 +1360,54 @@ function hexToBuffer(hex) {
  * @param {'create'|'unlock'} mode
  * @returns {Promise<string>}
  */
+/**
+ * Показывает кастомное информационное сообщение (замена alert()).
+ * Не блокирует поток, не может быть перехвачен через window.alert.
+ * @param {string} message
+ * @param {'error'|'warn'|'info'} type
+ * @returns {Promise<void>} резолвится при нажатии OK
+ */
+function showE2ENotice(message, type = 'error') {
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = `
+      position:fixed;inset:0;background:rgba(0,0,0,.7);
+      display:flex;align-items:center;justify-content:center;
+      z-index:99999;backdrop-filter:blur(4px);
+    `;
+    const iconMap  = { error: '🚫', warn: '⚠️', info: 'ℹ️' };
+    const colorMap = { error: '#f87171', warn: '#fbbf24', info: '#63b3ff' };
+    const card = document.createElement('div');
+    card.style.cssText = `
+      background:var(--surface,#1a1a2e);color:var(--text,#e8edf8);
+      border-radius:20px;padding:28px 24px;max-width:360px;width:90%;
+      box-shadow:0 24px 72px rgba(0,0,0,.6);
+      font-family:var(--font-body,'DM Sans',sans-serif);
+      border-top:3px solid ${colorMap[type]};
+    `;
+    card.innerHTML = `
+      <p style="margin:0 0 20px;font-size:1rem;line-height:1.5;">
+        ${iconMap[type]} ${escapeTextForHtml(message)}
+      </p>
+      <div style="display:flex;justify-content:flex-end;">
+        <button id="e2e-notice-ok" style="padding:10px 24px;border-radius:12px;border:none;
+          background:${colorMap[type]};color:#030b18;font-weight:700;cursor:pointer;font-size:.9rem;">
+          OK
+        </button>
+      </div>
+    `;
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+    card.querySelector('#e2e-notice-ok').addEventListener('click', () => {
+      overlay.remove();
+      resolve();
+    });
+    overlay.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === 'Escape') { overlay.remove(); resolve(); }
+    });
+    card.querySelector('#e2e-notice-ok').focus();
+  });
+}
 function promptMasterPassword(mode) {
   return new Promise((resolve, reject) => {
     // Создаём модалку программно, чтобы не зависеть от существующей разметки
@@ -1142,8 +1478,16 @@ function promptMasterPassword(mode) {
 
     card.querySelector('#mp-ok').addEventListener('click', () => {
       const pwd = input.value;
-      if (!pwd || pwd.length < 8) { showErr('Минимум 8 символов'); return; }
+      if (!pwd || pwd.length < 12) { showErr('Минимум 12 символов'); return; }
       if (isCreate) {
+        // Проверка сложности: буквы + цифры или спецсимволы
+        const hasLetter  = /[a-zA-Zа-яА-ЯёЁ]/.test(pwd);
+        const hasDigit   = /\d/.test(pwd);
+        const hasSpecial = /[^a-zA-Zа-яА-ЯёЁ\d]/.test(pwd);
+        if (!hasLetter || !(hasDigit || hasSpecial)) {
+          showErr('Пароль должен содержать буквы и цифры или спецсимволы');
+          return;
+        }
         if (pwd !== input2.value) { showErr('Пароли не совпадают'); return; }
       }
       hideErr();
@@ -1215,6 +1559,7 @@ async function initE2EForUser(uid, firestoreDb, fsDoc, fsGetDoc, fsSetDoc) {
           if (testPlain === 'e2e_ok') {
             await ensureSigningKeyPair(uid, firestoreDb, fsDoc, fsSetDoc, password);
             await ensureEcdhKeyPair(uid, firestoreDb, fsDoc, fsSetDoc, password);
+            await activateRatchetStorageKey(uid, password);
             console.info('[e2e] Ключи разблокированы и верифицированы');
             return { privateKey, publicKeyB64: storedPubB64 };
           }
@@ -1238,7 +1583,7 @@ async function initE2EForUser(uid, firestoreDb, fsDoc, fsGetDoc, fsSetDoc) {
           // AES-GCM провалился → неверный пароль
           console.warn(`[e2e] Неверный пароль (попытка ${attempts}/3)`);
           if (attempts >= 3) {
-            alert('Неверный пароль 3 раза. E2E-переписка недоступна на этом устройстве.');
+            await showE2ENotice('Неверный пароль введён 3 раза. E2E-переписка недоступна на этом устройстве.', 'error');
             return { privateKey: null, publicKeyB64: null };
           }
         } else {
@@ -1274,9 +1619,11 @@ async function initE2EForUser(uid, firestoreDb, fsDoc, fsGetDoc, fsSetDoc) {
   await idbSet(`e2e_ecdh_pub_${uid}`, ecdhPublicKeyB64);
 
   // Сохраняем приватный ключ в IDB (зашифрованный мастер-паролем)
-  await savePrivateKey(uid, pair.privateKey, password);
+  // Передаём публичный ключ для дублирования в IDB
+  await savePrivateKey(uid, pair.privateKey, password, pair.publicKey);
   await saveSigningPrivateKey(uid, signPair.privateKey, password);
   await saveEcdhPrivateKey(uid, ecdhPair.privateKey, password);
+  await activateRatchetStorageKey(uid, password);
   _activeSigningPrivateKey = signPair.privateKey;
   _activeSigningPublicKeyB64 = signingPublicKeyB64;
   _activeEcdhPrivateKey = ecdhPair.privateKey;
@@ -1322,9 +1669,10 @@ async function encryptDM(text, peerUid, myUid, myPrivateKey, firestoreDb, fsDoc,
 
   const peerData = peerSnap.data() || {};
   const myData = mySnap.data() || {};
+  const peerKeys = await getPinnedEncryptionKeyBundle(peerUid, myUid, peerData);
 
   const [forPeer, forMe] = await Promise.all([
-    encryptForUserPublicKeys({ ecdhPublicKey: peerData.ecdhPublicKey, rsaPublicKey: peerData.publicKey }, text, { convId: options.convId, targetUid: peerUid, senderUid: myUid }),
+    encryptForUserPublicKeys(peerKeys, text, { convId: options.convId, targetUid: peerUid, senderUid: myUid }),
     encryptForUserPublicKeys({ ecdhPublicKey: myData.ecdhPublicKey || _activeEcdhPublicKeyB64, rsaPublicKey: myData.publicKey }, text, { convId: options.convId, targetUid: myUid, senderUid: myUid })
   ]);
 
@@ -1409,10 +1757,11 @@ async function sendDirectMessage(params) {
     ]);
     const peerData = peerSnap.data() || {};
     const myData   = mySnap.data() || {};
+    const peerKeys = await getPinnedEncryptionKeyBundle(peerUid, myUid, peerData);
 
     const [encAesForPeer, encAesForMe] = await Promise.all([
       encryptForUserPublicKeys(
-        { ecdhPublicKey: peerData.ecdhPublicKey, rsaPublicKey: peerData.publicKey },
+        peerKeys,
         aesHex,
         { convId, targetUid: peerUid, senderUid: myUid }
       ),
@@ -1683,7 +2032,7 @@ async function checkToxicity(text) {
   try {
     const resp = await fetch(`${BACKEND_URL}/moderate`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: await authJsonHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ text: text.trim() }),
       signal: AbortSignal.timeout(8000)  // 8 сек таймаут
     });
@@ -1712,6 +2061,7 @@ async function checkToxicity(text) {
  * @returns {Promise<string>}  Cloudinary secure_url
  */
 async function uploadViaBackend(blob, onProgress, type = 'raw') {
+  const token = await getFirebaseIdToken();
   return new Promise((resolve, reject) => {
     const fd = new FormData();
     fd.append('file', blob);
@@ -1720,6 +2070,7 @@ async function uploadViaBackend(blob, onProgress, type = 'raw') {
     const xhr = new XMLHttpRequest();
     xhr.open('POST', `${BACKEND_URL}/upload`);
     xhr.timeout = 60_000;
+    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
 
     if (onProgress) {
       xhr.upload.addEventListener('progress', e => {
@@ -1742,63 +2093,28 @@ async function uploadViaBackend(blob, onProgress, type = 'raw') {
 
 /* ═══════════════════════════════════════════════════════════════
    § 11  ЭКСПОРТ В ГЛОБАЛЬНЫЙ ОБЪЕКТ window.E2E
+   Только публичные функции попадают наружу.
+   Внутренние утилиты (idbGet, idbSet, deriveKeyFromPassword и др.)
+   остаются приватными внутри IIFE и недоступны из window.
 ═══════════════════════════════════════════════════════════════ */
 
-window.E2E = {
-  // Ключи
+window.E2E = Object.freeze({
+  // Минимальный публичный API. Private-key helpers and raw encryptors stay in closure.
   initE2EForUser,
-  savePrivateKey,
-  loadPrivateKey,
-  hasStoredPrivateKey,
-  generateKeyPair,
-  exportPublicKey,
-  importPublicKey,
-  fingerprintPublicKeyB64,
-  verifyDMPlaintextSignature,
-  signDMPlaintext,
-  revokeE2EObjectUrls,
-
-  // Шифрование текста
-  rsaEncrypt,
-  rsaDecrypt,
-  rsaDecryptLegacy,
   encryptDM,
-  verifyEncryptedMessageSignature,
-  signEncryptedMessagePayload,
-  ensureEcdhKeyPair,
-  ratchetEncryptForPublicKeyB64,
-  ratchetDecryptEnvelope,
-  loadRatchetState,
-  clearRatchetState,
-
-  // Шифрование медиа
-  encryptBlob,
-  decryptBuffer,
-  decryptMediaUrl,
-  decryptE2EMediaPayload,
-  decryptE2ETextValue,
-  decryptMediaFileFromUrlAndAesHex,
-
-  // Сообщения
-  sendDirectMessage,
   decryptMessage,
-
-  // Модерация и загрузка (через бэкенд)
+  sendDirectMessage,
+  verifyEncryptedMessageSignature,
+  rsaDecrypt, // read-only legacy decrypt compatibility used by the main UI
   checkToxicity,
   uploadViaBackend,
+  revokeE2EObjectUrls,
+  showE2ENotice,
+});
 
-  // Утилиты
-  bufferToHex,
-  hexToBuffer,
-  openIDB,
-  idbGet,
-  idbSet,
-  idbDelete,
-  detectCipherAlg,
-};
+console.info('[E2E] Security module v2.4 загружен (auth, pinning, safe media, ratchet hardening)');
 
-console.info('[E2E] Security module v2.2 загружен');
-
+})();
     </script>
 
     <style>
@@ -4549,6 +4865,7 @@ console.info('[E2E] Security module v2.2 загружен');
         };
         const app  = initializeApp(firebaseConfig);
         const auth = getAuth(app);
+        window.chat6aAuth = auth;
         const db   = getFirestore(app);
 
         /* ══════════════════════════════
@@ -4556,7 +4873,7 @@ console.info('[E2E] Security module v2.2 загружен');
            Старый общий AES с hardcoded-ключом отключён.
            Общий чат хранится plaintext по задумке, а ЛС идут через E2E.
         ══════════════════════════════ */
-        function encryptMessage(text) { return text || ''; }
+        function encryptMessage() { throw new Error('legacy_plaintext_dm_fallback_disabled'); }
         function decryptMessage(cipherText) { return cipherText ? '[Старое AES-сообщение отключено]' : ''; }
         function safeDecrypt(text) {
             if (!text) return text;
@@ -4576,108 +4893,20 @@ console.info('[E2E] Security module v2.2 загружен');
              2) своим публичным ключом (чтобы видеть свои сообщения)
            - При получении — расшифровываем своим приватным ключом
         ══════════════════════════════════════════════════════ */
-
-        const E2E_PRIVATE_KEY_PREFIX = 'e2e_privkey_';
+        // Legacy localStorage RSA keystore removed.
+        // All DM E2E keys are managed by window.E2E in IndexedDB and wrapped with the master password.
+        const E2E_PRIVATE_KEY_PREFIX = 'e2e_privkey_legacy_disabled_';
         let myPrivateKey  = null;
         let myPublicKeyB64 = null;
-        // Кеш расшифрованных E2E текстов: msgId → plaintext
         const _e2eDecryptedCache = new Map();
-        // Полный кеш расшифровки E2E: msgId → Promise<decryptMessageResult>.
-        // Нужен, чтобы UI не расшифровывал один и тот же ciphertext несколько раз при onSnapshot/rerender.
         const _e2eMessageDecryptCache = new Map();
 
-        // ── Защита приватного ключа паролем (AES-GCM) ──
-        // Ключ шифруется через PBKDF2 из uid пользователя + фиксированной соли устройства.
-        // Это не замена паролю, но защищает от банального чтения localStorage расширениями —
-        // без uid (который знает только Firebase Auth сессия) расшифровать нельзя.
-        const E2E_KEY_SALT_PREFIX = 'e2e_salt_';
-
-        async function deriveKeyFromUid(uid, salt) {
-            const enc = new TextEncoder();
-            const baseKey = await crypto.subtle.importKey('raw', enc.encode(uid),
-                'PBKDF2', false, ['deriveKey']);
-            return crypto.subtle.deriveKey(
-                { name: 'PBKDF2', salt, iterations: 100_000, hash: 'SHA-256' },
-                baseKey, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']
-            );
-        }
-
-        // Сохранить приватный ключ в localStorage (зашифрованный AES-GCM через PBKDF2(uid))
-        async function savePrivateKey(uid, cryptoKey) {
-            const jwk = await crypto.subtle.exportKey('jwk', cryptoKey);
-            const plain = new TextEncoder().encode(JSON.stringify(jwk));
-            // Получаем или генерируем соль для этого браузера
-            let saltB64 = localStorage.getItem(E2E_KEY_SALT_PREFIX + uid);
-            let salt;
-            if (saltB64) {
-                salt = Uint8Array.from(atob(saltB64), c => c.charCodeAt(0));
-            } else {
-                salt = crypto.getRandomValues(new Uint8Array(16));
-                saltB64 = btoa(String.fromCharCode(...salt));
-                localStorage.setItem(E2E_KEY_SALT_PREFIX + uid, saltB64);
-            }
-            const iv = crypto.getRandomValues(new Uint8Array(12));
-            const aesKey = await deriveKeyFromUid(uid, salt);
-            const cipher = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, aesKey, plain);
-            // Пакуем: [12 байт IV][зашифрованный JWK]
-            const blob = new Uint8Array(12 + cipher.byteLength);
-            blob.set(iv, 0); blob.set(new Uint8Array(cipher), 12);
-            localStorage.setItem(E2E_PRIVATE_KEY_PREFIX + uid, btoa(String.fromCharCode(...blob)));
-        }
-
-        // Загрузить приватный ключ из localStorage (расшифровываем AES-GCM)
-        async function loadPrivateKey(uid) {
-            const raw = localStorage.getItem(E2E_PRIVATE_KEY_PREFIX + uid);
-            if (!raw) return null;
-            try {
-                // Попытка 1: новый формат (зашифрованный blob)
-                const saltB64 = localStorage.getItem(E2E_KEY_SALT_PREFIX + uid);
-                if (saltB64) {
-                    const salt = Uint8Array.from(atob(saltB64), c => c.charCodeAt(0));
-                    const blob = Uint8Array.from(atob(raw), c => c.charCodeAt(0));
-                    const iv = blob.slice(0, 12);
-                    const cipher = blob.slice(12);
-                    const aesKey = await deriveKeyFromUid(uid, salt);
-                    const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, aesKey, cipher);
-                    const jwk = JSON.parse(new TextDecoder().decode(plain));
-                    return await crypto.subtle.importKey('jwk', jwk,
-                        { name: 'RSA-OAEP', hash: 'SHA-256' }, true, ['decrypt']);
-                }
-                // Попытка 2: старый формат (plaintext JWK) — миграция
-                const jwk = JSON.parse(raw);
-                if (jwk.kty) {
-                    const key = await crypto.subtle.importKey('jwk', jwk,
-                        { name: 'RSA-OAEP', hash: 'SHA-256' }, true, ['decrypt']);
-                    // Мигрируем: перезаписываем в защищённый формат
-                    await savePrivateKey(uid, key);
-                    return key;
-                }
-            } catch(e) { return null; }
-            return null;
-        }
-
-        // Сгенерировать новую пару ключей RSA-OAEP 2048
-        async function generateKeyPair() {
-            return crypto.subtle.generateKey(
-                { name: 'RSA-OAEP', modulusLength: 2048,
-                  publicExponent: new Uint8Array([1,0,1]), hash: 'SHA-256' },
-                true, ['encrypt', 'decrypt']
-            );
-        }
-
-        // Экспортировать публичный ключ в base64 (для хранения в Firebase)
-        async function exportPublicKey(cryptoKey) {
-            const spki = await crypto.subtle.exportKey('spki', cryptoKey);
-            return btoa(String.fromCharCode(...new Uint8Array(spki)));
-        }
-
-        // Импортировать публичный ключ из base64 (из Firebase)
-        async function importPublicKey(b64) {
-            const binary = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
-            return crypto.subtle.importKey('spki', binary,
-                { name: 'RSA-OAEP', hash: 'SHA-256' },
-                true, ['encrypt']);
-        }
+        async function deriveKeyFromUid() { throw new Error('legacy_key_derivation_disabled'); }
+        async function savePrivateKey() { throw new Error('legacy_localstorage_keystore_disabled'); }
+        async function loadPrivateKey() { return null; }
+        async function generateKeyPair() { throw new Error('legacy_rsa_generation_disabled'); }
+        async function exportPublicKey() { throw new Error('legacy_rsa_export_disabled'); }
+        async function importPublicKey() { throw new Error('legacy_rsa_import_disabled'); }
 
         // Зашифровать строку публичным ключом → base64 (гибридный RSA+AES)
         // RSA шифрует только AES-ключ, AES шифрует сам текст — без ограничений на длину
@@ -4852,7 +5081,12 @@ console.info('[E2E] Security module v2.2 загружен');
         function isSafeMediaSrc(url) {
             if (typeof url !== 'string') return false;
             if (!url || url.startsWith('[🔒') || url.includes('Не удалось расшифровать')) return false;
-            return url.startsWith('blob:') || url.startsWith('data:audio/') || url.startsWith('data:image/') || /^https:\/\//i.test(url);
+            if (url.startsWith('blob:')) return true;
+            if (/^data:(audio|image)\//i.test(url)) return true;
+            try {
+                const u = new URL(url);
+                return u.protocol === 'https:' && u.hostname === 'res.cloudinary.com' && u.pathname.startsWith(`/${window.CLOUDINARY_CLOUD_NAME}/`);
+            } catch (_) { return false; }
         }
 
         function e2eCacheHash(value) {
@@ -4900,8 +5134,8 @@ console.info('[E2E] Security module v2.2 загружен');
                 const e2e = await encryptDM(text, peerUid, myUid);
                 return { [forPeerField]: e2e.forPeer, [forMeField]: e2e.forMe };
             } catch (e) {
-                console.warn('[dm aes fallback]', e.message);
-                return { [plainField]: encryptMessage(text) };
+                console.warn('[dm e2e blocked]', e.message);
+                throw new Error('E2E недоступно: plaintext fallback для ЛС отключён');
             }
         }
 
@@ -7366,7 +7600,7 @@ function dataUrlToFile(dataUrl, filename) {
                                     fsGetDoc: getDoc,
                                     fsServerTimestamp: serverTimestamp,
                                     fsIncrement: increment,
-                                    uploadToCloudinary: window.E2E.uploadViaBackend || uploadToCloudinary
+                                    uploadToCloudinary: window.E2E.uploadViaBackend
                                 });
                             }
                             lastOutboundAt=Date.now();
@@ -7678,22 +7912,54 @@ function dataUrlToFile(dataUrl, filename) {
             while((m=GIF_URL.exec(raw))!==null){
                 const before=raw.slice(last,m.index);
                 if (before) appendPlainText(wrap,before);
-                const img=document.createElement('img'); img.className='gif-inline'; img.src=m[1]; img.alt=''; img.loading='lazy'; img.referrerPolicy='no-referrer';
-                wrap.appendChild(img); last=m.index+m[0].length;
+                const gifUrl = m[1];
+                if (isSafeMediaSrc(gifUrl)) {
+                    const img=document.createElement('img'); img.className='gif-inline'; img.src=gifUrl; img.alt=''; img.loading='lazy'; img.referrerPolicy='no-referrer';
+                    wrap.appendChild(img);
+                } else {
+                    appendPlainText(wrap, gifUrl);
+                }
+                last=m.index+m[0].length;
             }
             const rest=raw.slice(last);
             if (rest) appendPlainText(wrap,rest);
             return wrap;
         }
+        function isSafeHttpUrl(rawUrl) {
+            try {
+                const u = new URL(String(rawUrl));
+                return u.protocol === 'https:' || (u.protocol === 'http:' && /^localhost$|^127\.0\.0\.1$/.test(u.hostname));
+            } catch (_) { return false; }
+        }
         function appendPlainText(container,text){
-            const div=document.createElement('div');
-            // Linkify — только http/https, блокируем data:/javascript:/vbscript: URI
             const safe_url_re = /\bhttps?:\/\/[^\s<>"']{2,}/gi;
-            const escaped = escapeHtml(text).replace(/\n/g,'<br>');
-            const linked = escaped.replace(safe_url_re, u =>
-                `<a href="${u}" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:underline;opacity:.85">${u}</a>`);
-            div.innerHTML = linked;
-            while(div.firstChild) container.appendChild(div.firstChild);
+            let last = 0, m; safe_url_re.lastIndex = 0;
+            const appendTextWithBreaks = (chunk) => {
+                const parts = String(chunk).split('\n');
+                parts.forEach((part, i) => {
+                    if (i) container.appendChild(document.createElement('br'));
+                    if (part) container.appendChild(document.createTextNode(part));
+                });
+            };
+            while ((m = safe_url_re.exec(String(text))) !== null) {
+                appendTextWithBreaks(String(text).slice(last, m.index));
+                const rawUrl = m[0];
+                if (isSafeHttpUrl(rawUrl)) {
+                    const a = document.createElement('a');
+                    a.href = rawUrl;
+                    a.target = '_blank';
+                    a.rel = 'noopener noreferrer nofollow ugc';
+                    a.style.color = 'inherit';
+                    a.style.textDecoration = 'underline';
+                    a.style.opacity = '.85';
+                    a.textContent = rawUrl;
+                    container.appendChild(a);
+                } else {
+                    appendTextWithBreaks(rawUrl);
+                }
+                last = m.index + rawUrl.length;
+            }
+            appendTextWithBreaks(String(text).slice(last));
         }
         function buildUrlPreview(text, bubble){
             URL_RE.lastIndex=0;
@@ -8990,7 +9256,7 @@ function dataUrlToFile(dataUrl, filename) {
                             fsGetDoc: getDoc,
                             fsServerTimestamp: serverTimestamp,
                             fsIncrement: increment,
-                            uploadToCloudinary: window.E2E.uploadViaBackend || uploadToCloudinary
+                            uploadToCloudinary: window.E2E.uploadViaBackend
                         });
                     }
                     sentCount++;
@@ -9191,7 +9457,7 @@ musicSendBtn.addEventListener('click', async () => {
                         fsGetDoc: getDoc,
                         fsServerTimestamp: serverTimestamp,
                         fsIncrement: increment,
-                        uploadToCloudinary: window.E2E.uploadViaBackend || uploadToCloudinary
+                        uploadToCloudinary: window.E2E.uploadViaBackend
                     });
                 }
                 initChecklistRows();
@@ -9265,7 +9531,7 @@ musicSendBtn.addEventListener('click', async () => {
                                     fsGetDoc: getDoc,
                                     fsServerTimestamp: serverTimestamp,
                                     fsIncrement: increment,
-                                    uploadToCloudinary: window.E2E.uploadViaBackend || uploadToCloudinary
+                                    uploadToCloudinary: window.E2E.uploadViaBackend
                                 });
                             }
                         } catch(e) { showToast('Ошибка: ' + e.message); }
@@ -9474,7 +9740,7 @@ musicSendBtn.addEventListener('click', async () => {
                             fsGetDoc: getDoc,
                             fsServerTimestamp: serverTimestamp,
                             fsIncrement: increment,
-                            uploadToCloudinary: window.E2E.uploadViaBackend || uploadToCloudinary
+                            uploadToCloudinary: window.E2E.uploadViaBackend
                         });
                     }
                     cancelReply(); lastOutboundAt=Date.now();

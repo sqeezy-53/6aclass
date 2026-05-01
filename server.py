@@ -10,21 +10,23 @@
 ║  3. /api/health    — healthcheck для мониторинга                 ║
 ║                                                                  ║
 ║  Запуск: uvicorn server:app --host 0.0.0.0 --port 8000          ║
-║  Зависимости: pip install fastapi uvicorn httpx python-dotenv    ║
+║  Зависимости: pip install fastapi uvicorn httpx python-dotenv firebase-admin    ║
 ╚══════════════════════════════════════════════════════════════════╝
 """
 
 import os
 import io
+import json
 import logging
 import hashlib
 import hmac
 import time
 from functools import wraps
 from typing import Optional
+from urllib.parse import urlparse
 
 import httpx
-from fastapi import FastAPI, Request, HTTPException, UploadFile, File, Form
+from fastapi import FastAPI, Request, HTTPException, UploadFile, File, Form, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, field_validator
@@ -39,7 +41,9 @@ CLOUDINARY_CLOUD_NAME = os.environ.get("CLOUDINARY_CLOUD_NAME", "")    # dvl3h61
 CLOUDINARY_UPLOAD_PRESET = os.environ.get("CLOUDINARY_UPLOAD_PRESET", "")  # unsigned preset
 CLOUDINARY_API_KEY    = os.environ.get("CLOUDINARY_API_KEY", "")
 CLOUDINARY_API_SECRET = os.environ.get("CLOUDINARY_API_SECRET", "")
-ALLOWED_ORIGINS       = os.environ.get("ALLOWED_ORIGINS", "https://6aclass.online").split(",")
+ALLOWED_ORIGINS       = [o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "https://6aclass.online").split(",") if o.strip()]
+FIREBASE_PROJECT_ID   = os.environ.get("FIREBASE_PROJECT_ID", "class6a-chat")
+FIREBASE_SERVICE_ACCOUNT_JSON = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON", "")
 
 # Пороговый балл токсичности (0.0–1.0). 0.75 = блокируем при 75%+
 TOXICITY_THRESHOLD = float(os.environ.get("TOXICITY_THRESHOLD", "0.75"))
@@ -62,6 +66,59 @@ logging.basicConfig(
 )
 logger = logging.getLogger("chat6a")
 
+# ── Firebase Auth ────────────────────────────────────────────────
+_firebase_ready = False
+
+def _init_firebase_admin() -> None:
+    """Ленивая инициализация Firebase Admin SDK для проверки ID token."""
+    global _firebase_ready
+    if _firebase_ready:
+        return
+    try:
+        import firebase_admin
+        from firebase_admin import credentials
+
+        if firebase_admin._apps:
+            _firebase_ready = True
+            return
+
+        options = {"projectId": FIREBASE_PROJECT_ID} if FIREBASE_PROJECT_ID else None
+        if FIREBASE_SERVICE_ACCOUNT_JSON:
+            service_account = json.loads(FIREBASE_SERVICE_ACCOUNT_JSON)
+            cred = credentials.Certificate(service_account)
+            firebase_admin.initialize_app(cred, options=options)
+        else:
+            firebase_admin.initialize_app(options=options)
+        _firebase_ready = True
+    except ImportError as exc:
+        logger.error("[auth] firebase-admin не установлен")
+        raise HTTPException(status_code=500, detail="Firebase Admin SDK не установлен") from exc
+    except Exception as exc:
+        logger.error("[auth] Firebase Admin SDK не настроен: %s", exc)
+        raise HTTPException(status_code=500, detail="Firebase Auth не настроен на сервере") from exc
+
+async def require_firebase_user(request: Request) -> dict:
+    """Fail-closed проверка Authorization: Bearer <Firebase ID token>."""
+    header = request.headers.get("Authorization", "")
+    if not header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing Authorization Bearer token")
+    token = header.removeprefix("Bearer ").strip()
+    if not token:
+        raise HTTPException(status_code=401, detail="Empty Authorization Bearer token")
+
+    _init_firebase_admin()
+    try:
+        from firebase_admin import auth as fb_auth
+        decoded = fb_auth.verify_id_token(token, check_revoked=True)
+        if not decoded.get("uid"):
+            raise ValueError("token without uid")
+        return decoded
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.warning("[auth] invalid Firebase ID token: %s", exc)
+        raise HTTPException(status_code=401, detail="Invalid Firebase ID token") from exc
+
 import asyncio
 
 # ── Rate limiting ─────────────────────────────────────────────────
@@ -71,6 +128,9 @@ import asyncio
 REDIS_URL          = os.environ.get("REDIS_URL", "")
 RATE_LIMIT_WINDOW  = 60   # секунд
 RATE_LIMIT_MAX_REQ = 30   # запросов за окно
+RATE_LIMIT_UPLOAD_MAX_REQ = int(os.environ.get("RATE_LIMIT_UPLOAD_MAX_REQ", "12"))
+RATE_LIMIT_MODERATE_MAX_REQ = int(os.environ.get("RATE_LIMIT_MODERATE_MAX_REQ", "30"))
+RATE_LIMIT_SECURITY_ALERT_MAX_REQ = int(os.environ.get("RATE_LIMIT_SECURITY_ALERT_MAX_REQ", "20"))
 
 _redis_client = None
 _rate_buckets: dict[str, list[float]] = {}  # fallback
@@ -90,6 +150,13 @@ async def _get_redis():
         logger.warning("[rate] Redis недоступен, используем in-memory fallback: %s", e)
         _redis_client = None
     return _redis_client
+
+def _limit_for_endpoint(endpoint: str) -> int:
+    return {
+        "upload": RATE_LIMIT_UPLOAD_MAX_REQ,
+        "moderate": RATE_LIMIT_MODERATE_MAX_REQ,
+        "security-alert": RATE_LIMIT_SECURITY_ALERT_MAX_REQ,
+    }.get(endpoint, RATE_LIMIT_MAX_REQ)
 
 async def check_rate_limit(client_ip: str, endpoint: str) -> bool:
     """
@@ -111,14 +178,14 @@ async def check_rate_limit(client_ip: str, endpoint: str) -> bool:
             pipe.expire(key, RATE_LIMIT_WINDOW + 1)
             results = await pipe.execute()
             count = results[2]
-            return count <= RATE_LIMIT_MAX_REQ
+            return count <= _limit_for_endpoint(endpoint)
         except Exception as e:
             logger.warning("[rate] Redis ошибка, fallback: %s", e)
 
     # In-memory fallback
     bucket = _rate_buckets.get(key, [])
     bucket = [t for t in bucket if now - t < RATE_LIMIT_WINDOW]
-    if len(bucket) >= RATE_LIMIT_MAX_REQ:
+    if len(bucket) >= _limit_for_endpoint(endpoint):
         _rate_buckets[key] = bucket
         return False
     bucket.append(now)
@@ -146,9 +213,16 @@ def get_client_ip(request: Request) -> str:
     if trusted_proxy:
         forwarded = request.headers.get("X-Forwarded-For", "")
         if forwarded:
-            # Последний IP добавляет доверенный прокси — он не может быть подделан
-            ips = [ip.strip() for ip in forwarded.split(",")]
-            return ips[-1] if ips else (request.client.host if request.client else "unknown")
+            ips = [ip.strip() for ip in forwarded.split(",") if ip.strip()]
+            # Select the client address before the configured trusted proxy hops.
+            # Default: one trusted reverse proxy appends its own IP to XFF.
+            try:
+                hops = max(1, int(os.environ.get("TRUSTED_PROXY_HOPS", "1")))
+            except ValueError:
+                hops = 1
+            idx = -(hops + 1)
+            if len(ips) >= hops + 1:
+                return ips[idx]
     return request.client.host if request.client else "unknown"
 
 # ── FastAPI приложение ───────────────────────────────────────────
@@ -176,6 +250,10 @@ async def add_security_headers(request: Request, call_next):
     response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     response.headers.setdefault("Permissions-Policy", "camera=(), geolocation=(), payment=(), usb=()")
     response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload")
+    response.headers.setdefault(
+        "Content-Security-Policy",
+        "frame-ancestors 'self'; object-src 'none'; base-uri 'self'"
+    )
     return response
 
 # ══════════════════════════════════════════════════════════════════
@@ -211,15 +289,19 @@ PERSPECTIVE_URL = (
 )
 
 @app.post("/api/moderate")
-async def moderate(request: Request, body: ModerateRequest):
+async def moderate(request: Request, body: ModerateRequest, user: dict = Depends(require_firebase_user)):
     """
     Проверяет текст на токсичность через Perspective API.
     Возвращает: { toxic: bool, score: float }
     """
     client_ip = get_client_ip(request)
+    uid = str(user.get("uid", "anon"))
+    if not PERSPECTIVE_API_KEY:
+        logger.error("[moderate] Perspective API key is not configured")
+        raise HTTPException(status_code=503, detail="Модерация временно недоступна")
 
-    # Rate limiting
-    if not await check_rate_limit(client_ip, "moderate"):
+    # Rate limiting: IP + authenticated user
+    if not await check_rate_limit(client_ip, "moderate") or not await check_rate_limit(f"uid:{uid}", "moderate"):
         logger.warning(f"[moderate] Rate limit exceeded for {client_ip}")
         raise HTTPException(status_code=429, detail="Слишком много запросов")
 
@@ -240,16 +322,15 @@ async def moderate(request: Request, body: ModerateRequest):
             resp = await client.post(PERSPECTIVE_URL, json=payload)
             resp.raise_for_status()
             data = resp.json()
-    except httpx.TimeoutException:
+    except httpx.TimeoutException as exc:
         logger.warning("[moderate] Perspective API timeout")
-        # fail-open: не блокируем если API недоступен
-        return JSONResponse({"toxic": False, "score": 0.0})
-    except httpx.HTTPStatusError as e:
-        logger.error(f"[moderate] Perspective HTTP error: {e.response.status_code}")
-        return JSONResponse({"toxic": False, "score": 0.0})
-    except Exception as e:
-        logger.error(f"[moderate] Unexpected error: {e}")
-        return JSONResponse({"toxic": False, "score": 0.0})
+        raise HTTPException(status_code=503, detail="Модерация временно недоступна") from exc
+    except httpx.HTTPStatusError as exc:
+        logger.error("[moderate] Perspective HTTP error: %s", exc.response.status_code)
+        raise HTTPException(status_code=503, detail="Модерация временно недоступна") from exc
+    except Exception as exc:
+        logger.error("[moderate] Unexpected error: %s", exc)
+        raise HTTPException(status_code=503, detail="Модерация временно недоступна") from exc
 
     # Берём максимальный балл среди всех атрибутов
     scores = data.get("attributeScores", {})
@@ -278,11 +359,11 @@ MAGIC_SIGNATURES = {
     "image/jpeg": [b"\xff\xd8\xff"],
     "image/png":  [b"\x89PNG\r\n\x1a\n"],
     "image/gif":  [b"GIF87a", b"GIF89a"],
-    "image/webp": [b"RIFF"],
+    "image/webp": [b"RIFF"],  # additionally requires WEBP at offset 8
     "audio/ogg":  [b"OggS"],
     "audio/mpeg": [b"ID3", b"\xff\xfb", b"\xff\xf3", b"\xff\xf2"],
-    "audio/wav":  [b"RIFF"],
-    "audio/x-wav": [b"RIFF"],
+    "audio/wav":  [b"RIFF"],  # additionally requires WAVE at offset 8
+    "audio/x-wav": [b"RIFF"],  # additionally requires WAVE at offset 8
     "video/webm": [b"\x1a\x45\xdf\xa3"],
 }
 
@@ -293,14 +374,32 @@ def validate_upload_content(filename: str, content_type: str, content: bytes, up
     if not content:
         raise HTTPException(status_code=400, detail="Пустой файл")
 
-    header = content[:16]
-    if upload_type == "image":
+    header = content[:64]
+    if upload_type != "raw":
         allowed = MAGIC_SIGNATURES.get(content_type, [])
         if not allowed or not any(header.startswith(sig) for sig in allowed):
             raise HTTPException(status_code=415, detail="Содержимое файла не соответствует MIME-типу")
+        if content_type == "image/webp" and content[8:12] != b"WEBP":
+            raise HTTPException(status_code=415, detail="Некорректный WEBP-файл")
+        if content_type in {"audio/wav", "audio/x-wav"} and content[8:12] != b"WAVE":
+            raise HTTPException(status_code=415, detail="Некорректный WAV-файл")
     if b"<script" in content[:4096].lower() or b"<?php" in content[:4096].lower():
         raise HTTPException(status_code=415, detail="Файл похож на исполняемый скрипт")
 
+
+
+def is_trusted_cloudinary_delivery_url(url: str) -> bool:
+    """Проверяет, что Cloudinary вернул URL именно из нашего cloud-name."""
+    try:
+        parsed = urlparse(url)
+        return (
+            parsed.scheme == "https"
+            and parsed.netloc == "res.cloudinary.com"
+            and bool(CLOUDINARY_CLOUD_NAME)
+            and (parsed.path == f"/{CLOUDINARY_CLOUD_NAME}" or parsed.path.startswith(f"/{CLOUDINARY_CLOUD_NAME}/"))
+        )
+    except Exception:
+        return False
 
 # ══════════════════════════════════════════════════════════════════
 #  § 3  ЗАГРУЗКА ФАЙЛОВ — Cloudinary прокси
@@ -311,6 +410,7 @@ async def upload(
     request: Request,
     file: UploadFile = File(...),
     type: str = Form(default="raw"),
+    user: dict = Depends(require_firebase_user),
 ):
     """
     Принимает зашифрованный E2E-блоб (или обычный файл для группового чата),
@@ -324,8 +424,9 @@ async def upload(
     """
     client_ip = get_client_ip(request)
 
-    if not await check_rate_limit(client_ip, "upload"):
-        logger.warning(f"[upload] Rate limit exceeded for {client_ip}")
+    uid = str(user.get("uid", "anon"))
+    if not await check_rate_limit(client_ip, "upload") or not await check_rate_limit(f"uid:{uid}", "upload"):
+        logger.warning("[upload] Rate limit exceeded for ip=%s uid=%s", client_ip, uid)
         raise HTTPException(status_code=429, detail="Слишком много запросов")
 
     # Валидация типа
@@ -349,8 +450,8 @@ async def upload(
 
     validate_upload_content(file.filename or "upload", content_type, content, type)
 
-    if not CLOUDINARY_CLOUD_NAME or not CLOUDINARY_UPLOAD_PRESET:
-        logger.error("[upload] Cloudinary env is not configured")
+    if not all([CLOUDINARY_CLOUD_NAME, CLOUDINARY_UPLOAD_PRESET, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET]):
+        logger.error("[upload] Cloudinary signed upload env is not configured")
         raise HTTPException(status_code=500, detail="Загрузка файлов не настроена на сервере")
 
     # Для зашифрованных блобов всегда resource_type=raw
@@ -361,28 +462,21 @@ async def upload(
         f"/{resource_type}/upload"
     )
 
-    # ── Signed upload (безопаснее unsigned preset) ──────────────────
-    # Подпись гарантирует, что загружать могут только запросы от нашего бэкенда.
-    # Даже если кто-то узнает cloud_name и upload_preset — без подписи загрузка
-    # будет отклонена. Требует CLOUDINARY_API_KEY и CLOUDINARY_API_SECRET в .env.
-    use_signed = bool(CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET)
+    # Signed upload only. Unsigned preset fallback is intentionally removed for production safety.
     ts = int(time.time())
-
-    if use_signed:
-        sign_params = {"timestamp": str(ts), "upload_preset": CLOUDINARY_UPLOAD_PRESET}
-        signature = _cloudinary_sign(sign_params)
-        form_data = {
-            "upload_preset": CLOUDINARY_UPLOAD_PRESET,
-            "timestamp": str(ts),
-            "signature": signature,
-            "api_key":   CLOUDINARY_API_KEY,
-        }
-    else:
-        # Fallback: unsigned preset (менее безопасно, работает без API Secret)
-        logger.warning("[upload] CLOUDINARY_API_SECRET не задан — используется unsigned upload")
-        form_data = {
-            "upload_preset": CLOUDINARY_UPLOAD_PRESET,
-        }
+    sign_params = {
+        "timestamp": str(ts),
+        "upload_preset": CLOUDINARY_UPLOAD_PRESET,
+        "overwrite": "false",
+        "unique_filename": "true",
+        "use_filename": "false",
+    }
+    signature = _cloudinary_sign(sign_params)
+    form_data = {
+        **sign_params,
+        "signature": signature,
+        "api_key": CLOUDINARY_API_KEY,
+    }
 
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
@@ -404,9 +498,9 @@ async def upload(
         raise HTTPException(status_code=500, detail="Внутренняя ошибка сервера")
 
     secure_url = data.get("secure_url", "")
-    if not secure_url.startswith("https://"):
-        logger.error(f"[upload] Cloudinary не вернул secure_url: {data}")
-        raise HTTPException(status_code=502, detail="Cloudinary не вернул ссылку")
+    if not is_trusted_cloudinary_delivery_url(secure_url):
+        logger.error(f"[upload] Cloudinary вернул недоверенный secure_url: {data}")
+        raise HTTPException(status_code=502, detail="Cloudinary вернул недоверенную ссылку")
 
     logger.info(
         f"[upload] ip={client_ip} size={len(content)} "
@@ -438,6 +532,7 @@ def _cloudinary_sign(params: dict) -> str:
 async def security_alert(request: Request):
     """Принимает клиентские security/audit события. Не раскрывает детали наружу."""
     client_ip = get_client_ip(request)
+    # Endpoint intentionally has IP-only rate limiting because CSP reports may be unauthenticated.
     if not await check_rate_limit(client_ip, "security-alert"):
         raise HTTPException(status_code=429, detail="Слишком много запросов")
     try:
