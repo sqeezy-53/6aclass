@@ -41,7 +41,7 @@ const DM_ALLOWED_FIELDS = new Set([
   'uid','author','text','createdAt','edited',
   'e2eForPeer','e2eForMe',
   'e2eImgForPeer','e2eImgForMe',
-  'e2eVoiceForPeer','e2eVoiceForMe','voiceDuration','voiceMime',
+  'e2eVoiceForPeer','e2eVoiceForMe','voiceDuration','voiceMime','voiceQuality','voiceWaveform',
   'e2eMusicForPeer','e2eMusicForMe','musicDuration','musicMime',
   'e2eChecklistForPeer','e2eChecklistForMe',
   'replyTo','forwarded','convId','e2eSig','e2eSigAlg','e2eCipherAlg','e2eRatchetAlg','e2eRatchetN','e2eRatchetPN'
@@ -409,13 +409,10 @@ async function ecdhEncryptForPublicKeyB64(publicKeyB64, text) {
   });
 }
 async function encryptForUserPublicKeys({ ecdhPublicKey, rsaPublicKey }, text, options = {}) {
-  // СТАБИЛЬНЫЙ РЕЖИМ ДЛЯ FIRESTORE-ИСТОРИИ.
-  // Ratchet-Lite v4 в этой версии оставлен только для чтения уже созданных legacy-v4 сообщений.
-  // Причина: текущий ratchetDecryptEnvelope() двигает локальную KDF-цепочку вперёд, а UI чата
-  // многократно ререндерит и расшифровывает одни и те же Firestore-сообщения. Это приводило к
-  // ratchet_message_key_expired при повторной расшифровке image/music/checklist.
-  // Новые сообщения шифруем повторно-дешифруемым ECDH v3 envelope. RSA — только fallback для
-  // старых пользователей без ECDH-ключа.
+  if (ecdhPublicKey && options.convId) {
+    try { return ratchetEncryptForPublicKeyB64(ecdhPublicKey, text, options); }
+    catch (e) { console.warn('[e2e] ratchet-lite fallback to plain ECDH:', e); }
+  }
   if (ecdhPublicKey) return ecdhEncryptForPublicKeyB64(ecdhPublicKey, text);
   if (rsaPublicKey) return rsaEncrypt(await importPublicKey(rsaPublicKey), text);
   throw new Error('У пользователя нет E2E public key');
@@ -430,7 +427,7 @@ function canonicalEncryptedPayload(msgData) {
   const keys = [
     'uid','author','text','edited','e2eForPeer','e2eForMe',
     'e2eImgForPeer','e2eImgForMe',
-    'e2eVoiceForPeer','e2eVoiceForMe','voiceDuration','voiceMime',
+    'e2eVoiceForPeer','e2eVoiceForMe','voiceDuration','voiceMime','voiceQuality','voiceWaveform',
     'e2eMusicForPeer','e2eMusicForMe','musicDuration','musicMime',
     'e2eChecklistForPeer','e2eChecklistForMe','replyTo','forwarded','convId','e2eCipherAlg','e2eRatchetAlg','e2eRatchetN','e2eRatchetPN'
   ];
@@ -459,7 +456,6 @@ async function verifyEncryptedMessageSignature(msgData, firestoreDb, fsDoc, fsGe
   } catch (e) { return { ok: false, reason: 'verify_error' }; }
 }
 
-const _e2eRatchetPlaintextCache = new Map();
 const _e2eObjectUrls = new Set();
 function rememberObjectUrl(url) { if (url && url.startsWith('blob:')) _e2eObjectUrls.add(url); return url; }
 function revokeE2EObjectUrls() { for (const url of _e2eObjectUrls) { try { URL.revokeObjectURL(url); } catch (_) {} } _e2eObjectUrls.clear(); }
@@ -730,11 +726,7 @@ async function rsaDecrypt(privateKey, value) {
     try {
       const env = JSON.parse(value);
       if (env && env.v === 4 && env.alg === E2E_CIPHER_V4) {
-        const cacheKey = value;
-        if (_e2eRatchetPlaintextCache.has(cacheKey)) return _e2eRatchetPlaintextCache.get(cacheKey);
-        const plain = await ratchetDecryptEnvelope(privateKey, env);
-        _e2eRatchetPlaintextCache.set(cacheKey, plain);
-        return plain;
+        return ratchetDecryptEnvelope(privateKey, env);
       }
       if (env && env.v === 3 && env.alg === E2E_CIPHER_V3) {
         if (!_activeEcdhPrivateKey) throw new Error('ecdh_private_key_not_loaded');
@@ -758,9 +750,7 @@ async function rsaDecrypt(privateKey, value) {
       if (String(value).includes(E2E_CIPHER_V3)) throw e;
     }
   }
-  const legacyValue = normalizeB64ForAtob(value);
-  if (!isLikelyLegacyRsaPayload(legacyValue)) throw new Error('not_legacy_rsa_ciphertext');
-  return rsaDecryptLegacy(privateKey, legacyValue);
+  return rsaDecryptLegacy(privateKey, value);
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -845,146 +835,6 @@ async function decryptMediaUrl(myPrivateKey, encryptedAesB64, cloudinaryRawUrl) 
 
   // 4. Возвращаем Object URL — не забудь вызвать revokeObjectURL после использования
   return rememberObjectUrl(URL.createObjectURL(new Blob([plainBuf])));
-}
-
-function normalizeE2EStoredValue(value) {
-  if (value == null) return '';
-  if (typeof value === 'string') return value;
-  if (typeof value === 'object') return JSON.stringify(value);
-  return String(value);
-}
-
-function isProbablyPlainMediaUrl(value) {
-  const s = String(value || '').trim();
-  return s.startsWith('https://') || s.startsWith('blob:') || s.startsWith('data:audio/') || s.startsWith('data:image/') || s.startsWith('data:video/');
-}
-
-function isLikelyHexKey(value) {
-  return typeof value === 'string' && /^[0-9a-fA-F]{64}$/.test(value.trim());
-}
-
-function unwrapJsonString(value, maxDepth = 2) {
-  let raw = normalizeE2EStoredValue(value).trim();
-  for (let i = 0; i < maxDepth; i++) {
-    if (!(raw.startsWith('"') || raw.startsWith("'"))) break;
-    try {
-      const parsed = JSON.parse(raw);
-      if (typeof parsed !== 'string') break;
-      raw = parsed.trim();
-    } catch (_) { break; }
-  }
-  return raw;
-}
-
-function tryParseJsonObject(value) {
-  const raw = unwrapJsonString(value);
-  if (!raw || !(raw.startsWith('{') || raw.startsWith('['))) return null;
-  try {
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' ? parsed : null;
-  } catch (_) { return null; }
-}
-
-function normalizeB64ForAtob(value) {
-  return String(value || '').trim().replace(/\s+/g, '');
-}
-
-function isLikelyLegacyRsaPayload(value) {
-  const s = normalizeB64ForAtob(value);
-  // Legacy RSA/AES envelope is a large regular base64 blob produced by btoa().
-  // Do not pass plaintext labels / broken Firestore values into atob().
-  return s.length >= 80 && s.length % 4 === 0 && /^[A-Za-z0-9+/]+={0,2}$/.test(s);
-}
-
-function isE2EEnvelopeObject(value) {
-  return !!(value && typeof value === 'object' && value.v && value.alg && (value.ct || value.seed || value.epk));
-}
-
-function isMediaEnvelopeObject(value) {
-  return !!(value && typeof value === 'object' && (value.aes || value.key || value.e2eAes || value.encryptedAes) && (value.url || value.cloudUrl || value.src));
-}
-
-async function decryptE2ETextValue(myPrivateKey, value, options = {}) {
-  const raw = unwrapJsonString(value).trim();
-  if (!raw) return '';
-  if (isProbablyPlainMediaUrl(raw)) return raw;
-  if (isLikelyHexKey(raw)) return raw;
-
-  const parsed = tryParseJsonObject(raw);
-  if (parsed) {
-    if (isE2EEnvelopeObject(parsed)) {
-      return rsaDecrypt(myPrivateKey, JSON.stringify(parsed));
-    }
-    // Media wrapper itself is not ciphertext. The caller will decrypt aes/url separately.
-    if (isMediaEnvelopeObject(parsed)) return JSON.stringify(parsed);
-    return raw;
-  }
-
-  if (!isLikelyLegacyRsaPayload(raw)) {
-    if (options.strict) throw new Error('not_e2e_ciphertext');
-    return raw;
-  }
-
-  try {
-    return await rsaDecrypt(myPrivateKey, normalizeB64ForAtob(raw));
-  } catch (e) {
-    if (options.strict) throw e;
-    return raw;
-  }
-}
-
-async function decryptMediaFileFromUrlAndAesHex(cloudinaryRawUrl, aesHex, mimeType = 'application/octet-stream') {
-  const url = unwrapJsonString(cloudinaryRawUrl).trim();
-  const keyHex = unwrapJsonString(aesHex).trim();
-  if (!url || !url.startsWith('https://')) throw new Error('invalid_media_url');
-  if (!isLikelyHexKey(keyHex)) throw new Error('invalid_media_aes_key');
-  const rawAesKey = hexToBuffer(keyHex);
-  const resp = await fetch(url);
-  if (!resp.ok) throw new Error(`Fetch failed: ${resp.status}`);
-  const encBuf = await resp.arrayBuffer();
-  const plainBuf = await decryptBuffer(encBuf, rawAesKey);
-  return rememberObjectUrl(URL.createObjectURL(new Blob([plainBuf], { type: mimeType || 'application/octet-stream' })));
-}
-
-async function decryptE2EMediaPayload(myPrivateKey, mediaRaw, mimeType = 'application/octet-stream') {
-  if (!mediaRaw) return null;
-  const raw = unwrapJsonString(mediaRaw).trim();
-  if (!raw) return null;
-
-  if (isProbablyPlainMediaUrl(raw)) return raw;
-
-  const parsed = tryParseJsonObject(raw);
-
-  // Current + fixed legacy media format: { aes: <encrypted-or-plain-hex>, url: <encrypted-or-plain-url> }
-  if (isMediaEnvelopeObject(parsed)) {
-    const aesField = parsed.aes ?? parsed.key ?? parsed.e2eAes ?? parsed.encryptedAes;
-    const urlField = parsed.url ?? parsed.cloudUrl ?? parsed.src;
-
-    let aesHex = unwrapJsonString(await decryptE2ETextValue(myPrivateKey, aesField)).trim();
-    let cloudUrl = unwrapJsonString(await decryptE2ETextValue(myPrivateKey, urlField)).trim();
-
-    // Tolerate broken interim builds that accidentally stored already-decrypted values.
-    const rawAesCandidate = unwrapJsonString(aesField).trim();
-    const rawUrlCandidate = unwrapJsonString(urlField).trim();
-    if (!isLikelyHexKey(aesHex) && isLikelyHexKey(rawAesCandidate)) aesHex = rawAesCandidate;
-    if (!isProbablyPlainMediaUrl(cloudUrl) && isProbablyPlainMediaUrl(rawUrlCandidate)) cloudUrl = rawUrlCandidate;
-
-    if (isProbablyPlainMediaUrl(cloudUrl) && !cloudUrl.startsWith('https://')) return cloudUrl;
-    if (cloudUrl.startsWith('https://') && isLikelyHexKey(aesHex)) {
-      return decryptMediaFileFromUrlAndAesHex(cloudUrl, aesHex, mimeType);
-    }
-
-    // If this is an old non-E2E/plain media wrapper, prefer returning the safe URL over hard-locking UI.
-    if (cloudUrl.startsWith('https://') && !aesField) return cloudUrl;
-    return null;
-  }
-
-  // Direct E2E field that decrypts to a URL, or to a media wrapper from an older deployment.
-  const legacyPlain = unwrapJsonString(await decryptE2ETextValue(myPrivateKey, raw)).trim();
-  if (isProbablyPlainMediaUrl(legacyPlain)) return legacyPlain;
-  const nested = tryParseJsonObject(legacyPlain);
-  if (isMediaEnvelopeObject(nested)) return decryptE2EMediaPayload(myPrivateKey, nested, mimeType);
-  return null;
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -1322,6 +1172,7 @@ async function sendDirectMessage(params) {
     convId, peerUid, myUid, authorName, myPrivateKey,
     text = '', imageFile = null, voiceFile = null,
     voiceDuration = null, voiceMime = null,
+    voiceQuality = null, voiceWaveform = null,
     musicFile = null, musicDuration = null, musicMime = null,
     checklist = null, replyTo = null, forwarded = false,
     firestoreDb, fsCollection, fsAddDoc, fsSetDoc, fsDoc, fsGetDoc,
@@ -1342,27 +1193,18 @@ async function sendDirectMessage(params) {
     const cloudUrl = await uploadToCloudinary(encryptedBlob, onProgress);
     if (!cloudUrl?.startsWith('https://')) throw new Error('Cloudinary не вернул ссылку');
 
-    // Шифруем AES-ключ (hex) тем же стабильным E2E-конвертом, что и текст.
-    // Новые сообщения используют ECDH v3; RSA остаётся fallback для старых аккаунтов.
-    const aesHex = bufferToHex(rawAesKey);
+    // Шифруем AES-ключ (hex) RSA-ключами обоих участников
+    const aesHex        = bufferToHex(rawAesKey);
     const [peerSnap, mySnap] = await Promise.all([
       fsGetDoc(fsDoc(firestoreDb, 'users', peerUid)),
       fsGetDoc(fsDoc(firestoreDb, 'users', myUid))
     ]);
-    const peerData = peerSnap.data() || {};
-    const myData   = mySnap.data() || {};
+    const peerPubKey = await importPublicKey(peerSnap.data().publicKey);
+    const myPubKey   = await importPublicKey(mySnap.data().publicKey);
 
     const [encAesForPeer, encAesForMe] = await Promise.all([
-      encryptForUserPublicKeys(
-        { ecdhPublicKey: peerData.ecdhPublicKey, rsaPublicKey: peerData.publicKey },
-        aesHex,
-        { convId, targetUid: peerUid, senderUid: myUid }
-      ),
-      encryptForUserPublicKeys(
-        { ecdhPublicKey: myData.ecdhPublicKey || _activeEcdhPublicKeyB64, rsaPublicKey: myData.publicKey },
-        aesHex,
-        { convId, targetUid: myUid, senderUid: myUid }
-      )
+      rsaEncrypt(peerPubKey, aesHex),
+      rsaEncrypt(myPubKey,   aesHex)
     ]);
 
     return { cloudUrl, encAesForPeer, encAesForMe };
@@ -1393,11 +1235,11 @@ async function sendDirectMessage(params) {
     const urlE2e = await enc(cloudUrl);
     msgData.e2eImgForPeer = JSON.stringify({ aes: encAesForPeer, url: urlE2e.forPeer });
     msgData.e2eImgForMe   = JSON.stringify({ aes: encAesForMe,   url: urlE2e.forMe  });
-    // Если нет текста — кладём нормальный E2E-placeholder, а не AES-ключ медиа.
+    // Если нет текста — Rules требуют хоть одно e2e-поле с непустой строкой
     if (!msgData.e2eForPeer) {
-      const placeholder = await enc('🖼 Изображение');
-      msgData.e2eForPeer = placeholder.forPeer;
-      msgData.e2eForMe   = placeholder.forMe;
+      const placeholder = await enc(''); // пустой текст — Rules допускают
+      msgData.e2eForPeer = msgData.e2eForPeer || encAesForPeer;
+      msgData.e2eForMe   = msgData.e2eForMe   || encAesForMe;
     }
   }
 
@@ -1409,10 +1251,14 @@ async function sendDirectMessage(params) {
     msgData.e2eVoiceForMe   = JSON.stringify({ aes: encAesForMe,   url: urlE2e.forMe  });
     if (voiceDuration != null) msgData.voiceDuration = voiceDuration;
     if (voiceMime)             msgData.voiceMime     = voiceMime;
+    if (voiceQuality)          msgData.voiceQuality  = voiceQuality;
+    if (Array.isArray(voiceWaveform)) {
+      msgData.voiceWaveform = voiceWaveform.slice(0, 80)
+        .map(v => Math.max(0, Math.min(100, Math.round(Number(v) || 0))));
+    }
     if (!msgData.e2eForPeer) {
-      const placeholder = await enc('🎙 Голосовое');
-      msgData.e2eForPeer = placeholder.forPeer;
-      msgData.e2eForMe   = placeholder.forMe;
+      msgData.e2eForPeer = encAesForPeer;
+      msgData.e2eForMe   = encAesForMe;
     }
   }
 
@@ -1425,16 +1271,14 @@ async function sendDirectMessage(params) {
     if (musicDuration != null) msgData.musicDuration = musicDuration;
     if (musicMime)             msgData.musicMime     = musicMime;
     if (!msgData.e2eForPeer) {
-      const placeholder = await enc('🎵 Музыка');
-      msgData.e2eForPeer = placeholder.forPeer;
-      msgData.e2eForMe   = placeholder.forMe;
+      msgData.e2eForPeer = encAesForPeer;
+      msgData.e2eForMe   = encAesForMe;
     }
   }
 
   // Чеклист
-  if (checklist && (Array.isArray(checklist) || typeof checklist === 'object')) {
-    const normalizedChecklist = Array.isArray(checklist) ? { title: '', items: checklist, done: {} } : checklist;
-    const serialized = JSON.stringify(normalizedChecklist);
+  if (checklist && Array.isArray(checklist)) {
+    const serialized = JSON.stringify(checklist);
     const e2e = await enc(serialized);
     msgData.e2eChecklistForPeer = e2e.forPeer;
     msgData.e2eChecklistForMe   = e2e.forMe;
@@ -1493,20 +1337,15 @@ async function sendDirectMessage(params) {
                     : voiceFile ? '🎙 Голосовое'
                     : musicFile ? '🎵 Музыка'
                     : '🔒 Сообщение';
-  try {
-    await fsSetDoc(
-      fsDoc(firestoreDb, 'dmConvs', convId),
-      {
-        members: [myUid, peerUid],
-        lastText: previewText,
-        lastAt:   fsServerTimestamp(),
-        [`unread.${peerUid}`]: fsIncrement(1)
-      },
-      { merge: true }
-    );
-  } catch (e) {
-    console.debug('[e2e] DM metadata update skipped; message was created', e);
-  }
+  await fsSetDoc(
+    fsDoc(firestoreDb, 'dmConvs', convId),
+    {
+      lastText: previewText,
+      lastAt:   fsServerTimestamp(),
+      [`unread.${peerUid}`]: fsIncrement(1)
+    },
+    { merge: true }
+  );
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -1553,10 +1392,15 @@ async function decryptMessage(msgData, myUid, myPrivateKey, firestoreDb = null, 
   const imgRaw = pick('e2eImgForPeer', 'e2eImgForMe');
   if (imgRaw) {
     try {
-      result.imageObjectUrl = await decryptE2EMediaPayload(myPrivateKey, imgRaw, msgData.imageMime || 'image/*');
-    } catch (e) {
-      console.warn('[e2e] image decrypt failed:', e?.message || e);
-      result.imageObjectUrl = null;
+      const { aes, url: encUrl } = JSON.parse(imgRaw);
+      // Расшифровываем Cloudinary URL
+      const cloudUrl   = await rsaDecrypt(myPrivateKey, encUrl);
+      // Расшифровываем AES-ключ
+      const aesHex     = await rsaDecrypt(myPrivateKey, aes);
+      // Загружаем и расшифровываем файл
+      result.imageObjectUrl = await decryptMediaUrl(myPrivateKey, aes, cloudUrl);
+    } catch {
+      result.imageObjectUrl = null; // отображать заглушку
     }
   }
 
@@ -1564,9 +1408,10 @@ async function decryptMessage(msgData, myUid, myPrivateKey, firestoreDb = null, 
   const voiceRaw = pick('e2eVoiceForPeer', 'e2eVoiceForMe');
   if (voiceRaw) {
     try {
-      result.voiceObjectUrl = await decryptE2EMediaPayload(myPrivateKey, voiceRaw, msgData.voiceMime || 'audio/webm');
-    } catch (e) {
-      console.warn('[e2e] voice decrypt failed:', e?.message || e);
+      const { aes, url: encUrl } = JSON.parse(voiceRaw);
+      const cloudUrl = await rsaDecrypt(myPrivateKey, encUrl);
+      result.voiceObjectUrl = await decryptMediaUrl(myPrivateKey, aes, cloudUrl);
+    } catch {
       result.voiceObjectUrl = null;
     }
   }
@@ -1575,9 +1420,10 @@ async function decryptMessage(msgData, myUid, myPrivateKey, firestoreDb = null, 
   const musicRaw = pick('e2eMusicForPeer', 'e2eMusicForMe');
   if (musicRaw) {
     try {
-      result.musicObjectUrl = await decryptE2EMediaPayload(myPrivateKey, musicRaw, msgData.musicMime || 'audio/mpeg');
-    } catch (e) {
-      console.warn('[e2e] music decrypt failed:', e?.message || e);
+      const { aes, url: encUrl } = JSON.parse(musicRaw);
+      const cloudUrl = await rsaDecrypt(myPrivateKey, encUrl);
+      result.musicObjectUrl = await decryptMediaUrl(myPrivateKey, aes, cloudUrl);
+    } catch {
       result.musicObjectUrl = null;
     }
   }
@@ -1586,18 +1432,9 @@ async function decryptMessage(msgData, myUid, myPrivateKey, firestoreDb = null, 
   const checklistCipher = pick('e2eChecklistForPeer', 'e2eChecklistForMe');
   if (checklistCipher) {
     try {
-      let json = null;
-      if (checklistCipher === textCipher && typeof result.text === 'string' && (result.text.trim().startsWith('{') || result.text.trim().startsWith('['))) {
-        json = result.text;
-      } else {
-        json = await decryptE2ETextValue(myPrivateKey, checklistCipher);
-      }
-      const parsedChecklist = JSON.parse(json);
-      result.checklist = Array.isArray(parsedChecklist)
-        ? { title: '', items: parsedChecklist, done: {} }
-        : parsedChecklist;
-    } catch (e) {
-      console.warn('[e2e] checklist decrypt failed:', e?.message || e);
+      const json = await rsaDecrypt(myPrivateKey, checklistCipher);
+      result.checklist = JSON.parse(json);
+    } catch {
       result.checklist = null;
     }
   }
@@ -1682,6 +1519,323 @@ async function uploadViaBackend(blob, onProgress, type = 'raw') {
   });
 }
 
+
+/* ═══════════════════════════════════════════════════════════════
+   § 10.5 MULTI-RECIPIENT E2E — private groups / private channels
+═══════════════════════════════════════════════════════════════ */
+const E2E_SPACE_RECIPIENT_LIMIT = 64;
+const SPACE_E2E_ALLOWED_FIELDS = new Set([
+  'uid', 'author', 'createdAt', 'edited', 'spaceId', 'spaceKind',
+  'e2e', 'e2eCipherAlg',
+  'e2eByUid', 'e2eImgByUid', 'e2eVoiceByUid', 'e2eMusicByUid', 'e2eChecklistByUid',
+  'voiceDuration', 'voiceMime', 'voiceQuality', 'voiceWaveform',
+  'musicDuration', 'musicMime',
+  'forwarded', 'pinned'
+]);
+const SPACE_E2E_FORBIDDEN_FIELDS = new Set([
+  'text',
+  'imageUrl', 'imageBase64', 'imageMime',
+  'voiceUrl', 'voiceBase64',
+  'musicUrl', 'musicBase64', 'musicTitle',
+  'checklist',
+  'poll', 'pollId', 'options',
+  'replyTo'
+]);
+
+function normalizeRecipientUidList(uids, myUid = null) {
+  const out = [];
+  if (myUid) out.push(String(myUid));
+  for (const uid of (uids || [])) {
+    const s = String(uid || '').trim();
+    if (s && !out.includes(s)) out.push(s);
+  }
+  if (out.length > E2E_SPACE_RECIPIENT_LIMIT) {
+    throw new Error(`Слишком много получателей E2E: максимум ${E2E_SPACE_RECIPIENT_LIMIT}`);
+  }
+  return out;
+}
+
+async function resolveRecipientsPublicKeys(uids, firestoreDb, fsDoc, fsGetDoc) {
+  const unique = normalizeRecipientUidList(uids);
+  const out = {};
+  await Promise.all(unique.map(async uid => {
+    const snap = await fsGetDoc(fsDoc(firestoreDb, 'users', uid));
+    const d = snap.data() || {};
+    if (d.ecdhPublicKey || d.publicKey) {
+      out[uid] = {
+        ecdhPublicKey: d.ecdhPublicKey || null,
+        rsaPublicKey: d.publicKey || null
+      };
+    }
+  }));
+  return out;
+}
+
+async function encryptForRecipientsByUid(recipientMap, plaintext, options = {}) {
+  const entries = Object.entries(recipientMap || {});
+  if (!entries.length) throw new Error('Нет E2E-получателей');
+  if (entries.length > E2E_SPACE_RECIPIENT_LIMIT) {
+    throw new Error(`Слишком много E2E-получателей: максимум ${E2E_SPACE_RECIPIENT_LIMIT}`);
+  }
+
+  const out = {};
+  await Promise.all(entries.map(async ([uid, keys]) => {
+    out[uid] = await encryptForUserPublicKeys(keys || {}, String(plaintext ?? ''), {
+      convId: options.spaceId || options.convId || 'space',
+      targetUid: uid,
+      senderUid: options.senderUid || 'unknown'
+    });
+  }));
+  return out;
+}
+
+function pickE2EValueForUid(map, myUid) {
+  if (!map || typeof map !== 'object') return '';
+  return map[String(myUid)] || map[myUid] || '';
+}
+
+async function decryptRecipientPayload(msgData, myUid, myPrivateKey, field = 'e2eByUid') {
+  const val = pickE2EValueForUid(msgData && msgData[field], myUid);
+  if (!val) return '';
+  return rsaDecrypt(myPrivateKey, val);
+}
+
+function normalizeVoiceWaveformForE2E(values) {
+  if (!Array.isArray(values)) return null;
+  return values
+    .slice(0, 80)
+    .map(v => Math.max(0, Math.min(100, Math.round(Number(v) || 0))));
+}
+
+async function buildE2EMediaByUid(file, recipientKeys, uploadToCloudinary, options = {}) {
+  if (!file) return null;
+  if (typeof uploadToCloudinary !== 'function') {
+    throw new Error('uploadToCloudinary is required for E2E media');
+  }
+
+  const enc = await encryptBlob(file);
+  const cloudUrl = await uploadToCloudinary(enc.encryptedBlob, options.onProgress);
+  if (!cloudUrl || !String(cloudUrl).startsWith('https://')) {
+    throw new Error('Upload не вернул HTTPS URL');
+  }
+
+  const aesHex = bufferToHex(enc.rawAesKey);
+  const aesByUid = await encryptForRecipientsByUid(recipientKeys, aesHex, options);
+  const urlByUid = await encryptForRecipientsByUid(recipientKeys, cloudUrl, options);
+
+  const out = {};
+  Object.keys(recipientKeys || {}).forEach(uid => {
+    if (aesByUid[uid] && urlByUid[uid]) {
+      out[uid] = JSON.stringify({ aes: aesByUid[uid], url: urlByUid[uid] });
+    }
+  });
+  return out;
+}
+
+async function decryptE2EMediaPayload(myPrivateKey, payloadRaw, mimeType = 'application/octet-stream') {
+  if (!myPrivateKey) throw new Error('E2E ключ не загружен');
+  if (!payloadRaw) return null;
+
+  const payload = typeof payloadRaw === 'string' ? JSON.parse(payloadRaw) : payloadRaw;
+  if (!payload || typeof payload !== 'object' || !payload.aes || !payload.url) {
+    throw new Error('Некорректный E2E media payload');
+  }
+
+  const [aesHex, cloudUrl] = await Promise.all([
+    rsaDecrypt(myPrivateKey, payload.aes),
+    rsaDecrypt(myPrivateKey, payload.url)
+  ]);
+
+  if (!String(cloudUrl).startsWith('https://')) throw new Error('Некорректный media URL');
+
+  const resp = await fetch(cloudUrl);
+  if (!resp.ok) throw new Error(`Fetch failed: ${resp.status}`);
+
+  const encryptedBuffer = await resp.arrayBuffer();
+  const plainBuffer = await decryptBuffer(encryptedBuffer, hexToBuffer(aesHex));
+  return rememberObjectUrl(URL.createObjectURL(new Blob([plainBuffer], { type: mimeType || 'application/octet-stream' })));
+}
+
+function assertSpaceE2EMessageHasOnlyAllowedFields(msg) {
+  const keys = Object.keys(msg || {});
+  const unknown = keys.filter(k => !SPACE_E2E_ALLOWED_FIELDS.has(k));
+  if (unknown.length) throw new Error(`[e2e] Недопустимые поля private-space: ${unknown.join(', ')}`);
+
+  const forbidden = keys.filter(k => SPACE_E2E_FORBIDDEN_FIELDS.has(k));
+  if (forbidden.length) throw new Error(`[e2e] Plain-поля запрещены в private-space: ${forbidden.join(', ')}`);
+
+  if ('pinned' in (msg || {}) && typeof msg.pinned !== 'boolean') {
+    throw new Error('[e2e] pinned должен быть boolean');
+  }
+}
+
+function privateSpacePreviewText(params = {}) {
+  if (params.imageFile) return '🖼 Изображение';
+  if (params.voiceFile) return '🎙 Голосовое';
+  if (params.musicFile) return '🎵 Музыка';
+  if (params.checklist) return '✅ Чек-лист';
+  return '🔒 Сообщение';
+}
+
+async function sendSpaceMessageE2E(params) {
+  const p = params || {};
+  const spaceKind = p.spaceKind === 'channel' ? 'channel' : 'group';
+  const root = p.collectionRoot || (spaceKind === 'channel' ? 'channels' : 'groups');
+  const child = p.subcollection || (spaceKind === 'channel' ? 'posts' : 'messages');
+
+  if (!p.spaceId) throw new Error('spaceId is required');
+  if (!p.myUid || !p.myPrivateKey) throw new Error('E2E ключи не разблокированы');
+
+  const allUids = normalizeRecipientUidList(p.recipientUids || [], p.myUid);
+  const keys = await resolveRecipientsPublicKeys(allUids, p.firestoreDb, p.fsDoc, p.fsGetDoc);
+  if (!keys[p.myUid]) throw new Error('У текущего пользователя нет E2E public key');
+  if (!Object.keys(keys).length) throw new Error('Нет доступных E2E public keys участников');
+
+  const msg = {
+    uid: p.myUid,
+    author: p.authorName || 'Пользователь',
+    createdAt: p.fsServerTimestamp(),
+    edited: false,
+    spaceId: p.spaceId,
+    spaceKind,
+    e2e: true,
+    e2eCipherAlg: 'ECDH-P384-AES-GCM-MULTI'
+  };
+
+  const plain = String(p.text || '').trim();
+
+  if (plain) {
+    msg.e2eByUid = await encryptForRecipientsByUid(keys, plain, {
+      spaceId: p.spaceId,
+      senderUid: p.myUid
+    });
+  }
+
+  if (p.imageFile) {
+    msg.e2eImgByUid = await buildE2EMediaByUid(p.imageFile, keys, p.uploadToCloudinary, {
+      spaceId: p.spaceId,
+      senderUid: p.myUid
+    });
+    if (!msg.e2eByUid) {
+      msg.e2eByUid = await encryptForRecipientsByUid(keys, '🖼 Изображение', {
+        spaceId: p.spaceId,
+        senderUid: p.myUid
+      });
+    }
+  }
+
+  if (p.voiceFile) {
+    msg.e2eVoiceByUid = await buildE2EMediaByUid(p.voiceFile, keys, p.uploadToCloudinary, {
+      spaceId: p.spaceId,
+      senderUid: p.myUid
+    });
+    if (p.voiceDuration != null) msg.voiceDuration = Math.max(0, Math.min(300, Math.round(Number(p.voiceDuration) || 0)));
+    msg.voiceMime = p.voiceMime || 'audio/webm;codecs=opus';
+    msg.voiceQuality = p.voiceQuality || 'opus-hq';
+    const wf = normalizeVoiceWaveformForE2E(p.voiceWaveform);
+    if (wf) msg.voiceWaveform = wf;
+    if (!msg.e2eByUid) {
+      msg.e2eByUid = await encryptForRecipientsByUid(keys, '🎙 Голосовое', {
+        spaceId: p.spaceId,
+        senderUid: p.myUid
+      });
+    }
+  }
+
+  if (p.musicFile) {
+    msg.e2eMusicByUid = await buildE2EMediaByUid(p.musicFile, keys, p.uploadToCloudinary, {
+      spaceId: p.spaceId,
+      senderUid: p.myUid
+    });
+    if (p.musicDuration != null) msg.musicDuration = Math.max(0, Math.min(7200, Math.round(Number(p.musicDuration) || 0)));
+    if (p.musicMime) msg.musicMime = p.musicMime;
+    if (!msg.e2eByUid) {
+      msg.e2eByUid = await encryptForRecipientsByUid(keys, '🎵 Музыка', {
+        spaceId: p.spaceId,
+        senderUid: p.myUid
+      });
+    }
+  }
+
+  if (p.checklist) {
+    const normalized = Array.isArray(p.checklist)
+      ? { title: '', items: p.checklist, done: {} }
+      : {
+          title: String(p.checklist.title || '').slice(0, 100),
+          items: Array.isArray(p.checklist.items) ? p.checklist.items.slice(0, 20).map(x => String(x).slice(0, 200)) : [],
+          done: {}
+        };
+
+    msg.e2eChecklistByUid = await encryptForRecipientsByUid(keys, JSON.stringify(normalized), {
+      spaceId: p.spaceId,
+      senderUid: p.myUid
+    });
+    if (!msg.e2eByUid) msg.e2eByUid = msg.e2eChecklistByUid;
+  }
+
+  if (!msg.e2eByUid && !msg.e2eImgByUid && !msg.e2eVoiceByUid && !msg.e2eMusicByUid && !msg.e2eChecklistByUid) {
+    throw new Error('Пустое E2E-сообщение');
+  }
+
+  assertSpaceE2EMessageHasOnlyAllowedFields(msg);
+  await p.fsAddDoc(p.fsCollection(p.firestoreDb, root, p.spaceId, child), msg);
+
+  try {
+    await p.fsSetDoc(
+      p.fsDoc(p.firestoreDb, root, p.spaceId),
+      { lastText: privateSpacePreviewText(p), lastAt: p.fsServerTimestamp() },
+      { merge: true }
+    );
+  } catch (_) {}
+}
+
+async function decryptSpaceMessage(msgData, myUid, myPrivateKey) {
+  if (!msgData || msgData.e2e !== true) return { text: '[⚠️ Некорректный формат private-сообщения]' };
+  if (!myPrivateKey) return { text: '[🔒 Ключ не загружен]' };
+
+  const r = {};
+
+  try {
+    if (msgData.e2eByUid) r.text = await decryptRecipientPayload(msgData, myUid, myPrivateKey, 'e2eByUid');
+  } catch (_) {
+    r.text = '[🔒 Не удалось расшифровать]';
+  }
+
+  try {
+    const raw = pickE2EValueForUid(msgData.e2eImgByUid, myUid);
+    if (raw) r.imageObjectUrl = await decryptE2EMediaPayload(myPrivateKey, raw, msgData.imageMime || 'image/*');
+  } catch (_) {
+    r.imageObjectUrl = null;
+  }
+
+  try {
+    const raw = pickE2EValueForUid(msgData.e2eVoiceByUid, myUid);
+    if (raw) r.voiceObjectUrl = await decryptE2EMediaPayload(myPrivateKey, raw, msgData.voiceMime || 'audio/webm;codecs=opus');
+  } catch (_) {
+    r.voiceObjectUrl = null;
+  }
+
+  try {
+    const raw = pickE2EValueForUid(msgData.e2eMusicByUid, myUid);
+    if (raw) r.musicObjectUrl = await decryptE2EMediaPayload(myPrivateKey, raw, msgData.musicMime || 'audio/mpeg');
+  } catch (_) {
+    r.musicObjectUrl = null;
+  }
+
+  try {
+    if (msgData.e2eChecklistByUid) {
+      const j = await decryptRecipientPayload(msgData, myUid, myPrivateKey, 'e2eChecklistByUid');
+      const parsed = JSON.parse(j);
+      r.checklist = Array.isArray(parsed) ? { title: '', items: parsed, done: {} } : parsed;
+    }
+  } catch (_) {
+    r.checklist = null;
+  }
+
+  return r;
+}
+
+
 /* ═══════════════════════════════════════════════════════════════
    § 11  ЭКСПОРТ В ГЛОБАЛЬНЫЙ ОБЪЕКТ window.E2E
 ═══════════════════════════════════════════════════════════════ */
@@ -1718,12 +1872,15 @@ window.E2E = {
   decryptBuffer,
   decryptMediaUrl,
   decryptE2EMediaPayload,
-  decryptE2ETextValue,
-  decryptMediaFileFromUrlAndAesHex,
 
   // Сообщения
   sendDirectMessage,
   decryptMessage,
+  resolveRecipientsPublicKeys,
+  encryptForRecipientsByUid,
+  decryptRecipientPayload,
+  sendSpaceMessageE2E,
+  decryptSpaceMessage,
 
   // Модерация и загрузка (через бэкенд)
   checkToxicity,
@@ -1739,4 +1896,4 @@ window.E2E = {
   detectCipherAlg,
 };
 
-console.info('[E2E] Security module v2.2 загружен');
+console.info('[E2E] Security module v2.0 загружен');
