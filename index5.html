@@ -11,7 +11,7 @@
     <meta http-equiv="Content-Security-Policy"
           content="
             default-src 'self';
-            script-src  'self' 'sha256-r+u0okChkaq7hSOl6ctiyvMWhoLiQ3YcSu3HJvU9maI=' 'sha256-7hpVw28Zo+5INU8LMyhs3E1LhBVrBLS3vHyEqe3Ustk=' 'sha256-c+UcrSOvVy+Guhz5azKL1WWvDOx4EScqRjbGB+XD22c=' 'sha256-n1QTSTMOK5He+QNmK/qiMtUWaRsqTAHWkLviscTY5dY=' https://www.gstatic.com https://apis.google.com;
+            script-src  'self' 'sha256-r+u0okChkaq7hSOl6ctiyvMWhoLiQ3YcSu3HJvU9maI=' 'sha256-7hpVw28Zo+5INU8LMyhs3E1LhBVrBLS3vHyEqe3Ustk=' 'sha256-c+UcrSOvVy+Guhz5azKL1WWvDOx4EScqRjbGB+XD22c=' 'sha256-XKXvBA+w50fP0qWAOc/v/jOrfGLCVVvqLD/s4TdMXK4=' https://www.gstatic.com https://apis.google.com;
             script-src-attr 'none';
             style-src   'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com https://cdn.jsdelivr.net;
             font-src    'self' https://fonts.gstatic.com https://cdn.jsdelivr.net;
@@ -5809,6 +5809,7 @@ function dataUrlToFile(dataUrl, filename) {
         let currentDMConvId       = null;
         let onlineUsers           = {};             // uid → name
         let sidebarItems          = [];             // DM items
+        let savedChatSidebarItem = null;             // Избранное / Saved Messages pseudo-chat
         let selectedMessages      = new Set();      // multi-select msg ids
         let isSelectionMode       = false;
         let currentFolder         = 'all';
@@ -6272,24 +6273,34 @@ function dataUrlToFile(dataUrl, filename) {
         function buildSidebarList(filter = '') {
             sidebarList.innerHTML = '';
             const q = filter.trim().toLowerCase();
+            const me = auth.currentUser;
+
+            // "Избранное" — отдельный pseudo-chat в самом верху, не в секции закреплённых.
+            let savedItem = me ? makeSavedChatItem(me) : null;
 
             // Group chat entry
             const groupItem = { id:'group', type:'group', name:'Основной чат', peerUid:null, lastText:'Чат класса 6А', lastAt:null, unread:0 };
 
-            let dmItems = sidebarItems.filter(x=>x.type==='dm');
+            let dmItems = sidebarItems.filter(x=>x.type==='dm' && !isSavedMessagesPeer(x.peerUid));
 
             // Filter by folder
-            if (currentFolder === 'dm') { /* only dm – hide group */ }
-            if (currentFolder === 'unread') dmItems = dmItems.filter(x=>x.unread>0);
-            if (currentFolder === 'archived') { dmItems = dmItems.filter(x=>isArchived(x.id)); }
-            else dmItems = dmItems.filter(x=>!isArchived(x.id));
+            if (currentFolder === 'unread') {
+                dmItems = dmItems.filter(x=>x.unread>0);
+                if (savedItem && savedItem.unread <= 0) savedItem = null;
+            }
+            if (currentFolder === 'archived') {
+                dmItems = dmItems.filter(x=>isArchived(x.id));
+                savedItem = null;
+            } else {
+                dmItems = dmItems.filter(x=>!isArchived(x.id));
+            }
 
             // Search filter
             let allItems = currentFolder==='dm' ? dmItems : [groupItem, ...dmItems];
             if (q) {
+                if (savedItem && !savedItem.name.toLowerCase().includes(q)) savedItem = null;
                 allItems = allItems.filter(x=>x.name.toLowerCase().includes(q));
                 // Also surface online users not in DMs
-                const me = auth.currentUser;
                 if (me) Object.entries(onlineUsers).forEach(([uid,name])=>{
                     if (uid===me.uid) return;
                     if (!name.toLowerCase().includes(q)) return;
@@ -6298,7 +6309,9 @@ function dataUrlToFile(dataUrl, filename) {
                 });
             }
 
-            // Separate pinned (group always up top)
+            if (savedItem) sidebarList.appendChild(createChatListItem(savedItem, -1));
+
+            // Separate pinned (group always up top within pinned, but below Избранное)
             const pinned = allItems.filter(x=>x.type==='group'||(x.type==='dm'&&isPinned(x.id)));
             const normal = allItems.filter(x=>x.type!=='group'&&!isPinned(x.id));
 
@@ -6312,7 +6325,7 @@ function dataUrlToFile(dataUrl, filename) {
                 sidebarList.appendChild(lbl);
                 normal.forEach((item,i)=>sidebarList.appendChild(createChatListItem(item,pinned.length+i)));
             }
-            if (!allItems.length) {
+            if (!savedItem && !allItems.length) {
                 const empty = document.createElement('div');
                 empty.style.cssText='padding:24px;text-align:center;color:var(--muted);font-size:.84rem';
                 empty.textContent = q ? 'Ничего не найдено' : (currentFolder==='archived' ? 'Архив пуст' : 'Нет чатов');
@@ -6323,8 +6336,8 @@ function dataUrlToFile(dataUrl, filename) {
         function createChatListItem(item, idx) {
             const el = document.createElement('div');
             el.className = 'chat-list-item';
-            el.style.animationDelay = Math.min(idx*25,200)+'ms';
-            const isActive = (item.type==='group'&&currentChatMode==='group') || (item.type==='dm'&&currentDMPeerUid===item.peerUid);
+            el.style.animationDelay = Math.min(Math.max(idx,0)*25,200)+'ms';
+            const isActive = (item.type==='group'&&currentChatMode==='group') || (item.type==='saved'&&isSavedMessagesOpen()) || (item.type==='dm'&&currentDMPeerUid===item.peerUid&&!isSavedMessagesOpen());
             if (isActive) el.classList.add('is-active');
             if (item.unread>0) el.classList.add('is-unread');
 
@@ -6334,6 +6347,9 @@ function dataUrlToFile(dataUrl, filename) {
             if (item.type==='group') {
                 avInner.style.background='linear-gradient(135deg,#5ec8ff,#a78bfa)';
                 avInner.textContent='💬'; avInner.style.fontSize='1.2rem';
+            } else if (item.type==='saved') {
+                avInner.style.background='linear-gradient(135deg,#3b82f6,#60a5fa)';
+                avInner.textContent='🔖'; avInner.style.fontSize='1.15rem';
             } else {
                 avInner.style.background=avatarGradient(item.peerUid);
                 avInner.textContent=firstLetter(item.name,item.name);
@@ -6354,7 +6370,7 @@ function dataUrlToFile(dataUrl, filename) {
             const prev = document.createElement('span'); prev.className='cli-preview'; prev.textContent=item.lastText||'';
             row2.appendChild(prev);
             if (item.type==='dm'&&isPinned(item.id)) { const p=document.createElement('span'); p.className='cli-pin-icon'; p.textContent='📌'; row2.appendChild(p); }
-            if (isMuted(item.id)) { const m=document.createElement('span'); m.className='cli-muted-icon'; m.textContent='🔕'; row2.appendChild(m); }
+            if (item.type!=='saved' && isMuted(item.id)) { const m=document.createElement('span'); m.className='cli-muted-icon'; m.textContent='🔕'; row2.appendChild(m); }
             if (item.unread>0) {
                 const badge=document.createElement('span'); badge.className='cli-badge'+(isMuted(item.id)?' is-muted':'');
                 badge.textContent=item.unread>99?'99+':item.unread; row2.appendChild(badge);
@@ -6362,12 +6378,17 @@ function dataUrlToFile(dataUrl, filename) {
             body.appendChild(row1); body.appendChild(row2);
             el.appendChild(avWrap); el.appendChild(body);
 
-            el.addEventListener('click', ()=>{ if(item.type==='group') openGroupChat(); else openDMWith(item.peerUid,item.name); closeMobileSidebar(); });
+            el.addEventListener('click', ()=>{
+                if (item.type==='group') openGroupChat();
+                else if (item.type==='saved') openSavedMessages();
+                else openDMWith(item.peerUid,item.name);
+                closeMobileSidebar();
+            });
 
             // Right-click context menu
             el.addEventListener('contextmenu', e=>{
                 e.preventDefault();
-                if (item.type==='group') return;
+                if (item.type==='group' || item.type==='saved') return;
                 const items = [
                     { label: isPinned(item.id)?'Открепить':'Закрепить', icon:'📌', onClick:()=>togglePin(item.id) },
                     { label: isMuted(item.id)?'Включить уведомления':'Заглушить', icon:isMuted(item.id)?'🔔':'🔕', onClick:()=>toggleMute(item.id) },
@@ -6399,6 +6420,7 @@ function dataUrlToFile(dataUrl, filename) {
             startPollsListener();
             tgHeaderAv.style.background='linear-gradient(135deg,#5ec8ff,#a78bfa)';
             tgHeaderAv.textContent='💬';
+            tgHeaderAv.style.fontSize='';
             tgHeaderName.textContent='Основной чат';
             tgHeaderStatus.textContent='Чат класса 6А';
             tgHeaderStatus.classList.remove('online');
@@ -6477,6 +6499,27 @@ function dataUrlToFile(dataUrl, filename) {
            OPEN DM CHAT
         ══════════════════════════════ */
         function dmConvId(uid1, uid2) { return [uid1,uid2].sort().join('_'); }
+        function savedMessagesConvId(uid) { return dmConvId(uid, uid); }
+        function isSavedMessagesPeer(peerUid) {
+            const u = auth.currentUser;
+            return !!(u && peerUid && String(peerUid) === String(u.uid));
+        }
+        function isSavedMessagesOpen() {
+            const u = auth.currentUser;
+            return !!(u && currentChatMode === 'dm' && currentDMPeerUid === u.uid && currentDMConvId === savedMessagesConvId(u.uid));
+        }
+        function makeSavedChatItem(user = auth.currentUser) {
+            const uid = user?.uid || '';
+            return {
+                id: 'saved',
+                type: 'saved',
+                name: 'Избранное',
+                peerUid: uid,
+                lastText: savedChatSidebarItem?.lastText || 'Личное зашифрованное хранилище',
+                lastAt: savedChatSidebarItem?.lastAt || null,
+                unread: 0
+            };
+        }
 
         /* Mark DM messages as read for current user.
            Read receipts are per-message: outgoing message shows ✓✓ only when msg.readBy contains peerUid. */
@@ -6487,6 +6530,7 @@ function dataUrlToFile(dataUrl, filename) {
             _markReadInFlight = true;
             try {
                 await updateDoc(doc(db,'dmConvs',chatId), { [`unread.${u.uid}`]: 0 }).catch(()=>{});
+                if (isSavedMessagesOpen()) return;
                 const qUnread = query(
                     collection(db,'dmConvs',chatId,'messages'),
                     where('uid','==',currentDMPeerUid),
@@ -6539,9 +6583,59 @@ function dataUrlToFile(dataUrl, filename) {
             tgHeaderName.style.cursor = '';
         }
 
+        async function openSavedMessages() {
+            const u = auth.currentUser; if (!u) return;
+            if (isSavedMessagesOpen()) return;
+
+            const unlocked = await ensureDME2EUnlocked(u.uid);
+            if (!unlocked) return;
+
+            currentChatMode = 'dm';
+            currentDMPeerUid = u.uid;
+            currentDMPeerName = 'Избранное';
+            currentDMConvId = savedMessagesConvId(u.uid);
+
+            tgHeaderAv.style.background = 'linear-gradient(135deg,#3b82f6,#60a5fa)';
+            tgHeaderAv.textContent = '🔖';
+            tgHeaderAv.style.fontSize = '1.05rem';
+            tgHeaderName.textContent = 'Избранное';
+            tgHeaderStatus.textContent = 'Личное зашифрованное хранилище';
+            tgHeaderStatus.classList.remove('online');
+            pinnedBanner.classList.remove('is-on');
+            _unbindDMHeaderProfile();
+
+            startTypingListeners();
+            buildSidebarList(sidebarSearch.value);
+            tearDownChat();
+
+            const convRef = doc(db, 'dmConvs', currentDMConvId);
+            try {
+                await setDoc(convRef, {
+                    members: [u.uid, u.uid],
+                    names: { [u.uid]: 'Избранное' },
+                    lastText: savedChatSidebarItem?.lastText || 'Личное хранилище',
+                    lastAt: savedChatSidebarItem?.lastAt || serverTimestamp(),
+                    createdAt: serverTimestamp(),
+                    [`unread.${u.uid}`]: 0
+                }, { merge:true });
+            } catch(e) {
+                console.warn('[saved] conv create/update failed:', e?.message || e);
+            }
+
+            const msgsQ = query(collection(db,'dmConvs',currentDMConvId,'messages'),orderBy('createdAt','asc'),limit(100));
+            messagesUnsub = onSnapshot(msgsQ,
+                snap=>{ globalStatus.textContent=''; globalStatus.classList.remove('is-error'); updateMessagesDOM(snap); markDMRead(); },
+                ()=>{ globalStatus.textContent='Не удалось загрузить Избранное.'; globalStatus.classList.add('is-error'); }
+            );
+            startPeerReadListener(currentDMConvId, u.uid);
+            updateAutodelBanner(currentDMConvId);
+            animateChatOpen();
+        }
+
         async function openDMWith(peerUid, peerName) {
             const u = auth.currentUser; if (!u) return;
-            if (currentChatMode==='dm'&&currentDMPeerUid===peerUid) return;
+            if (String(peerUid) === String(u.uid)) return openSavedMessages();
+            if (currentChatMode==='dm'&&currentDMPeerUid===peerUid&&!isSavedMessagesOpen()) return;
 
             const unlocked = await ensureDME2EUnlocked(u.uid);
             if (!unlocked) return;
@@ -6552,6 +6646,7 @@ function dataUrlToFile(dataUrl, filename) {
             // Update header
             tgHeaderAv.style.background=avatarGradient(peerUid);
             tgHeaderAv.textContent=firstLetter(peerName,peerName);
+            tgHeaderAv.style.fontSize='';
             if (avatarCache[peerUid]) applyAvatarToEl(tgHeaderAv,peerUid,peerName,peerName,avatarCache[peerUid]);
             else renderAvatarCircle(tgHeaderAv,peerUid,peerName,peerName);
             tgHeaderName.textContent=peerName;
@@ -7196,8 +7291,11 @@ function dataUrlToFile(dataUrl, filename) {
             forwardMsgTexts = texts;
             const list = document.getElementById('forwardChatList');
             list.innerHTML='';
-            // Build target list: group + DMs
-            const targets = [{id:'group',name:'Основной чат',type:'group'}, ...sidebarItems.filter(x=>x.type==='dm')];
+            const u = auth.currentUser;
+            const savedTarget = u ? {id:'saved',name:'Избранное',type:'saved',peerUid:u.uid} : null;
+            // Build target list: Избранное + group + DMs
+            const dmTargets = sidebarItems.filter(x=>x.type==='dm' && !isSavedMessagesPeer(x.peerUid));
+            const targets = [savedTarget, {id:'group',name:'Основной чат',type:'group'}, ...dmTargets].filter(Boolean);
             targets.forEach(target=>{
                 const btn=document.createElement('button');
                 btn.type='button';
@@ -7207,6 +7305,7 @@ function dataUrlToFile(dataUrl, filename) {
                 const av=document.createElement('div');
                 av.style.cssText='width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font-size:.8rem;color:#fff;flex-shrink:0;overflow:hidden;font-family:var(--font-display);font-weight:800';
                 if (target.type==='group') { av.style.background='linear-gradient(135deg,#5ec8ff,#a78bfa)'; av.textContent='💬'; }
+                else if (target.type==='saved') { av.style.background='linear-gradient(135deg,#3b82f6,#60a5fa)'; av.textContent='🔖'; }
                 else { av.style.background=avatarGradient(target.peerUid); av.textContent=firstLetter(target.name,target.name); }
                 btn.appendChild(av);
                 btn.appendChild(document.createTextNode(target.name));
@@ -7219,6 +7318,16 @@ function dataUrlToFile(dataUrl, filename) {
             document.getElementById('forwardModal').classList.add('is-open');
         }
         document.getElementById('forwardCancel').addEventListener('click',()=>document.getElementById('forwardModal').classList.remove('is-open'));
+
+        function hasE2EForwardPayload(srcData) {
+            return !!(srcData && (
+                srcData.e2eForPeer || srcData.e2eForMe ||
+                srcData.e2eImgForPeer || srcData.e2eImgForMe ||
+                srcData.e2eVoiceForPeer || srcData.e2eVoiceForMe ||
+                srcData.e2eMusicForPeer || srcData.e2eMusicForMe ||
+                srcData.e2eChecklistForPeer || srcData.e2eChecklistForMe
+            ));
+        }
 
         async function getForwardPayload(src, myUid) {
             const srcData = (typeof src === 'object' && src !== null) ? (src.data ? src.data() : src) : null;
@@ -7239,28 +7348,26 @@ function dataUrlToFile(dataUrl, filename) {
                 } : null
             };
 
-            if (srcData.e2eForPeer || srcData.e2eForMe) {
+            if (hasE2EForwardPayload(srcData)) {
                 if (!myPrivateKey) throw new Error('Нет ключа для пересылки E2E-сообщения');
-                payload.text = await decryptDM(srcData, myUid);
-            }
-            if (srcData.e2eImgForPeer || srcData.e2eImgForMe)
-                payload.imageUrl = await decryptE2EField(srcData, myUid, 'e2eImgForPeer', 'e2eImgForMe');
-            if (srcData.e2eVoiceForPeer || srcData.e2eVoiceForMe)
-                payload.voiceUrl = await decryptE2EField(srcData, myUid, 'e2eVoiceForPeer', 'e2eVoiceForMe');
-            if (srcData.e2eChecklistForPeer || srcData.e2eChecklistForMe) {
-                const plain = await decryptE2EField(srcData, myUid, 'e2eChecklistForPeer', 'e2eChecklistForMe');
-                const parsed = JSON.parse(plain);
-                payload.checklist = { title: parsed.title || '', items: parsed.items || [], done: {} };
-            }
-            if (srcData.e2eMusicForPeer || srcData.e2eMusicForMe) {
-                const plain = await decryptE2EField(srcData, myUid, 'e2eMusicForPeer', 'e2eMusicForMe');
-                const parsed = JSON.parse(plain);
-                payload.music = {
-                    url: parsed.url || '',
-                    title: parsed.title || 'Трек',
-                    duration: parsed.duration || 0,
-                    mime: parsed.mime || 'audio/*'
-                };
+                const decoded = await window.E2E.decryptMessage(srcData, myUid, myPrivateKey, db, doc, getDoc);
+                payload.text = decoded.text && !decoded.text.startsWith('[🔒') ? decoded.text : '';
+                payload.imageUrl = decoded.imageObjectUrl || '';
+                payload.voiceUrl = decoded.voiceObjectUrl || '';
+                payload.voiceDuration = srcData.voiceDuration || 0;
+                payload.voiceMime = srcData.voiceMime || 'audio/webm';
+                payload.checklist = decoded.checklist || null;
+                if (payload.imageUrl && /^🖼/.test(payload.text)) payload.text = '';
+                if (payload.voiceUrl && /^🎙|^🎤/.test(payload.text)) payload.text = '';
+                if (payload.checklist && (payload.text.trim().startsWith('{') || payload.text.trim().startsWith('['))) payload.text = '';
+                if (decoded.musicObjectUrl) {
+                    payload.music = {
+                        url: decoded.musicObjectUrl,
+                        title: srcData.musicTitle || 'Музыка',
+                        duration: srcData.musicDuration || 0,
+                        mime: srcData.musicMime || 'audio/*'
+                    };
+                }
             }
             return payload;
         }
@@ -7273,8 +7380,58 @@ function dataUrlToFile(dataUrl, filename) {
             return payload.text || '↗️ Переслано';
         }
 
+        function extFromMime(mime, fallback = 'bin') {
+            const map = {
+                'image/jpeg':'jpg', 'image/png':'png', 'image/gif':'gif', 'image/webp':'webp',
+                'audio/webm':'webm', 'audio/ogg':'ogg', 'audio/mpeg':'mp3', 'audio/mp4':'m4a',
+                'audio/wav':'wav', 'audio/x-wav':'wav', 'audio/aac':'aac', 'audio/flac':'flac'
+            };
+            return map[String(mime || '').toLowerCase().split(';')[0]] || fallback;
+        }
+
+        function filenameFromForward(kind, mime) {
+            const fallback = kind === 'image' ? 'jpg' : kind === 'voice' ? 'webm' : kind === 'music' ? 'mp3' : 'bin';
+            return `forwarded-${kind}.${extFromMime(mime, fallback)}`;
+        }
+
+        async function detectBlobMimeByMagic(blob, fallbackMime = 'application/octet-stream') {
+            const header = new Uint8Array(await blob.slice(0, 16).arrayBuffer());
+            const ascii = String.fromCharCode(...header);
+            if (header[0] === 0xFF && header[1] === 0xD8 && header[2] === 0xFF) return 'image/jpeg';
+            if (header[0] === 0x89 && ascii.slice(1,4) === 'PNG') return 'image/png';
+            if (ascii.startsWith('GIF87a') || ascii.startsWith('GIF89a')) return 'image/gif';
+            if (ascii.startsWith('RIFF')) {
+                const webp = new Uint8Array(await blob.slice(8, 12).arrayBuffer());
+                const tag = String.fromCharCode(...webp);
+                if (tag === 'WEBP') return 'image/webp';
+                if (tag === 'WAVE') return 'audio/wav';
+            }
+            if (ascii.startsWith('OggS')) return 'audio/ogg';
+            if (ascii.startsWith('ID3') || (header[0] === 0xFF && [0xFB,0xF3,0xF2].includes(header[1]))) return 'audio/mpeg';
+            if (header[0] === 0x1A && header[1] === 0x45 && header[2] === 0xDF && header[3] === 0xA3) return 'audio/webm';
+            return blob.type && blob.type !== 'application/octet-stream' ? blob.type : fallbackMime;
+        }
+
+        async function fileFromBlobForUpload(blob, kind, fallbackMime) {
+            if (!blob) return null;
+            const mime = await detectBlobMimeByMagic(blob, fallbackMime);
+            return new File([blob], filenameFromForward(kind, mime), { type: mime });
+        }
+
+        async function blobFromMediaSource(src, fallbackMime = 'application/octet-stream') {
+            if (!src) return null;
+            if (src instanceof Blob) return src;
+            if (typeof src !== 'string') return null;
+            const resp = await fetch(src);
+            if (!resp.ok) throw new Error(`Не удалось получить вложение: ${resp.status}`);
+            const blob = await resp.blob();
+            if (blob.size <= 0) throw new Error('Вложение пустое');
+            return blob.type ? blob : new Blob([await blob.arrayBuffer()], { type: fallbackMime });
+        }
+
         async function sendForwardedMessages(target, srcMessages) {
             const u = auth.currentUser; if (!u) return;
+            const targetIsSaved = target.type === 'saved';
             for (const src of srcMessages) {
                 try {
                     const payload = await getForwardPayload(src, u.uid);
@@ -7291,54 +7448,81 @@ function dataUrlToFile(dataUrl, filename) {
                         const groupMsg = {
                             ...base,
                             text: payload.text || '',
-                            ...(payload.imageUrl ? { imageUrl: payload.imageUrl } : {}),
-                            ...(payload.voiceUrl ? { voiceUrl: payload.voiceUrl, voiceDuration: payload.voiceDuration || 0, voiceMime: payload.voiceMime || 'audio/webm' } : {}),
-                            ...(payload.music?.url ? { musicUrl: payload.music.url, musicTitle: payload.music.title, musicDuration: Math.round(payload.music.duration || 0), musicMime: payload.music.mime || 'audio/*' } : {}),
                             ...(payload.checklist ? { checklist: payload.checklist, text: (payload.checklist.title || 'Чек-лист') + ': ' + (payload.checklist.items || []).join(', ') } : {})
                         };
-                        await addDoc(messagesCol, groupMsg);
-                    } else {
-                        const convId = dmConvId(u.uid, target.peerUid);
-                        const dmFwdMsg = { ...base, text: '' };
-
-                        if (payload.text) {
-                            const e2e = await encryptDM(payload.text, target.peerUid, u.uid);
-                            dmFwdMsg.e2eForPeer = e2e.forPeer;
-                            dmFwdMsg.e2eForMe = e2e.forMe;
-                        }
                         if (payload.imageUrl) {
-                            const e2e = await encryptDM(payload.imageUrl, target.peerUid, u.uid);
-                            dmFwdMsg.e2eImgForPeer = e2e.forPeer;
-                            dmFwdMsg.e2eImgForMe = e2e.forMe;
+                            const blob = await blobFromMediaSource(payload.imageUrl, 'image/jpeg');
+                            const file = await fileFromBlobForUpload(blob, 'image', 'image/jpeg');
+                            groupMsg.imageUrl = await uploadToCloudinary(file);
                         }
                         if (payload.voiceUrl) {
-                            const e2e = await encryptDM(payload.voiceUrl, target.peerUid, u.uid);
-                            dmFwdMsg.e2eVoiceForPeer = e2e.forPeer;
-                            dmFwdMsg.e2eVoiceForMe = e2e.forMe;
-                            dmFwdMsg.voiceDuration = payload.voiceDuration || 0;
-                            dmFwdMsg.voiceMime = payload.voiceMime || 'audio/webm';
+                            const blob = await blobFromMediaSource(payload.voiceUrl, payload.voiceMime || 'audio/webm');
+                            const file = await fileFromBlobForUpload(blob, 'voice', payload.voiceMime || 'audio/webm');
+                            groupMsg.voiceUrl = await uploadToCloudinary(file);
+                            groupMsg.voiceDuration = payload.voiceDuration || 0;
+                            groupMsg.voiceMime = file?.type || payload.voiceMime || 'audio/webm';
                         }
                         if (payload.music?.url) {
-                            const musicJson = JSON.stringify(payload.music);
-                            const e2e = await encryptDM(musicJson, target.peerUid, u.uid);
-                            dmFwdMsg.e2eMusicForPeer = e2e.forPeer;
-                            dmFwdMsg.e2eMusicForMe = e2e.forMe;
-                            dmFwdMsg.musicDuration = Math.round(payload.music.duration || 0);
-                            dmFwdMsg.musicMime = payload.music.mime || 'audio/*';
+                            const blob = await blobFromMediaSource(payload.music.url, payload.music.mime || 'audio/mpeg');
+                            const file = await fileFromBlobForUpload(blob, 'music', payload.music.mime || 'audio/mpeg');
+                            groupMsg.musicUrl = await uploadToCloudinary(file);
+                            groupMsg.musicTitle = payload.music.title || 'Музыка';
+                            groupMsg.musicDuration = Math.round(payload.music.duration || 0);
+                            groupMsg.musicMime = file?.type || payload.music.mime || 'audio/*';
                         }
-                        if (payload.checklist) {
-                            const checkJson = JSON.stringify({ title: payload.checklist.title || '', items: payload.checklist.items || [] });
-                            const e2e = await encryptDM(checkJson, target.peerUid, u.uid);
-                            dmFwdMsg.e2eChecklistForPeer = e2e.forPeer;
-                            dmFwdMsg.e2eChecklistForMe = e2e.forMe;
+                        await addDoc(messagesCol, groupMsg);
+                    } else {
+                        const peerUid = targetIsSaved ? u.uid : target.peerUid;
+                        const convId = targetIsSaved ? savedMessagesConvId(u.uid) : dmConvId(u.uid, peerUid);
+                        if (targetIsSaved) {
+                            await setDoc(doc(db,'dmConvs',convId), {
+                                members: [u.uid, u.uid],
+                                names: { [u.uid]: 'Избранное' },
+                                lastText: savedChatSidebarItem?.lastText || 'Личное хранилище',
+                                createdAt: serverTimestamp(),
+                                [`unread.${u.uid}`]: 0
+                            }, { merge:true });
                         }
+                        const ok = await ensureDME2EUnlocked(u.uid);
+                        if (!ok || !myPrivateKey) throw new Error('ЛС не разблокированы мастер-паролем');
 
-                        if (!dmFwdMsg.e2eForPeer && !dmFwdMsg.e2eImgForPeer && !dmFwdMsg.e2eVoiceForPeer && !dmFwdMsg.e2eMusicForPeer && !dmFwdMsg.e2eChecklistForPeer)
-                            throw new Error('Нет содержимого для пересылки');
+                        const imageBlob = payload.imageUrl ? await blobFromMediaSource(payload.imageUrl, 'image/jpeg') : null;
+                        const voiceBlob = payload.voiceUrl ? await blobFromMediaSource(payload.voiceUrl, payload.voiceMime || 'audio/webm') : null;
+                        const musicBlob = payload.music?.url ? await blobFromMediaSource(payload.music.url, payload.music.mime || 'audio/mpeg') : null;
+                        const imageFile = imageBlob ? await fileFromBlobForUpload(imageBlob, 'image', 'image/jpeg') : null;
+                        const voiceFile = voiceBlob ? await fileFromBlobForUpload(voiceBlob, 'voice', payload.voiceMime || 'audio/webm') : null;
+                        const musicFile = musicBlob ? await fileFromBlobForUpload(musicBlob, 'music', payload.music?.mime || 'audio/mpeg') : null;
 
-                        await addDoc(collection(db, 'dmConvs', convId, 'messages'), dmFwdMsg);
-                        const convRef = doc(db, 'dmConvs', convId);
-                        await setDoc(convRef, { members:[u.uid,target.peerUid], names:{[u.uid]:displayNick(u),[target.peerUid]:target.name}, lastText:'↗️ '+previewText, lastAt:serverTimestamp(), [`unread.${target.peerUid}`]:increment(1) }, { merge:true });
+                        await window.E2E.sendDirectMessage({
+                            convId,
+                            peerUid,
+                            myUid: u.uid,
+                            authorName: displayNick(u),
+                            myPrivateKey,
+                            text: payload.text || '',
+                            imageFile,
+                            voiceFile,
+                            voiceDuration: payload.voiceDuration || null,
+                            voiceMime: payload.voiceMime || voiceFile?.type || null,
+                            musicFile,
+                            musicDuration: Math.round(payload.music?.duration || 0) || null,
+                            musicMime: payload.music?.mime || musicFile?.type || null,
+                            checklist: payload.checklist || null,
+                            forwarded: true,
+                            firestoreDb: db,
+                            fsCollection: collection,
+                            fsAddDoc: addDoc,
+                            fsSetDoc: setDoc,
+                            fsDoc: doc,
+                            fsGetDoc: getDoc,
+                            fsServerTimestamp: serverTimestamp,
+                            fsIncrement: increment,
+                            uploadToCloudinary: window.E2E.uploadViaBackend
+                        });
+
+                        if (targetIsSaved) {
+                            await updateDoc(doc(db,'dmConvs',convId), { [`unread.${u.uid}`]: 0 }).catch(()=>{});
+                        }
                     }
                 } catch(e) {
                     showToast('Ошибка пересылки: ' + e.message);
@@ -7367,7 +7551,7 @@ function dataUrlToFile(dataUrl, filename) {
            CHAT INFO / HEADER BUTTON
         ══════════════════════════════ */
         document.getElementById('btnChatInfo').addEventListener('click', ()=>{
-            const curId = currentChatMode==='group'?'group':('dm_'+currentDMPeerUid);
+            const curId = currentChatMode==='group'?'group':(isSavedMessagesOpen()?'saved':('dm_'+currentDMPeerUid));
             const items = [
                 { label:'⚙️ Настройки чата', icon:'⚙️', onClick:()=>openChatSettings(curId) },
             ];
@@ -7375,7 +7559,7 @@ function dataUrlToFile(dataUrl, filename) {
                 items.push({label:'---'});
                 items.push({ label:'🗑 Удалить ВСЕ сообщения (ADMIN)', icon:'💣', danger:true, onClick:deleteAllGroupMessages });
             }
-            if (currentChatMode==='dm') {
+            if (currentChatMode==='dm' && !isSavedMessagesOpen()) {
                 items.push({label:'---'});
                 items.push({ label:'🗑 Удалить чат', icon:'🗑', danger:true, onClick:()=>deleteChatForMe(currentDMConvId, currentDMPeerName) });
             }
@@ -7407,11 +7591,24 @@ function dataUrlToFile(dataUrl, filename) {
                 query(collection(db,'dmConvs'),where('members','array-contains',u.uid)),
                 snap=>{
                     const items=[];
+                    savedChatSidebarItem = null;
                     snap.docs.forEach(d=>{
                         const data=d.data();
                         // Skip if deleted by current user
                         if (data.deleted&&data.deleted[u.uid]) return;
-                        const peerUid=data.members.find(m=>m!==u.uid)||'';
+                        const members = Array.isArray(data.members) ? data.members.map(String) : [];
+                        const isSavedConv = d.id === savedMessagesConvId(u.uid) || (members.length > 0 && members.every(m=>m===String(u.uid)));
+                        if (isSavedConv) {
+                            savedChatSidebarItem = {
+                                id:'saved', type:'saved', name:'Избранное', peerUid:u.uid,
+                                lastText:data.lastText||'Личное зашифрованное хранилище',
+                                lastAt:data.lastAt||null,
+                                unread:0
+                            };
+                            return;
+                        }
+                        const peerUid=members.find(m=>m!==String(u.uid))||'';
+                        if (!peerUid) return;
                         const peerName=data.names?.[peerUid]||'???';
                         items.push({id:'dm_'+peerUid,type:'dm',name:peerName,peerUid,lastText:data.lastText||'',lastAt:data.lastAt||null,unread:(data.unread||{})[u.uid]||0});
                     });
