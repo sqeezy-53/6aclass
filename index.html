@@ -19,6 +19,11 @@
         })();
     </script>
 
+    <!-- Бэкенд-прокси для Cloudinary-загрузок -->
+    <script>
+        window.BACKEND_URL = window.BACKEND_URL || 'https://sixaclass.onrender.com/api';
+    </script>
+
     <style>
         /* ═══════════════════════════════════════
            ТОКЕНЫ И ПЕРЕМЕННЫЕ
@@ -797,6 +802,193 @@
             color: var(--muted);
             font-size: 0.97rem;
             line-height: 1.62;
+        }
+
+
+
+        /* ADMIN-панель доски почёта */
+        .honor-admin-panel {
+            display: none;
+            max-width: 560px;
+            margin: 28px auto 0;
+            text-align: left;
+            background: var(--surface-glass);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: clamp(18px, 4vw, 24px);
+            box-shadow: var(--card-shadow);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+        }
+        .honor-admin-panel.is-visible { display: block; }
+        .honor-admin-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 16px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--border);
+        }
+        .honor-admin-title {
+            font-family: var(--font-display);
+            font-size: 1rem;
+            font-weight: 850;
+            letter-spacing: -0.02em;
+            color: var(--text);
+        }
+        .honor-admin-badge {
+            font-size: 0.68rem;
+            font-weight: 800;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--accent);
+            background: var(--accent-dim);
+            border: 1px solid rgba(94,200,255,.2);
+            border-radius: 999px;
+            padding: 5px 10px;
+            white-space: nowrap;
+        }
+        .honor-admin-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+        .honor-admin-field { margin-bottom: 10px; }
+        .honor-admin-field.full { grid-column: 1 / -1; }
+        .honor-admin-label {
+            display: block;
+            font-size: 0.72rem;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--muted);
+            margin-bottom: 7px;
+        }
+        .honor-admin-input,
+        .honor-admin-textarea {
+            width: 100%;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            color: var(--text);
+            font-family: var(--font-body);
+            font-size: 0.9rem;
+            padding: 11px 13px;
+            outline: none;
+            transition: border-color var(--transition), box-shadow var(--transition), background var(--transition);
+        }
+        .honor-admin-textarea {
+            resize: vertical;
+            min-height: 92px;
+            line-height: 1.55;
+        }
+        .honor-admin-input:focus,
+        .honor-admin-textarea:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-dim);
+        }
+        .honor-admin-file-row {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .honor-admin-file {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            border: 1px dashed rgba(94,200,255,.38);
+            color: var(--accent);
+            background: var(--accent-dim);
+            border-radius: var(--radius-sm);
+            padding: 10px 14px;
+            cursor: pointer;
+            font-weight: 750;
+            font-size: 0.86rem;
+            transition: transform 0.15s ease, border-color var(--transition), background var(--transition);
+        }
+        .honor-admin-file:hover {
+            transform: translateY(-1px);
+            border-color: var(--accent);
+            background: rgba(94,200,255,.18);
+        }
+        .honor-admin-file input { display: none; }
+        .honor-admin-preview-wrap {
+            display: none;
+            align-items: center;
+            gap: 12px;
+            margin-top: 12px;
+            padding: 12px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            background: var(--bg-elevated);
+        }
+        .honor-admin-preview-wrap.is-visible { display: flex; }
+        .honor-admin-preview {
+            width: 72px;
+            height: 72px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 3px solid var(--surface);
+            box-shadow: 0 0 0 1px var(--border);
+            flex-shrink: 0;
+        }
+        .honor-admin-preview-text {
+            color: var(--muted);
+            font-size: 0.82rem;
+            line-height: 1.45;
+        }
+        .honor-admin-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 12px;
+        }
+        .honor-admin-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 7px;
+            font-family: var(--font-display);
+            font-weight: 800;
+            font-size: 0.86rem;
+            letter-spacing: -0.01em;
+            border: none;
+            border-radius: var(--radius-sm);
+            background: var(--accent);
+            color: var(--accent-text);
+            padding: 10px 16px;
+            cursor: pointer;
+            transition: transform 0.16s ease, filter 0.2s ease, background var(--transition), border-color var(--transition);
+        }
+        .honor-admin-btn:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.07); }
+        .honor-admin-btn:disabled { opacity: 0.55; cursor: wait; }
+        .honor-admin-btn.ghost {
+            background: var(--surface);
+            color: var(--muted);
+            border: 1px solid var(--border);
+        }
+        .honor-admin-btn.danger {
+            background: rgba(239,68,68,.12);
+            color: #f87171;
+            border: 1px solid rgba(239,68,68,.28);
+        }
+        .honor-admin-status {
+            min-height: 18px;
+            font-size: 0.82rem;
+            color: var(--muted);
+            line-height: 1.45;
+        }
+        .honor-admin-status.ok { color: var(--accent-3); }
+        .honor-admin-status.err { color: #f87171; }
+        .honor-admin-status.warn { color: var(--accent-warm); }
+
+        @media (max-width: 680px) {
+            .honor-admin-grid { grid-template-columns: 1fr; }
+            .honor-admin-actions { flex-direction: column; align-items: stretch; }
+            .honor-admin-btn { width: 100%; }
         }
 
         /* ═══════════════════════════════════════
@@ -1900,27 +2092,63 @@
                     <h2 class="section-title">Доска почёта</h2>
                     <p class="section-hint">Меняем каждую неделю ✨</p>
                 </div>
-                <!--
-                    ╔══════════════════════════════════════════╗
-                    ║  ДОСКА ПОЧЁТА — правьте здесь напрямую  ║
-                    ║  Имя, роль, описание и путь к фото       ║
-                    ╚══════════════════════════════════════════╝
-                -->
+                <!-- Данные доски почёта обновляются из Firestore: siteSettings/honorBoard -->
                 <div class="honor-wrap reveal reveal-delay-1">
-                    <article class="honor-card">
+                    <article class="honor-card" id="honorCard">
                         <div class="honor-card__ring-wrap">
                             <div class="honor-card__ring">
                                 <img class="honor-card__photo"
+                                     id="honorPhoto"
                                      src="Matvei1.jpg"
                                      alt="Фото Жени"
-                                     width="160" height="160"
-                                     onerror="this.onerror=null;this.src='https://ui-avatars.com/api/?name=%D0%9C%D0%B0%D1%82%D0%B2%D0%B5%D0%B9&background=5ec8ff&color=061018&bold=true&size=256'">
+                                     width="160" height="160">
                             </div>
                         </div>
-                        <p class="honor-card__role">Легенда класса</p>
-                        <h3 class="honor-card__name">Женя</h3>
-                        <p class="honor-card__desc">Добрейший парень, который заслужил похвалы</p>
+                        <p class="honor-card__role" id="honorRole">Легенда класса</p>
+                        <h3 class="honor-card__name" id="honorName">Женя</h3>
+                        <p class="honor-card__desc" id="honorDesc">Добрейший парень, который заслужил похвалы</p>
                     </article>
+                </div>
+
+                <div class="honor-admin-panel" id="honorAdminPanel" aria-live="polite">
+                    <div class="honor-admin-head">
+                        <div class="honor-admin-title">Управление доской почёта</div>
+                        <div class="honor-admin-badge">👑 ADMIN</div>
+                    </div>
+                    <div class="honor-admin-grid">
+                        <div class="honor-admin-field">
+                            <label class="honor-admin-label" for="honorNameInput">Имя</label>
+                            <input class="honor-admin-input" id="honorNameInput" maxlength="80" placeholder="Например: Женя">
+                        </div>
+                        <div class="honor-admin-field">
+                            <label class="honor-admin-label" for="honorRoleInput">Роль / звание</label>
+                            <input class="honor-admin-input" id="honorRoleInput" maxlength="80" placeholder="Например: Легенда класса">
+                        </div>
+                        <div class="honor-admin-field full">
+                            <label class="honor-admin-label" for="honorDescInput">Описание</label>
+                            <textarea class="honor-admin-textarea" id="honorDescInput" maxlength="500" placeholder="За что человек попал на доску почёта…"></textarea>
+                        </div>
+                        <div class="honor-admin-field full">
+                            <span class="honor-admin-label">Фото</span>
+                            <div class="honor-admin-file-row">
+                                <label class="honor-admin-file">
+                                    🖼 Выбрать фото
+                                    <input type="file" id="honorPhotoInput" accept="image/jpeg,image/png,image/webp,image/gif">
+                                </label>
+                                <button type="button" class="honor-admin-btn ghost" id="honorClearPhotoBtn">Убрать новое фото</button>
+                            </div>
+                            <div class="honor-admin-preview-wrap" id="honorPreviewWrap">
+                                <img class="honor-admin-preview" id="honorPreview" alt="Предпросмотр фото">
+                                <div class="honor-admin-preview-text" id="honorPreviewText">Фото будет загружено через Cloudinary без сжатия после сохранения.</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="honor-admin-actions">
+                        <button type="button" class="honor-admin-btn" id="honorSaveBtn">💾 Сохранить</button>
+                        <button type="button" class="honor-admin-btn ghost" id="honorResetBtn">Сбросить поля</button>
+                        <button type="button" class="honor-admin-btn danger" id="honorRemovePhotoBtn">Убрать фото с доски</button>
+                        <span class="honor-admin-status" id="honorAdminStatus"></span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -2166,6 +2394,277 @@ function initReveal() {
 initReveal();
 
 
+</script>
+
+
+<!-- ══════════════════════════════════════════════════════════
+     ДОСКА ПОЧЁТА — Firebase realtime + ADMIN-редактирование
+     Фото грузится через backend /api/upload → Cloudinary без сжатия
+══════════════════════════════════════════════════════════ -->
+<script type="module">
+import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
+import { getAuth, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
+import { getFirestore, doc, getDoc, setDoc, onSnapshot, serverTimestamp }
+    from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
+
+const firebaseConfigHonor = {
+    apiKey: 'AIzaSyCtVaVgIvQot9SJpwKyUKrClNwar6xX9fo',
+    authDomain: 'class6a-chat.firebaseapp.com',
+    projectId: 'class6a-chat',
+    storageBucket: 'class6a-chat.firebasestorage.app',
+    messagingSenderId: '656933440681',
+    appId: '1:656933440681:web:e7a8c2ae22181ec98f2db8'
+};
+
+const honorApp  = getApps().length ? getApps()[0] : initializeApp(firebaseConfigHonor);
+const honorDb   = getFirestore(honorApp);
+const honorAuth = getAuth(honorApp);
+
+const honorDocRef = doc(honorDb, 'siteSettings', 'honorBoard');
+const HONOR_DEFAULT = {
+    name: 'Женя',
+    role: 'Легенда класса',
+    desc: 'Добрейший парень, который заслужил похвалы',
+    photoUrl: 'Matvei1.jpg'
+};
+const HONOR_MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+const HONOR_ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+
+let honorCurrentUser = null;
+let honorIsAdminMode = false;
+let honorCurrentData = { ...HONOR_DEFAULT };
+let honorPendingPhotoFile = null;
+let honorPreviewObjectUrl = '';
+
+const honorPhoto        = document.getElementById('honorPhoto');
+const honorName         = document.getElementById('honorName');
+const honorRole         = document.getElementById('honorRole');
+const honorDesc         = document.getElementById('honorDesc');
+const honorAdminPanel   = document.getElementById('honorAdminPanel');
+const honorNameInput    = document.getElementById('honorNameInput');
+const honorRoleInput    = document.getElementById('honorRoleInput');
+const honorDescInput    = document.getElementById('honorDescInput');
+const honorPhotoInput   = document.getElementById('honorPhotoInput');
+const honorPreviewWrap  = document.getElementById('honorPreviewWrap');
+const honorPreview      = document.getElementById('honorPreview');
+const honorPreviewText  = document.getElementById('honorPreviewText');
+const honorClearPhotoBtn = document.getElementById('honorClearPhotoBtn');
+const honorRemovePhotoBtn = document.getElementById('honorRemovePhotoBtn');
+const honorSaveBtn      = document.getElementById('honorSaveBtn');
+const honorResetBtn     = document.getElementById('honorResetBtn');
+const honorAdminStatus  = document.getElementById('honorAdminStatus');
+
+function honorEsc(str) {
+    return String(str ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+function honorFallbackAvatar(name) {
+    return 'https://ui-avatars.com/api/?name=' + encodeURIComponent(name || '6А') + '&background=5ec8ff&color=061018&bold=true&size=256';
+}
+function honorSetStatus(text, type = '') {
+    if (!honorAdminStatus) return;
+    honorAdminStatus.textContent = text || '';
+    honorAdminStatus.className = 'honor-admin-status' + (type ? ' ' + type : '');
+}
+function honorNormalize(data) {
+    return {
+        name: String(data?.name || HONOR_DEFAULT.name).slice(0, 80),
+        role: String(data?.role || HONOR_DEFAULT.role).slice(0, 80),
+        desc: String(data?.desc || HONOR_DEFAULT.desc).slice(0, 500),
+        photoUrl: String(data?.photoUrl || HONOR_DEFAULT.photoUrl).slice(0, 1200)
+    };
+}
+function honorRender(data) {
+    const item = honorNormalize(data);
+    honorCurrentData = item;
+    if (honorName) honorName.textContent = item.name;
+    if (honorRole) honorRole.textContent = item.role;
+    if (honorDesc) honorDesc.textContent = item.desc;
+    if (honorPhoto) {
+        honorPhoto.alt = 'Фото ' + item.name;
+        honorPhoto.onerror = function () {
+            this.onerror = null;
+            this.src = honorFallbackAvatar(item.name);
+        };
+        honorPhoto.src = item.photoUrl || honorFallbackAvatar(item.name);
+    }
+    if (honorIsAdminMode) honorFillInputs(item);
+}
+function honorFillInputs(data = honorCurrentData) {
+    if (honorNameInput) honorNameInput.value = data.name || '';
+    if (honorRoleInput) honorRoleInput.value = data.role || '';
+    if (honorDescInput) honorDescInput.value = data.desc || '';
+}
+function honorClearPendingPhoto() {
+    honorPendingPhotoFile = null;
+    if (honorPhotoInput) honorPhotoInput.value = '';
+    if (honorPreviewObjectUrl) {
+        URL.revokeObjectURL(honorPreviewObjectUrl);
+        honorPreviewObjectUrl = '';
+    }
+    if (honorPreviewWrap) honorPreviewWrap.classList.remove('is-visible');
+    if (honorPreview) honorPreview.src = '';
+    if (honorPreviewText) honorPreviewText.textContent = 'Фото будет загружено через Cloudinary без сжатия после сохранения.';
+}
+async function honorIsAdmin(user) {
+    if (!user) return false;
+    if (user.displayName === 'ADMIN' || user.email === 'ADMIN@6a.ru') return true;
+    try {
+        const snap = await getDoc(doc(honorDb, 'users', user.uid));
+        return snap.exists() && snap.data()?.admin === true;
+    } catch (_) {
+        return false;
+    }
+}
+async function uploadHonorPhotoViaBackend(file, onProgress) {
+    if (!(file instanceof File || file instanceof Blob)) throw new Error('Выбери файл изображения.');
+    if (file.size > HONOR_MAX_IMAGE_BYTES) throw new Error('Фото слишком большое: максимум 10 МБ.');
+    const mime = file.type || 'application/octet-stream';
+    if (!HONOR_ALLOWED_IMAGE_TYPES.has(mime)) throw new Error('Разрешены только JPG, PNG, WEBP или GIF.');
+    const token = honorAuth.currentUser ? await honorAuth.currentUser.getIdToken().catch(() => '') : '';
+    if (!token) throw new Error('Нужно войти в чат перед загрузкой фото.');
+
+    const form = new FormData();
+    form.append('file', file, file.name || 'honor-photo');
+    form.append('type', 'image');
+
+    const endpoint = String(window.BACKEND_URL || 'https://sixaclass.onrender.com/api').replace(/\/$/, '') + '/upload';
+    return await new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', endpoint, true);
+        xhr.setRequestHeader('Authorization', 'Bearer ' + token);
+        xhr.upload.onprogress = (e) => {
+            if (e.lengthComputable && onProgress) onProgress(Math.round(e.loaded / e.total * 100));
+        };
+        xhr.onload = () => {
+            let data = null;
+            try { data = JSON.parse(xhr.responseText || '{}'); } catch (_) {}
+            if (xhr.status >= 200 && xhr.status < 300 && data?.url) {
+                resolve(String(data.url));
+                return;
+            }
+            const detail = data?.detail || data?.error || data?.message;
+            reject(new Error(detail || 'Cloudinary-загрузка не удалась.'));
+        };
+        xhr.onerror = () => reject(new Error('Сетевая ошибка при загрузке фото.'));
+        xhr.send(form);
+    });
+}
+
+onSnapshot(honorDocRef, snap => {
+    if (snap.exists()) honorRender(snap.data());
+    else honorRender(HONOR_DEFAULT);
+}, err => {
+    console.warn('[honor] realtime error:', err);
+    honorRender(HONOR_DEFAULT);
+});
+
+onAuthStateChanged(honorAuth, async user => {
+    honorCurrentUser = user || null;
+    honorIsAdminMode = await honorIsAdmin(user);
+    if (honorAdminPanel) honorAdminPanel.classList.toggle('is-visible', honorIsAdminMode);
+    if (honorIsAdminMode) {
+        honorFillInputs(honorCurrentData);
+        honorSetStatus('Готово: можно менять имя, звание, описание и фото.', 'ok');
+    }
+});
+
+if (honorPhotoInput) {
+    honorPhotoInput.addEventListener('change', () => {
+        const file = honorPhotoInput.files && honorPhotoInput.files[0];
+        honorClearPendingPhoto();
+        if (!file) return;
+        if (!HONOR_ALLOWED_IMAGE_TYPES.has(file.type || '')) {
+            honorSetStatus('Разрешены только JPG, PNG, WEBP или GIF.', 'err');
+            return;
+        }
+        if (file.size > HONOR_MAX_IMAGE_BYTES) {
+            honorSetStatus('Фото слишком большое: максимум 10 МБ.', 'err');
+            return;
+        }
+        honorPendingPhotoFile = file;
+        honorPreviewObjectUrl = URL.createObjectURL(file);
+        if (honorPreview) honorPreview.src = honorPreviewObjectUrl;
+        if (honorPreviewWrap) honorPreviewWrap.classList.add('is-visible');
+        if (honorPreviewText) {
+            honorPreviewText.textContent = `${file.name || 'Фото'} · ${(file.size / 1024 / 1024).toFixed(2)} МБ · загрузится без сжатия через Cloudinary`;
+        }
+        honorSetStatus('Фото выбрано. Нажми «Сохранить», чтобы загрузить.', 'warn');
+    });
+}
+if (honorClearPhotoBtn) honorClearPhotoBtn.addEventListener('click', () => {
+    honorClearPendingPhoto();
+    honorSetStatus('Новое выбранное фото убрано. Текущее фото на доске не изменено.', 'warn');
+});
+if (honorResetBtn) honorResetBtn.addEventListener('click', () => {
+    honorFillInputs(honorCurrentData);
+    honorClearPendingPhoto();
+    honorSetStatus('Поля сброшены к текущему состоянию доски.', 'ok');
+});
+if (honorRemovePhotoBtn) honorRemovePhotoBtn.addEventListener('click', async () => {
+    if (!honorIsAdminMode || !honorCurrentUser) {
+        honorSetStatus('Нужно войти как ADMIN.', 'err');
+        return;
+    }
+    if (!confirm('Убрать фото с доски почёта? Вместо него будет аватар-заглушка.')) return;
+    honorRemovePhotoBtn.disabled = true;
+    try {
+        await setDoc(honorDocRef, {
+            ...honorCurrentData,
+            photoUrl: '',
+            updatedAt: serverTimestamp(),
+            updatedByUid: honorCurrentUser.uid,
+            updatedByName: honorCurrentUser.displayName || honorCurrentUser.email || 'ADMIN'
+        }, { merge: true });
+        honorClearPendingPhoto();
+        honorSetStatus('Фото убрано.', 'ok');
+    } catch (e) {
+        honorSetStatus('Ошибка: ' + (e.message || e), 'err');
+    }
+    honorRemovePhotoBtn.disabled = false;
+});
+if (honorSaveBtn) honorSaveBtn.addEventListener('click', async () => {
+    if (!honorIsAdminMode || !honorCurrentUser) {
+        honorSetStatus('Нужно войти как ADMIN.', 'err');
+        return;
+    }
+    const name = honorNameInput.value.trim();
+    const role = honorRoleInput.value.trim();
+    const desc = honorDescInput.value.trim();
+    if (!name || !role || !desc) {
+        honorSetStatus('Заполни имя, звание и описание.', 'err');
+        return;
+    }
+    honorSaveBtn.disabled = true;
+    honorSetStatus('Сохраняю…', 'warn');
+    try {
+        let photoUrl = honorCurrentData.photoUrl || '';
+        if (honorPendingPhotoFile) {
+            honorSetStatus('Загружаю фото в Cloudinary: 0%', 'warn');
+            photoUrl = await uploadHonorPhotoViaBackend(honorPendingPhotoFile, pct => {
+                honorSetStatus('Загружаю фото в Cloudinary: ' + pct + '%', 'warn');
+            });
+        }
+        await setDoc(honorDocRef, {
+            name,
+            role,
+            desc,
+            photoUrl,
+            updatedAt: serverTimestamp(),
+            updatedByUid: honorCurrentUser.uid,
+            updatedByName: honorCurrentUser.displayName || honorCurrentUser.email || 'ADMIN'
+        }, { merge: true });
+        honorClearPendingPhoto();
+        honorSetStatus('Доска почёта обновлена. У всех обновится автоматически.', 'ok');
+    } catch (e) {
+        honorSetStatus('Ошибка: ' + (e.message || e), 'err');
+    }
+    honorSaveBtn.disabled = false;
+});
 </script>
 
 <!-- ══════════════════════════════════════════════════════════
