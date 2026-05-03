@@ -425,9 +425,10 @@
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            width: 52px;
-            height: 28px;
-            border-radius: 999px;
+            width: 68px;
+            height: 40px;
+            padding: 8px 16px;
+            border-radius: var(--radius-sm);
             border: 1px solid var(--border);
             background: var(--surface);
             cursor: pointer;
@@ -1230,7 +1231,7 @@
             .nav-links { flex: 1; justify-content: center; gap: 2px; }
             .nav-links a { padding: 10px 12px; font-size: 0.8rem; min-height: 44px; display: inline-flex; align-items: center; }
             .nav-links a.nav-mafia { font-size: 0.76rem; }
-            .theme-toggle { min-width: 52px; min-height: 28px; }
+            .theme-toggle { width: 68px; height: 44px; min-width: 68px; min-height: 44px; }
             .hero { padding: clamp(48px, 10vw, 72px) max(16px, env(safe-area-inset-left, 0px)) clamp(48px, 8vw, 72px); }
             .honor-card__ring-wrap { width: min(160px, 68vw); height: min(160px, 68vw); }
         }
