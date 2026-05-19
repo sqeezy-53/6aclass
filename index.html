@@ -17,7 +17,48 @@
 <script src="assets/js/home/config.js"></script>
 <link href="assets/css/home.css" rel="stylesheet"/>
 </head>
-<body>
+<body class="site-paused">
+<!-- ── УВЕДОМЛЕНИЕ ПЕРЕД ВХОДОМ ── -->
+<div aria-labelledby="sitePauseTitle" aria-modal="true" class="site-pause-overlay" id="sitePauseOverlay" role="dialog">
+<div class="site-pause-card">
+<div class="site-pause-badge">⚠️ Важное уведомление</div>
+<h1 class="site-pause-title" id="sitePauseTitle">РАБОТА НАД САЙТОМ ВРЕМЕННО ПРЕКРАЩЕНА</h1>
+<p class="site-pause-text">Главная страница остаётся доступной, но обновления и доработки пока поставлены на паузу.</p>
+<button class="site-pause-enter" id="sitePauseEnterBtn" type="button">Понятно, перейти на сайт</button>
+</div>
+</div>
+<script>
+(function () {
+    var body = document.body;
+    var overlay = document.getElementById('sitePauseOverlay');
+    var enterButton = document.getElementById('sitePauseEnterBtn');
+
+    if (!body || !overlay || !enterButton) {
+        return;
+    }
+
+    function openSite() {
+        overlay.classList.add('is-hidden');
+        body.classList.remove('site-paused');
+
+        window.setTimeout(function () {
+            overlay.hidden = true;
+        }, 240);
+    }
+
+    enterButton.addEventListener('click', openSite);
+
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape' || event.key === 'Enter') {
+            openSite();
+        }
+    });
+
+    window.setTimeout(function () {
+        enterButton.focus({ preventScroll: true });
+    }, 0);
+})();
+</script>
 <!-- =============================================
      ПАСХАЛКА: кликни на логотип 5 раз подряд!
      ============================================= -->
