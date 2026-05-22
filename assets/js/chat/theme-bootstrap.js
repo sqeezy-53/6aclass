@@ -15,13 +15,25 @@
         })();
 
 (function () {
-  var href = '/assets/css/chat-ui-hotfix.css?v=20260522-css-only-1';
+  var href = '/assets/css/chat-ui-hotfix.css?v=20260522-css-only-2';
   if (document.querySelector('link[data-chat6a-ui-hotfix]')) return;
   var link = document.createElement('link');
   link.rel = 'stylesheet';
   link.href = href;
   link.setAttribute('data-chat6a-ui-hotfix', '1');
   document.head.appendChild(link);
+})();
+
+(function () {
+  // Firebase WebChannel sometimes tries to load Google's cleardot tracking GIF.
+  // Our CSP intentionally blocks it; this is not a chat failure. Stop the app's
+  // own security logger from spamming the console for this known non-critical URL.
+  document.addEventListener('securitypolicyviolation', function (e) {
+    var blocked = String(e.blockedURI || '');
+    if (blocked.indexOf('https://www.google.com/images/cleardot.gif') === 0) {
+      e.stopImmediatePropagation();
+    }
+  }, true);
 })();
 
 // Runtime monkey-patches for Blob/File/XMLHttpRequest/FormData are intentionally disabled.
