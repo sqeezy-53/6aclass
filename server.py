@@ -47,6 +47,8 @@ FIREBASE_SERVICE_ACCOUNT_JSON = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON", 
 
 # Пороговый балл токсичности (0.0–1.0). 0.75 = блокируем при 75%+
 TOXICITY_THRESHOLD = float(os.environ.get("TOXICITY_THRESHOLD", "0.75"))
+MAX_WARNS = int(os.environ.get("MAX_WARNS", "3"))
+ISSUE_MODERATION_WARNS = os.environ.get("ISSUE_MODERATION_WARNS", "true").lower() == "true"
 
 # Лимит размера загружаемого файла (байты). 50 МБ по умолчанию.
 MAX_UPLOAD_BYTES = int(os.environ.get("MAX_UPLOAD_BYTES", str(50 * 1024 * 1024)))
@@ -118,6 +120,29 @@ async def require_firebase_user(request: Request) -> dict:
     except Exception as exc:
         logger.warning("[auth] invalid Firebase ID token: %s", exc)
         raise HTTPException(status_code=401, detail="Invalid Firebase ID token") from exc
+
+
+async def issue_moderation_warn(uid: str) -> Optional[int]:
+    """Выдаёт варн через Firebase Admin SDK. Клиенту это делать нельзя."""
+    if not ISSUE_MODERATION_WARNS:
+        return None
+    if not uid:
+        return None
+    _init_firebase_admin()
+    try:
+        from firebase_admin import firestore as fb_firestore
+        db = fb_firestore.client()
+        user_ref = db.collection("users").document(uid)
+        user_ref.set({"warns": fb_firestore.Increment(1)}, merge=True)
+        snap = user_ref.get()
+        if not snap.exists:
+            return 1
+        data = snap.to_dict() or {}
+        warns = data.get("warns", 1)
+        return int(warns) if isinstance(warns, (int, float)) else 1
+    except Exception as exc:
+        logger.error("[moderate] failed to issue warn for uid=%s: %s", uid, exc)
+        return None
 
 import asyncio
 
@@ -343,11 +368,23 @@ async def moderate(request: Request, body: ModerateRequest, user: dict = Depends
     )
 
     is_toxic = max_score >= TOXICITY_THRESHOLD
+    warns_count: Optional[int] = None
+    warn_issued = False
+    if is_toxic:
+        warns_count = await issue_moderation_warn(uid)
+        warn_issued = warns_count is not None
+
     logger.info(
-        f"[moderate] ip={client_ip} score={max_score:.3f} "
-        f"toxic={is_toxic} text_len={len(body.text)}"
+        f"[moderate] ip={client_ip} uid={uid} score={max_score:.3f} "
+        f"toxic={is_toxic} warn_issued={warn_issued} text_len={len(body.text)}"
     )
-    return JSONResponse({"toxic": is_toxic, "score": round(max_score, 4)})
+    return JSONResponse({
+        "toxic": is_toxic,
+        "score": round(max_score, 4),
+        "warnIssued": warn_issued,
+        "warns": warns_count,
+        "maxWarns": MAX_WARNS,
+    })
 
 
 

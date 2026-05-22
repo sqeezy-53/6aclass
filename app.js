@@ -1,0 +1,5263 @@
+import { initializeApp }          from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
+        import { getAuth, onAuthStateChanged, signInWithEmailAndPassword,
+                 createUserWithEmailAndPassword, signOut, updateProfile }
+                                          from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
+        import { getFirestore, collection, addDoc, onSnapshot, query,
+                 orderBy, serverTimestamp, doc, updateDoc, deleteDoc,
+                 setDoc, getDoc, deleteField, limit, where, getDocs, increment, writeBatch,
+                 arrayUnion, arrayRemove }
+                                          from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
+
+        /* ══════════════════════════════
+           FIREBASE CONFIG
+        ══════════════════════════════ */
+        const firebaseConfig = {
+            apiKey: 'AIzaSyCtVaVgIvQot9SJpwKyUKrClNwar6xX9fo',
+            authDomain: 'class6a-chat.firebaseapp.com',
+            projectId: 'class6a-chat',
+            storageBucket: 'class6a-chat.firebasestorage.app',
+            messagingSenderId: '656933440681',
+            appId: '1:656933440681:web:e7a8c2ae22181ec98f2db8'
+        };
+        const app  = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        window.chat6aAuth = auth;
+        const db   = getFirestore(app);
+
+        /* ══════════════════════════════
+           LEGACY AES DISABLED
+           Старый общий AES с hardcoded-ключом отключён.
+           Общий чат хранится plaintext по задумке, а ЛС идут через E2E.
+        ══════════════════════════════ */
+        function encryptMessage() { throw new Error('legacy_plaintext_dm_fallback_disabled'); }
+        function decryptMessage(cipherText) { return cipherText ? '[Старое AES-сообщение отключено]' : ''; }
+        function safeDecrypt(text) {
+            if (!text) return text;
+            if (String(text).startsWith('U2FsdGVkX1')) return '[Старое AES-сообщение отключено]';
+            return text;
+        }
+
+        /* ══════════════════════════════════════════════════════
+           E2E ШИФРОВАНИЕ ЛС (RSA-OAEP через Web Crypto API)
+           
+           Как работает:
+           - При первом входе генерируем пару ключей RSA
+           - Публичный ключ → Firebase (users/{uid}.publicKey)
+           - Приватный ключ → localStorage (ТОЛЬКО на этом устройстве)
+           - При отправке ЛС шифруем ДВА раза:
+             1) публичным ключом получателя (он сможет расшифровать)
+             2) своим публичным ключом (чтобы видеть свои сообщения)
+           - При получении — расшифровываем своим приватным ключом
+        ══════════════════════════════════════════════════════ */
+        // Legacy localStorage RSA keystore removed.
+        // All DM E2E keys are managed by window.E2E in IndexedDB and wrapped with the master password.
+        const E2E_PRIVATE_KEY_PREFIX = 'e2e_privkey_legacy_disabled_';
+        let myPrivateKey  = null;
+        let myPublicKeyB64 = null;
+        const _e2eDecryptedCache = new Map();
+        const _e2eMessageDecryptCache = new Map();
+
+        async function deriveKeyFromUid() { throw new Error('legacy_key_derivation_disabled'); }
+        async function savePrivateKey() { throw new Error('legacy_localstorage_keystore_disabled'); }
+        async function loadPrivateKey() { return null; }
+        async function generateKeyPair() { throw new Error('legacy_rsa_generation_disabled'); }
+        async function exportPublicKey() { throw new Error('legacy_rsa_export_disabled'); }
+        async function importPublicKey() { throw new Error('legacy_rsa_import_disabled'); }
+
+        // Зашифровать строку публичным ключом → base64 (гибридный RSA+AES)
+        // RSA шифрует только AES-ключ, AES шифрует сам текст — без ограничений на длину
+        async function rsaEncrypt(publicKey, text) {
+            // 1. Генерируем одноразовый AES-256-GCM ключ
+            const aesKey = await crypto.subtle.generateKey(
+                { name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
+            const iv = crypto.getRandomValues(new Uint8Array(12));
+
+            // 2. Шифруем текст AES
+            const enc = new TextEncoder();
+            const cipherText = await crypto.subtle.encrypt(
+                { name: 'AES-GCM', iv }, aesKey, enc.encode(text));
+
+            // 3. Экспортируем AES-ключ и шифруем его RSA
+            const rawAesKey = await crypto.subtle.exportKey('raw', aesKey);
+            const encryptedAesKey = await crypto.subtle.encrypt(
+                { name: 'RSA-OAEP' }, publicKey, rawAesKey);
+
+            // 4. Пакуем всё в один base64: [2 байта длины RSA-части][RSA-ключ][IV][AES-шифртекст]
+            const keyLen = new Uint8Array(2);
+            new DataView(keyLen.buffer).setUint16(0, encryptedAesKey.byteLength);
+            const blob = new Uint8Array(
+                2 + encryptedAesKey.byteLength + 12 + cipherText.byteLength);
+            blob.set(keyLen, 0);
+            blob.set(new Uint8Array(encryptedAesKey), 2);
+            blob.set(iv, 2 + encryptedAesKey.byteLength);
+            blob.set(new Uint8Array(cipherText), 2 + encryptedAesKey.byteLength + 12);
+            return btoa(String.fromCharCode(...blob));
+        }
+
+        // Расшифровать base64 приватным ключом → строка (гибридный RSA+AES)
+        async function rsaDecrypt(privateKey, b64) {
+            if (window.E2E && typeof window.E2E.rsaDecrypt === 'function') {
+                try { return await window.E2E.rsaDecrypt(privateKey, b64); } catch (_) { /* fallback to legacy below */ }
+            }
+            try {
+                const blob = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+                const keyLen = new DataView(blob.buffer).getUint16(0);
+                const encryptedAesKey = blob.slice(2, 2 + keyLen);
+                const iv = blob.slice(2 + keyLen, 2 + keyLen + 12);
+                const cipherText = blob.slice(2 + keyLen + 12);
+
+                // 1. Расшифровываем AES-ключ через RSA
+                const rawAesKey = await crypto.subtle.decrypt(
+                    { name: 'RSA-OAEP' }, privateKey, encryptedAesKey);
+
+                // 2. Импортируем AES-ключ
+                const aesKey = await crypto.subtle.importKey(
+                    'raw', rawAesKey, { name: 'AES-GCM' }, false, ['decrypt']);
+
+                // 3. Расшифровываем текст AES
+                const plain = await crypto.subtle.decrypt(
+                    { name: 'AES-GCM', iv }, aesKey, cipherText);
+                return new TextDecoder().decode(plain);
+            } catch(e) {
+                return '[🔒 Не удалось расшифровать]';
+            }
+        }
+
+        // Инициализация E2E для ЛС.
+        // ВАЖНО: больше НЕ вызывается при обычном входе в чат.
+        // Мастер-код запрашивается только при первом открытии ЛС в текущей вкладке.
+        let _e2eUnlockedUid = null;
+        let _e2eUnlockPromise = null;
+
+        async function initE2EForUser(uid) {
+            try {
+                const result = await window.E2E.initE2EForUser(
+                    uid, db, doc, getDoc, setDoc
+                );
+                myPrivateKey   = result.privateKey;
+                myPublicKeyB64 = result.publicKeyB64;
+                if (!myPrivateKey) {
+                    _e2eUnlockedUid = null;
+                    _dbgLog('e2e:init', 'E2E отключён (пользователь отменил мастер-код)');
+                } else {
+                    _e2eUnlockedUid = uid;
+                    _dbgLog('e2e:init', 'E2E разблокирован для текущей вкладки');
+                }
+                return result;
+            } catch(e) {
+                myPrivateKey = null;
+                myPublicKeyB64 = null;
+                _e2eUnlockedUid = null;
+                _dbgLog('e2e:init:error', e.message);
+                console.error('[e2e] initE2EForUser failed:', e);
+                return { privateKey: null, publicKeyB64: null };
+            }
+        }
+
+        async function ensureDME2EUnlocked(uid) {
+            if (!uid) return false;
+            if (myPrivateKey && myPublicKeyB64 && _e2eUnlockedUid === uid) return true;
+            if (_e2eUnlockPromise) return _e2eUnlockPromise;
+
+            _e2eUnlockPromise = (async () => {
+                const result = await initE2EForUser(uid);
+                const ok = !!(result && result.privateKey && result.publicKeyB64);
+                if (!ok) {
+                    showToast('🔒 ЛС не открыты: нужен мастер-код');
+                    return false;
+                }
+                showToast('🔓 ЛС разблокированы до закрытия вкладки');
+                return true;
+            })();
+
+            try {
+                return await _e2eUnlockPromise;
+            } finally {
+                _e2eUnlockPromise = null;
+            }
+        }
+
+        function resetDME2ESession() {
+            myPrivateKey = null;
+            myPublicKeyB64 = null;
+            _e2eUnlockedUid = null;
+            _e2eUnlockPromise = null;
+            _e2eDecryptedCache.clear();
+            _e2eMessageDecryptCache.clear();
+        }
+
+        // Получить публичный ключ любого пользователя из Firebase (без кеша — всегда свежий)
+        const _pubKeyCache = {};
+        async function getPeerPublicKey(uid) {
+            // Всегда берём свежий ключ из Firebase — не кешируем
+            const snap = await getDoc(doc(db, 'users', uid));
+            const b64  = snap.data()?.publicKey;
+            if (!b64) return null;
+            return importPublicKey(b64);
+        }
+
+        // Зашифровать ЛС-сообщение для отправки.
+        // Основная реализация живёт в window.E2E: там RSA-4096 + ECDSA-подписи.
+        async function encryptDM(text, peerUid, myUid) {
+            if (!text) return { forPeer: '', forMe: '' };
+            if (!window.E2E || typeof window.E2E.encryptDM !== 'function') throw new Error('E2E-модуль не загружен');
+            return window.E2E.encryptDM(text, peerUid, myUid, myPrivateKey, db, doc, getDoc, { convId: currentDMConvId || '' });
+        }
+
+        // Расшифровать входящее ЛС-сообщение
+        // Если я отправитель — расшифровываем forMe, иначе — forPeer
+        // Пробуем оба поля если первое не работает (защита от рассинхронизации ключей)
+        async function decryptDM(msgData, myUid) {
+            if (!myPrivateKey) return '[🔒 Нет ключа]';
+            if (window.E2E && typeof window.E2E.decryptMessage === 'function') {
+                const res = await window.E2E.decryptMessage(msgData, myUid, myPrivateKey, db, doc, getDoc);
+                if (res && typeof res.text === 'string') return res.text;
+            }
+            const cipher = pickE2ECipher(msgData, myUid, 'e2eForPeer', 'e2eForMe');
+            if (!cipher) return safeDecrypt(msgData.text || '');
+            try { return await rsaDecrypt(myPrivateKey, cipher); }
+            catch (_) { return '[🔒 Ошибка расшифровки]'; }
+        }
+
+        function pickE2ECipher(msgData, myUid, forPeerField, forMeField) {
+            if (!msgData) return '';
+            const isMine = String(msgData.uid || '') === String(myUid || '');
+            return isMine
+                ? (msgData[forMeField] || msgData[forPeerField] || '')
+                : (msgData[forPeerField] || msgData[forMeField] || '');
+        }
+
+        async function decryptE2EField(msgData, myUid, forPeerField, forMeField) {
+            if (!myPrivateKey) throw new Error('Нет приватного ключа для расшифровки');
+            const cipher = pickE2ECipher(msgData, myUid, forPeerField, forMeField);
+            if (!cipher) return '';
+            return rsaDecrypt(myPrivateKey, cipher);
+        }
+
+        function isSafeMediaSrc(url) {
+            if (typeof url !== 'string') return false;
+            if (!url || url.startsWith('[🔒') || url.includes('Не удалось расшифровать')) return false;
+            if (url.startsWith('blob:')) return true;
+            if (/^data:(audio|image)\//i.test(url)) return true;
+            try {
+                const u = new URL(url);
+                return u.protocol === 'https:' && u.hostname === 'res.cloudinary.com' && u.pathname.startsWith(`/${window.CLOUDINARY_CLOUD_NAME}/`);
+            } catch (_) { return false; }
+        }
+
+        function e2eCacheHash(value) {
+            const str = String(value || '');
+            let h = 2166136261;
+            for (let i = 0; i < str.length; i++) {
+                h ^= str.charCodeAt(i);
+                h = Math.imul(h, 16777619);
+            }
+            return (h >>> 0).toString(36);
+        }
+
+        function e2eMessageCacheKey(msgId, msgData) {
+            const fields = [
+                'e2eForPeer','e2eForMe',
+                'e2eImgForPeer','e2eImgForMe',
+                'e2eVoiceForPeer','e2eVoiceForMe','voiceDuration','voiceMime',
+                'e2eMusicForPeer','e2eMusicForMe','musicDuration','musicMime',
+                'e2eChecklistForPeer','e2eChecklistForMe','edited','readBy','pinned'
+            ];
+            const fingerprint = fields.map(k => `${k}=${msgData?.[k] ?? ''}`).join('\u001f');
+            return `${currentDMConvId || 'dm'}:${msgId || 'noid'}:${e2eCacheHash(fingerprint)}`;
+        }
+
+        function decryptMessageCached(msgId, msgData) {
+            if (!window.E2E || typeof window.E2E.decryptMessage !== 'function') {
+                return Promise.resolve({ text: '[🔒 E2E-модуль не загружен]' });
+            }
+            const key = e2eMessageCacheKey(msgId, msgData);
+            if (!_e2eMessageDecryptCache.has(key)) {
+                const promise = window.E2E.decryptMessage(msgData, auth.currentUser?.uid || '', myPrivateKey, db, doc, getDoc)
+                    .catch(err => {
+                        // Не кешируем сбой навсегда: Cloudinary/IndexedDB/ECDH могут быть временно не готовы.
+                        _e2eMessageDecryptCache.delete(key);
+                        console.warn('[e2e] decryptMessageCached failed:', err?.message || err);
+                        return { text: '[🔒 Не удалось расшифровать]', decryptError: true };
+                    });
+                _e2eMessageDecryptCache.set(key, promise);
+            }
+            return _e2eMessageDecryptCache.get(key);
+        }
+
+        async function encryptDMToFields(text, peerUid, myUid, forPeerField, forMeField, plainField) {
+            try {
+                const e2e = await encryptDM(text, peerUid, myUid);
+                return { [forPeerField]: e2e.forPeer, [forMeField]: e2e.forMe };
+            } catch (e) {
+                console.warn('[dm e2e blocked]', e.message);
+                throw new Error('E2E недоступно: plaintext fallback для ЛС отключён');
+            }
+        }
+
+
+        /* ══════════════════════════════════════════════════════════════
+           SECURE FILE UPLOAD MODULE — без Cloudinary
+           Реализует все 9 пунктов политики безопасности облачной платформы
+        ══════════════════════════════════════════════════════════════ */
+
+        // ── §5 · Допустимые MIME-типы и расширения ──────────────────
+        const UPLOAD_ALLOWED_MIME = new Set([
+            'image/jpeg','image/png','image/gif','image/webp',
+            'audio/webm','audio/ogg','audio/mpeg','audio/mp4',
+            'audio/wav','audio/x-wav','audio/aac','audio/flac',
+        ]);
+        const UPLOAD_ALLOWED_EXT = new Set([
+            'jpg','jpeg','png','gif','webp',
+            'webm','ogg','mp3','mp4','m4a','wav','aac','flac',
+        ]);
+        const UPLOAD_MAX_IMAGE_BYTES = 10 * 1024 * 1024;   // 10 МБ — §5
+        const UPLOAD_MAX_AUDIO_BYTES = 15 * 1024 * 1024;   // 15 МБ — §5
+        const UPLOAD_MAX_BYTES       = 50 * 1024 * 1024;   // 50 МБ — §5 глобальный потолок
+
+        // ── §7 · Простая клиентская проверка на «магические байты» ──
+        // (полное сканирование — на бэкенде §6)
+        const MAGIC_SIGNATURES = [
+            { bytes: [0xFF,0xD8,0xFF],            mime: 'image/jpeg'  },
+            { bytes: [0x89,0x50,0x4E,0x47],       mime: 'image/png'   },
+            { bytes: [0x47,0x49,0x46,0x38],       mime: 'image/gif'   },
+            { bytes: [0x52,0x49,0x46,0x46],       mime: 'image/webp', offset_check: { offset:8, bytes:[0x57,0x45,0x42,0x50] } },
+            { bytes: [0x1A,0x45,0xDF,0xA3],       mime: 'audio/webm'  }, // WebM/MKV
+            { bytes: [0x4F,0x67,0x67,0x53],       mime: 'audio/ogg'   },
+            { bytes: [0x49,0x44,0x33],             mime: 'audio/mpeg'  }, // MP3 ID3
+            { bytes: [0xFF,0xFB],                  mime: 'audio/mpeg'  }, // MP3 no-ID3
+            { bytes: [0x52,0x49,0x46,0x46],       mime: 'audio/wav',  offset_check: { offset:8, bytes:[0x57,0x41,0x56,0x45] } },
+            { bytes: [0x66,0x74,0x79,0x70],       mime: 'audio/mp4',  header_offset: 4 },
+        ];
+
+        async function _checkMagicBytes(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const buf = new Uint8Array(e.target.result);
+                    for (const sig of MAGIC_SIGNATURES) {
+                        const off = sig.header_offset || 0;
+                        const match = sig.bytes.every((b, i) => buf[off + i] === b);
+                        if (!match) continue;
+                        if (sig.offset_check) {
+                            const { offset, bytes } = sig.offset_check;
+                            const ok = bytes.every((b, i) => buf[offset + i] === b);
+                            if (!ok) continue;
+                        }
+                        return resolve(true);
+                    }
+                    resolve(false); // ни одна сигнатура не совпала
+                };
+                reader.onerror = () => reject(new Error('Ошибка чтения файла'));
+                reader.readAsArrayBuffer(file.slice(0, 16));
+            });
+        }
+
+        // ── §8 · Клиентский лог загрузок ────────────────────────────
+        function _auditLog(event, detail) {
+            try {
+                const entry = {
+                    ts: new Date().toISOString(),
+                    uid: auth.currentUser?.uid || 'anon',
+                    event,
+                    ...detail,
+                };
+                // Храним последние 100 записей в памяти (сессия)
+                if (!window._uploadAuditLog) window._uploadAuditLog = [];
+                window._uploadAuditLog.push(entry);
+                if (window._uploadAuditLog.length > 100) window._uploadAuditLog.shift();
+                // Дублируем в console с меткой безопасности
+                console.info('[SECURITY AUDIT]', JSON.stringify(entry));
+            } catch (_) {}
+        }
+
+        // ── §4 · Rate-limit загрузок (клиентская защита) ─────────────
+        const _uploadRateLimit = { count: 0, windowStart: 0, MAX_PER_MIN: 10 };
+        function _checkUploadRateLimit() {
+            const now = Date.now();
+            if (now - _uploadRateLimit.windowStart > 60_000) {
+                _uploadRateLimit.count = 0;
+                _uploadRateLimit.windowStart = now;
+            }
+            _uploadRateLimit.count++;
+            if (_uploadRateLimit.count > _uploadRateLimit.MAX_PER_MIN) {
+                _auditLog('rate_limit_exceeded', { count: _uploadRateLimit.count });
+                throw new Error('Слишком много загрузок. Подождите минуту.');
+            }
+        }
+
+        // ── Основная функция загрузки через существующий бэкенд /api/upload ──
+        async function uploadToBackend(file, onProgress) {
+            try {
+                if (!(file instanceof File || file instanceof Blob))
+                    throw new Error('Передан недопустимый объект вместо файла.');
+
+                if (file.size > UPLOAD_MAX_BYTES)
+                    throw new Error('Файл превышает максимальный размер (50 МБ).');
+
+                const mimeType = file.type || 'application/octet-stream';
+                const fileName = file instanceof File ? file.name : 'upload.bin';
+                const ext = (fileName.split('.').pop() || '').toLowerCase();
+
+                if (!UPLOAD_ALLOWED_MIME.has(mimeType)) {
+                    _auditLog('blocked_mime', { mimeType, fileName, size: file.size });
+                    throw new Error('Тип файла не разрешён. Допустимы: изображения и аудио.');
+                }
+
+                if (!UPLOAD_ALLOWED_EXT.has(ext)) {
+                    _auditLog('blocked_ext', { ext, mimeType, size: file.size });
+                    throw new Error('Расширение файла не разрешено.');
+                }
+
+                const isImage = mimeType.startsWith('image/');
+                const isVideo = mimeType.startsWith('video/');
+                const isAudio = mimeType.startsWith('audio/');
+
+                if (isImage && file.size > UPLOAD_MAX_IMAGE_BYTES)
+                    throw new Error('Картинка превышает 10 МБ.');
+                if (isAudio && file.size > UPLOAD_MAX_AUDIO_BYTES)
+                    throw new Error('Аудио превышает 15 МБ.');
+
+                const magicOk = await _checkMagicBytes(file);
+                if (!magicOk) {
+                    _auditLog('blocked_magic_bytes', { mimeType, ext, size: file.size });
+                    throw new Error('Содержимое файла не соответствует его типу. Загрузка отклонена.');
+                }
+
+                _checkUploadRateLimit();
+                _auditLog('upload_start', { mimeType, ext, size: file.size, name: fileName });
+
+                const uploadType = isImage ? 'image' : (isVideo ? 'video' : 'raw');
+                const form = new FormData();
+                form.append('file', file, fileName);
+                form.append('type', uploadType);
+
+                const idToken = auth.currentUser
+                    ? await auth.currentUser.getIdToken().catch(() => '')
+                    : '';
+
+                const url = await new Promise((resolve, reject) => {
+                    const xhr = new XMLHttpRequest();
+                    xhr.open('POST', `${window.BACKEND_URL}/upload`, true);
+                    if (idToken) xhr.setRequestHeader('Authorization', `Bearer ${idToken}`);
+
+                    if (onProgress) {
+                        xhr.upload.onprogress = (e) => {
+                            if (e.lengthComputable) onProgress(Math.round(e.loaded / e.total * 100));
+                        };
+                    }
+
+                    xhr.onload = () => {
+                        let data = null;
+                        try { data = JSON.parse(xhr.responseText || '{}'); } catch (_) {}
+
+                        if (xhr.status >= 200 && xhr.status < 300 && data && data.url) {
+                            if (!String(data.url).startsWith('https://')) {
+                                reject(new Error('Бэкенд вернул некорректный URL файла.'));
+                                return;
+                            }
+                            resolve(data.url);
+                            return;
+                        }
+
+                        const detail = data && (data.detail || data.error || data.message);
+                        if (xhr.status === 413) reject(new Error(detail || 'Файл слишком большой.'));
+                        else if (xhr.status === 415) reject(new Error(detail || 'Тип файла не разрешён.'));
+                        else if (xhr.status === 429) reject(new Error('Слишком много запросов. Попробуйте позже.'));
+                        else reject(new Error(detail || 'Ошибка загрузки файла. Попробуйте позже.'));
+                    };
+                    xhr.onerror = () => reject(new Error('Сетевая ошибка при загрузке файла.'));
+                    xhr.send(form);
+                });
+
+                _auditLog('upload_success', { mimeType, size: file.size, uploadType });
+                return url;
+
+            } catch (err) {
+                _auditLog('upload_error', { message: err.message });
+                const safeMessages = [
+                    'Тип файла не разрешён',
+                    'Расширение файла не разрешено',
+                    'Картинка превышает',
+                    'Аудио превышает',
+                    'Файл превышает максимальный размер',
+                    'Файл слишком большой',
+                    'Содержимое файла не соответствует',
+                    'Слишком много загрузок',
+                    'Слишком много запросов',
+                    'Ошибка загрузки файла',
+                    'Сетевая ошибка при загрузке',
+                    'Не авторизован',
+                    'Бэкенд вернул некорректный URL файла',
+                    'Передан недопустимый объект',
+                    'Cloudinary не ответил',
+                    'Ошибка Cloudinary',
+                    'Cloudinary не вернул ссылку',
+                ];
+                const isSafe = safeMessages.some(m => err.message?.startsWith(m));
+                throw new Error(isSafe ? err.message : 'Ошибка загрузки. Попробуйте позже.');
+            }
+        }
+
+        // ── Обратная совместимость: uploadToCloudinary → uploadToBackend ──
+        async function uploadToCloudinary(file, onProgress) {
+            return uploadToBackend(file, onProgress);
+        }
+
+        /* ══════════════════════════════════════════════════════════════
+           КОНЕЦ SECURE FILE UPLOAD MODULE
+        ══════════════════════════════════════════════════════════════ */
+
+
+// Конвертирует base64 dataURL в File объект для загрузки
+function dataUrlToFile(dataUrl, filename) {
+    const arr = dataUrl.split(',');
+    const mime = arr[0].match(/:(.*?);/)[1];
+    const bstr = atob(arr[1]);
+    const u8arr = new Uint8Array(bstr.length);
+    for (let i = 0; i < bstr.length; i++) u8arr[i] = bstr.charCodeAt(i);
+    return new File([u8arr], filename, { type: mime });
+}
+
+        /* ══════════════════════════════
+           CONSTANTS
+        ══════════════════════════════ */
+        const FAKE_EMAIL_DOMAIN = '@6a.ru';
+        const THEME_KEY         = 'index6a_theme';
+        const RECENT_EMOJI_KEY  = 'index6a_emoji_recent';
+        const RECENT_MAX        = 24;
+        const TYPING_MAX_MS     = 4500;
+        const SCROLL_THRESHOLD  = 120;
+        const SPAM_INTERVAL_MS  = 1500;
+        const ONLINE_TTL_MS     = 180000; // 3 минуты
+        const PINNED_KEY        = 'index6a_pinned_chats';
+        const MUTED_KEY         = 'index6a_muted_chats';
+        const ARCHIVED_KEY      = 'index6a_archived_chats';
+        const AUTODEL_KEY       = 'index6a_autodel';   // { chatId → seconds }
+        const PROFILE_KEY       = 'index6a_profile';   // { bio, status }
+        const VISUAL_NICK_KEY   = 'index6a_visual_nick'; // визуальный ник (только UI)
+        const UI_STYLE_KEY      = 'index6a_ui_style_v2';
+        const UI_SKIN_KEY       = 'index6a_ui_skin_v2';
+        const UI_RADIUS_KEY     = 'index6a_ui_radius_v1';
+        const UI_DENSITY_KEY    = 'index6a_ui_density_v1';
+        const UI_MOTION_KEY     = 'index6a_ui_motion_v1';
+        const UI_GLASS_KEY      = 'index6a_ui_glass_v1';
+        const UI_CONTRAST_KEY   = 'index6a_ui_contrast_v1';
+        const UI_TEXTURE_KEY    = 'index6a_ui_texture_v1';
+        const UI_BUBBLE_KEY     = 'index6a_ui_bubble_v1';
+        const UI_PERFORMANCE_KEY = 'index6a_ui_performance_v1';
+
+        /* Admin UIDs — add real UIDs here */
+        const ADMIN_UIDS = new Set(['iMey77WyBccVB1wVFlqdWlrviLx2']);
+
+        /* ══════════════════════════════════════════════════════
+           MODERATION — через бэкенд (ключ только на сервере)
+        ══════════════════════════════════════════════════════ */
+        const TOXICITY_THRESHOLD   = 0.7;
+        const MAX_WARNS            = 3;
+
+        async function checkToxicity(text) {
+            const result = await window.E2E.checkToxicity(text);
+            // Backward compatibility: old E2E module returned boolean.
+            if (typeof result === 'boolean') {
+                return { ok: true, toxic: result, score: null, warns: null, legacy: true };
+            }
+            return result || { ok: false, toxic: false, score: null, reason: 'empty_moderation_result' };
+        }
+
+        function moderationErrorText(result) {
+            if (!result) return 'Модерация временно недоступна. Сообщение не отправлено.';
+            if (result.status === 401) return 'Нет авторизации для модерации. Перезайдите в аккаунт.';
+            if (result.status === 429) return 'Слишком много сообщений подряд. Подождите минуту.';
+            if (result.status === 503) return 'Модерация временно недоступна на сервере. Попробуйте позже.';
+            if (result.reason === 'timeout') return 'Модерация не ответила вовремя. Попробуйте ещё раз.';
+            if (result.reason === 'network_error') return 'Нет связи с бэкендом модерации. Сообщение не отправлено.';
+            return result.message || 'Модерация временно недоступна. Сообщение не отправлено.';
+        }
+
+        /**
+         * Варны выдаются только бэкендом через Firebase Admin SDK.
+         * Клиент не имеет права сам увеличивать users/{uid}.warns: Firestore rules это блокируют.
+         */
+
+        /**
+         * Применяет UI-блокировку отправки при >= MAX_WARNS варнов.
+         * Скрывает инпут и кнопки, показывает баннер.
+         */
+        function applyWarnsBan(warnsCount) {
+            const banner   = document.getElementById('warnsBanner');
+            const countEl  = document.getElementById('warnsCount');
+            const input    = document.getElementById('chatInput');
+            const sendWrap = document.getElementById('btnSendWrap');
+            const attach   = document.getElementById('btnAttach');
+            const emoji    = document.getElementById('btnEmoji');
+            if (!banner) return;
+            if (warnsCount >= MAX_WARNS) {
+                if (countEl) countEl.textContent = warnsCount;
+                banner.style.display  = 'block';
+                if (input)    { input.style.display    = 'none'; input.disabled = true; }
+                if (sendWrap) sendWrap.style.display   = 'none';
+                if (attach)   attach.style.display     = 'none';
+                if (emoji)    emoji.style.display      = 'none';
+            } else {
+                banner.style.display  = 'none';
+                if (input)    { input.style.display    = ''; input.disabled = false; }
+                if (sendWrap) sendWrap.style.display   = '';
+                if (attach)   attach.style.display     = '';
+                if (emoji)    emoji.style.display      = '';
+            }
+        }
+
+        const AVATAR_SET = [
+            {type:'emoji',val:'😎'},{type:'emoji',val:'🐱'},{type:'emoji',val:'🦊'},
+            {type:'emoji',val:'🐼'},{type:'emoji',val:'🦁'},{type:'emoji',val:'🐸'},
+            {type:'emoji',val:'🤖'},{type:'emoji',val:'👾'},{type:'emoji',val:'🧙'},
+            {type:'emoji',val:'🥷'},{type:'emoji',val:'🧛'},{type:'emoji',val:'🦸'},
+            {type:'emoji',val:'🐉'},{type:'emoji',val:'🦄'},{type:'emoji',val:'🐧'},
+            {type:'emoji',val:'🦋'},{type:'emoji',val:'🌚'},{type:'emoji',val:'🌝'},
+            {type:'emoji',val:'💀'},{type:'emoji',val:'👻'},{type:'emoji',val:'🤡'},
+            {type:'emoji',val:'🎃'},{type:'emoji',val:'🍕'},{type:'emoji',val:'🍔'},
+        ];
+        const QUICK_REACTIONS = ['👍','❤️','😂','😮','😢','🔥','👏','💀'];
+        const EMOJI_GROUPS = [
+            { id:'recent', label:'🕐 Недавние', emojis:[] },
+            { id:'smileys', label:'😀 Смайлы', emojis:['😀','😃','😄','😁','😅','😂','🤣','🥲','😊','😇','🙂','😉','😌','😍','🥰','😘','😋','😛','😜','🤪','😝','🤑','🤗','🤭','🤫','🤔','🤐','🤨','😐','😑','😶','😏','😒','🙄','😬','🤥','😔','😪','🤤','😴','😷','🤒','🤕','🤢','🤮','🤧','🥵','🥶','🥴','😵','🤯','🤠','🥳','😎','🤓','🧐'] },
+            { id:'animals', label:'🐶 Животные', emojis:['🐶','🐱','🐭','🐹','🐰','🦊','🐻','🐼','🐨','🐯','🦁','🐮','🐷','🐸','🐵','🐔','🐧','🐦','🐤','🦆','🦅','🦉','🦇','🐺','🐗','🐴','🦄','🐝','🐛','🦋','🐌','🐞','🐜','🦟','🦗','🐢','🐍','🦎','🐙','🦑','🦐','🦀','🐡','🐠','🐟','🐬','🐳','🦈','🐊','🦒','🐘','🦛','🐪','🦓','🦍','🐕','🐈','🐇','🦝','🐁','🦔'] },
+            { id:'food', label:'🍕 Еда', emojis:['🍏','🍎','🍐','🍊','🍋','🍌','🍉','🍇','🍓','🫐','🍒','🍑','🍍','🥝','🍅','🥑','🥦','🥕','🌽','🥐','🥖','🧀','🥚','🍳','🥞','🥓','🥩','🍗','🌭','🍔','🍟','🍕','🥪','🌮','🌯','🍝','🍜','🍲','🍣','🍱','🥟','🍤','🍙','🍚','🍘','🧁','🍰','🎂','🍩','🍪','🍫','🍿','🥤','☕','🍵','🧋','🍺','🍷','🥂'] },
+            { id:'hearts', label:'❤️ Сердца', emojis:['❤️','🧡','💛','💚','💙','💜','🖤','🤍','🤎','💔','❤️‍🔥','❤️‍🩹','💕','💞','💓','💗','💖','💘','💝','💟','💋','💌','💐','🌹','🥀','🌷','🌸','🌻','🌼','🌺'] },
+            { id:'gestures', label:'👍 Жесты', emojis:['👍','👎','👌','🤌','✌️','🤞','🤟','🤘','🤙','👋','🤚','🖐','✋','🖖','👏','🙌','🫶','👐','🤲','🤝','🙏','✍️','💅','💪','👀','👄','🫵','☝️','👆','👇','👈','👉'] },
+            { id:'objects', label:'💡 Вещи', emojis:['📱','💻','⌨️','🖥','💾','📷','🎥','📞','📺','📻','🔋','💡','🔦','💸','💵','💳','🔨','🔧','⚙️','🧲','🔮','📿','🧬','🔭','🔬','🩺','💊','🧹','🛒','🎮','🕹','🎲','🎯','🃏','🎴'] },
+            { id:'sport', label:'⚽ Спорт', emojis:['⚽','🏀','🏈','⚾','🎾','🏐','🏉','🎱','🏓','🏸','🏒','🥅','⛳','🎣','🥊','🥋','🛹','⛸','🎿','🏋️','🤸','⛹','🏊','🚴','🏆','🥇','🥈','🥉','🏅','🎖'] }
+        ];
+
+        /* ══════════════════════════════
+           UTILITIES
+        ══════════════════════════════ */
+        function nickFromInput(raw) {
+            let n = String(raw||'').trim();
+            if (n.toLowerCase().endsWith(FAKE_EMAIL_DOMAIN.toLowerCase()))
+                n = n.slice(0, n.length - FAKE_EMAIL_DOMAIN.length).trim();
+            return n;
+        }
+        function nickToEmail(raw) {
+            const n = nickFromInput(raw);
+            if (!n) throw new Error('Введите ник');
+            return n + FAKE_EMAIL_DOMAIN;
+        }
+        /* Визуальный ник: сначала localStorage, потом Firebase Auth displayName */
+        function getVisualNick() {
+            try { const v = localStorage.getItem(VISUAL_NICK_KEY); if (v) return v; } catch(_){}
+            return null;
+        }
+        function setVisualNick(nick) {
+            try { localStorage.setItem(VISUAL_NICK_KEY, nick); } catch(_){}
+        }
+
+        // Кеш ников из Firestore (uid → displayName). Единственный источник правды.
+        const _userNickCache = {};
+
+        function displayNick(u) {
+            if (!u) return '?';
+            // 1. Firestore-кеш (заполняется при логине и сохранении профиля)
+            if (_userNickCache[u.uid]) return _userNickCache[u.uid];
+            // 2. Firebase Auth displayName как запасной вариант
+            const dn = u.displayName && String(u.displayName).trim();
+            if (dn) return dn;
+            // 3. Вычленяем из email (фейковый домен или обычный)
+            const em = u.email || '';
+            if (em.toLowerCase().endsWith(FAKE_EMAIL_DOMAIN.toLowerCase()))
+                return em.slice(0, em.length - FAKE_EMAIL_DOMAIN.length) || '?';
+            const at = em.indexOf('@');
+            return at > 0 ? em.slice(0, at) : (em || '?');
+        }
+        async function getAuthorNameForRules(u) {
+            if (!u) return '?';
+            try {
+                const snap = await getDoc(doc(db, 'users', u.uid));
+                const name = snap.exists() ? String(snap.data().displayName || '').trim() : '';
+                if (name) { _userNickCache[u.uid] = name; return name; }
+            } catch (_) {}
+            return displayNick(u);
+        }
+
+        function cleanContent(text) {
+            let t = String(text);
+            t = t.replace(/\b(?:f+u+c+k+|s+h+i+t+|d+a+m+n+)\b/gi, '❤');
+            t = t.replace(/(хуй|хуя|хуе|хуи|хуё|хуищ|пизд|ебан|еба[тьл]|ебёт|ебать|ёб|бляд|блять|сука|муд[ао]|мудак|долбо|залуп|говноп|гандон)/gi, '❤');
+            return t;
+        }
+        function escapeHtml(s) {
+            return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        }
+        function formatTime(ts) {
+            if (!ts||typeof ts.toDate!=='function') return '';
+            return ts.toDate().toLocaleString('ru-RU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+        }
+        function formatTimeShort(ts) {
+            if (!ts||typeof ts.toDate!=='function') return '';
+            const d = ts.toDate(), now = new Date();
+            if (d.getDate()===now.getDate() && now-d < 86400000)
+                return d.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
+            return d.toLocaleDateString('ru-RU',{day:'numeric',month:'short'});
+        }
+        function formatDate(ts) {
+            if (!ts||typeof ts.toDate!=='function') return '';
+            return ts.toDate().toLocaleDateString('ru-RU',{day:'numeric',month:'long',year:'numeric'});
+        }
+        function isNearBottom(el) { return el.scrollHeight - el.scrollTop - el.clientHeight < SCROLL_THRESHOLD; }
+
+        /* LocalStorage helpers */
+        function lsGet(key, def = null) { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : def; } catch(_) { return def; } }
+        function lsSet(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch(_) {} }
+
+        /* Скрытый логгер — пиши window.__dbg в консоли чтобы посмотреть */
+        const _dbgLog = (function(){
+            const MAX = 100;
+            const log = [];
+            window.__dbg = { log, clear: ()=>log.splice(0,log.length), show: ()=>log.forEach((e,i)=>console.log(i,e.t,e.k,e.v)) };
+            return function(key, val) {
+                log.push({ t: new Date().toISOString(), k: key, v: val });
+                if (log.length > MAX) log.shift();
+            };
+        })();
+
+        /* ══════════════════════════════
+           STATE
+        ══════════════════════════════ */
+        let stickToBottom         = true;
+        let messagesUnsub         = null;
+        let typingUnsub           = null;
+        let typingInterval        = null;
+        let typingWriteTimer      = null;
+        let lastTypingWrite       = 0;
+        let lastKnownLastMessageId = null;
+        let unreadBelow           = 0;
+        let editingMessageId      = null;
+        let emojiActiveTab        = 'recent';
+        let lastOutboundAt        = 0;
+        let toastTimer            = null;
+        let searchDebounceTimer   = null;
+        let replyingTo            = null;           // { id, author, text }
+        let selectedAvatar        = null;
+        let onlineUnsub           = null;
+        let onlinePingTimer      = null;
+        let sidebarDMUnsub        = null;
+        let peerReadUnsub         = null;           // listener for peer's unread count
+        let peerHasRead           = false;          // true = peer read our last msg
+        let pendingImageBase64    = null;           // локальный base64 ТОЛЬКО для превью
+        let pendingImageFile      = null;           // оригинальный File для загрузки на Cloudinary
+        let pendingImageUrl       = null;           // Cloudinary URL после загрузки
+        let rpActiveFor           = null;
+        let currentChatMode       = 'group';        // 'group' | 'dm'
+        let currentDMPeerUid      = null;
+        let currentDMPeerName     = null;
+        let currentDMConvId       = null;
+        let onlineUsers           = {};             // uid → name
+        let sidebarItems          = [];             // DM items
+        let selectedMessages      = new Set();      // multi-select msg ids
+        let isSelectionMode       = false;
+        let currentFolder         = 'all';
+        let userIsAdmin           = false;
+        let pinnedMsgId           = null;           // currently pinned msg in group
+        let autodelTimers         = {};             // msgId → timeoutId
+        let _userProfileUid       = null;           // uid открытого профиля
+        let globalAudioPlayer     = null;           // DEPRECATED — use ChatPlayer singleton below
+        let currentPlayBtn        = null;           // DEPRECATED — use ChatPlayer singleton below
+
+        /* Persisted settings */
+        let pinnedChats  = lsGet(PINNED_KEY, []);
+        let mutedChats   = lsGet(MUTED_KEY, []);
+        let archivedChats= lsGet(ARCHIVED_KEY, []);
+        let autoDelSettings = lsGet(AUTODEL_KEY, {});
+        let userProfile  = lsGet(PROFILE_KEY, { bio:'', status:'online' });
+        const avatarCache = {};
+
+        /* ══════════════════════════════
+           AVATAR HELPERS
+        ══════════════════════════════ */
+        function avatarGradient(uid) {
+            let h = 0;
+            const s = String(uid||'x');
+            for (let i=0;i<s.length;i++) h = (h*31+s.charCodeAt(i))>>>0;
+            const h1 = h%360, h2 = (h1+38+(h%40))%360;
+            return `linear-gradient(135deg,hsl(${h1} 65% 48%) 0%,hsl(${h2} 58% 42%) 100%)`;
+        }
+        function firstLetter(name, fb) {
+            const t = (name && String(name).trim()) || fb || '?';
+            return ([...t][0]||'?').toUpperCase();
+        }
+        function applyAvatarToEl(el, uid, name, fb, avData) {
+            el.innerHTML = '';
+            if (avData?.type === 'emoji') {
+                el.style.background = avatarGradient(uid);
+                el.style.fontSize = '1.1em';
+                el.textContent = avData.val;
+            } else if (avData?.type === 'img') {
+                el.style.background = 'none';
+                el.style.fontSize = '';
+                const img = document.createElement('img');
+                img.src = avData.val; img.alt = '';
+                img.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:50%';
+                el.appendChild(img);
+            } else {
+                el.style.background = avatarGradient(uid);
+                el.style.fontSize = '';
+                el.textContent = firstLetter(name, fb);
+            }
+        }
+        async function renderAvatarCircle(el, uid, name, fb) {
+            applyAvatarToEl(el, uid, name, fb, avatarCache[uid]||null);
+            if (!avatarCache[uid] && uid) {
+                try {
+                    const snap = await getDoc(doc(db,'users',uid));
+                    if (snap.exists()) {
+                        const av = snap.data().avatar;
+                        if (av) { avatarCache[uid]=av; applyAvatarToEl(el,uid,name,fb,av); }
+                    }
+                } catch(_) {}
+            }
+        }
+
+        /* ══════════════════════════════
+           DOM REFERENCES
+        ══════════════════════════════ */
+        const authGate       = document.getElementById('authGate');
+        const appRoot        = document.getElementById('appRoot');
+        const authChecking   = document.getElementById('authChecking');
+        const authFormBlock  = document.getElementById('authFormBlock');
+        const authSpinner    = document.getElementById('authSpinner');
+        const authError      = document.getElementById('authError');
+        const authSub        = document.getElementById('authSub');
+        const btnLogin       = document.getElementById('btnLogin');
+        const btnRegister    = document.getElementById('btnRegister');
+        const btnRegisterMode= document.getElementById('btnRegisterMode');
+        const btnBackLogin   = document.getElementById('btnBackLogin');
+        const authNick       = document.getElementById('authNick');
+        const authPass       = document.getElementById('authPass');
+
+        const chatMessages   = document.getElementById('chatMessages');
+        const chatEmpty      = document.getElementById('chatEmpty');
+        const chatInput      = document.getElementById('chatInput');
+        const chatSend       = document.getElementById('chatSend');
+        // Mic/Send swap state updater (stub — real fn defined later, called via wrapper)
+        function updateSendMicState() {
+            const wrap = document.getElementById('btnSendWrap');
+            if (!wrap) return;
+            const hasText     = chatInput.value.trim().length > 0;
+            const hasImage    = !!pendingImageBase64;
+            const hasMusic    = !!_pendingMusicFile;
+            const hasContent  = hasText || hasImage || hasMusic;
+            wrap.classList.toggle('is-typing', hasContent);
+            chatSend.disabled = !hasContent;
+        }
+        const globalStatus   = document.getElementById('globalStatus');
+        const typingBar      = document.getElementById('typingBar');
+        const scrollDownFab  = document.getElementById('scrollDownFab');
+        const scrollDownBadge= document.getElementById('scrollDownBadge');
+        const emojiPopover   = document.getElementById('emojiPopover');
+        const emojiTabs      = document.getElementById('emojiTabs');
+        const emojiGrid      = document.getElementById('emojiGrid');
+        const btnEmoji       = document.getElementById('btnEmoji');
+        const ctxMenu        = document.getElementById('ctxMenu');
+        const sheetBackdrop  = document.getElementById('sheetBackdrop');
+        const toastEl        = document.getElementById('toast');
+        const msgSearchInput = document.getElementById('msgSearchInput');
+        const editBanner     = document.getElementById('editBanner');
+        const editBannerCancel = document.getElementById('editBannerCancel');
+        const replyBanner    = document.getElementById('replyBanner');
+        const replyBannerNick= document.getElementById('replyBannerNick');
+        const replyBannerText= document.getElementById('replyBannerText');
+        const replyBannerClose= document.getElementById('replyBannerClose');
+        const onlineBar      = document.getElementById('onlineBar');
+        const reactionPicker = document.getElementById('reactionPicker');
+        const avatarModalBackdrop = document.getElementById('avatarModalBackdrop');
+        const avatarCurrentBig = document.getElementById('avatarCurrentBig');
+        const avatarGrid     = document.getElementById('avatarGrid');
+        const avatarModalCancel = document.getElementById('avatarModalCancel');
+        const avatarModalSave = document.getElementById('avatarModalSave');
+        const tgSidebar      = document.getElementById('tgSidebar');
+        const sidebarList    = document.getElementById('sidebarList');
+        const sidebarSearch  = document.getElementById('sidebarSearch');
+        const sidebarUserAv  = document.getElementById('sidebarUserAv');
+        const sidebarUserName= document.getElementById('sidebarUserName');
+        const tgHeaderAv     = document.getElementById('tgHeaderAv');
+        const tgHeaderName   = document.getElementById('tgHeaderName');
+        const tgHeaderStatus = document.getElementById('tgHeaderStatus');
+        const burgerBtn      = document.getElementById('burgerBtn');
+        const sidebarOverlay = document.getElementById('sidebarOverlay');
+        const pinnedBanner   = document.getElementById('pinnedBanner');
+        const pinnedBannerText= document.getElementById('pinnedBannerText');
+        const pinnedBannerClose= document.getElementById('pinnedBannerClose');
+        const autodelBanner  = document.getElementById('autodelBanner');
+        const autodelBannerText= document.getElementById('autodelBannerText');
+        const folderBar      = document.getElementById('folderBar');
+        const imgFileInput   = document.getElementById('imgFileInput');
+        const imgPreviewBar  = document.getElementById('imgPreviewBar');
+        const imgPreviewThumb= document.getElementById('imgPreviewThumb');
+        const imgPreviewName = document.getElementById('imgPreviewName');
+        const imgPreviewSize = document.getElementById('imgPreviewSize');
+        const imgPreviewCancel=document.getElementById('imgPreviewCancel');
+        const imgLightbox    = document.getElementById('imgLightbox');
+        const imgLightboxImg = document.getElementById('imgLightboxImg');
+
+        /* ══════════════════════════════
+           IMAGE COMPRESS + PREVIEW
+        ══════════════════════════════ */
+        function compressImage(file, maxPx=900, quality=0.72) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onerror = reject;
+                reader.onload = e => {
+                    const img = new Image();
+                    img.onerror = reject;
+                    img.onload = () => {
+                        let {width:w, height:h} = img;
+                        if (w > maxPx || h > maxPx) {
+                            if (w > h) { h = Math.round(h * maxPx / w); w = maxPx; }
+                            else       { w = Math.round(w * maxPx / h); h = maxPx; }
+                        }
+                        const canvas = document.createElement('canvas');
+                        canvas.width = w; canvas.height = h;
+                        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+                        resolve(canvas.toDataURL('image/jpeg', quality));
+                    };
+                    img.src = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+
+        function fmtBytes(b) {
+            if (b < 1024) return b + ' Б';
+            if (b < 1024*1024) return (b/1024).toFixed(0) + ' КБ';
+            return (b/1024/1024).toFixed(1) + ' МБ';
+        }
+
+        function clearImagePreview() {
+            pendingImageBase64 = null;
+            pendingImageFile   = null;
+            pendingImageUrl    = null;
+            imgPreviewBar.classList.remove('is-visible');
+            imgPreviewThumb.src = '';
+            imgPreviewName.textContent = '';
+            imgPreviewSize.textContent = '';
+            imgFileInput.value = '';
+            chatSend.disabled = !chatInput.value.trim() && !pendingImageFile;
+            updateSendMicState();
+        }
+
+        imgFileInput.addEventListener('change', async () => {
+            const file = imgFileInput.files[0];
+            if (!file) return;
+            if (!file.type.startsWith('image/')) { showToast('Только картинки!'); return; }
+            if (file.size > 20 * 1024 * 1024) { showToast('❌ Файл больше 20 МБ'); return; }
+            try {
+                // Сохраняем оригинальный файл для Cloudinary
+                pendingImageFile = file;
+                pendingImageUrl = null; // сбрасываем старый URL
+                // Превью — быстро и локально, без сжатия для Firestore
+                pendingImageBase64 = await compressImage(file, 400, 0.7); // только для <img> превью
+                imgPreviewThumb.src = pendingImageBase64;
+                imgPreviewName.textContent = file.name;
+                const kb = Math.round(file.size / 1024);
+                imgPreviewSize.textContent = `${kb} КБ · загрузится при отправке`;
+                imgPreviewBar.classList.add('is-visible');
+                chatSend.disabled = false;
+                updateSendMicState();
+            } catch(e) { showToast('❌ Не удалось прочитать картинку'); }
+        });
+
+        imgPreviewCancel.addEventListener('click', clearImagePreview);
+
+        /* Lightbox */
+        function openLightbox(src) {
+            imgLightboxImg.src = src;
+            imgLightbox.classList.add('is-open');
+        }
+        imgLightbox.addEventListener('click', () => imgLightbox.classList.remove('is-open'));
+        document.addEventListener('keydown', e => { if (e.key==='Escape') imgLightbox.classList.remove('is-open'); });
+
+        /* EXTENDED APPEARANCE SETTINGS */
+        const UI_SKIN_DEFAULTS = { minimal:'min-obsidian', skeuo:'sk-blue-gel', flat:'style-flat', material:'style-material', neumo:'style-neumo', glass:'style-glass', brutal:'style-brutal', cyberpunk:'style-cyberpunk', retro:'style-retro', swiss:'style-swiss', bauhaus:'style-bauhaus', maximal:'style-maximal', corporate:'style-corporate', dark:'style-dark', clay:'style-clay', immersive:'style-immersive', pixel:'style-pixel', y2k:'style-y2k' };
+        const UI_SKIN_STYLE = {'min-obsidian':'minimal','min-graphite':'minimal','min-amoled':'minimal','min-midnight':'minimal','min-carbon':'minimal','min-nord':'minimal','min-ink':'minimal','min-cyber':'minimal','min-oceanic':'minimal','min-lilac':'minimal','min-rose':'minimal','min-emerald':'minimal','min-sunset':'minimal','min-snow':'minimal','min-paper':'minimal','sk-blue-gel':'skeuo','sk-leather':'skeuo','sk-felt':'skeuo','sk-candy':'skeuo','sk-metal':'skeuo','sk-walnut':'skeuo','sk-aqua':'skeuo','sk-cream':'skeuo','sk-graphite-gel':'skeuo','sk-ruby':'skeuo','sk-amethyst':'skeuo','sk-slate-glass':'skeuo','style-flat':'flat','style-material':'material','style-neumo':'neumo','style-glass':'glass','style-brutal':'brutal','style-cyberpunk':'cyberpunk','style-retro':'retro','style-swiss':'swiss','style-bauhaus':'bauhaus','style-maximal':'maximal','style-corporate':'corporate','style-dark':'dark','style-clay':'clay','style-immersive':'immersive','style-pixel':'pixel','style-y2k':'y2k'};
+        const UI_SKIN_PALETTES = {
+          'min-obsidian': {'--bg-base':'#030712','--bg-chat':'#060b16','--sidebar-bg':'#050914','--nav-bg':'rgba(5,9,20,.94)','--surface':'#0b1220','--surface-2':'#111827','--surface-3':'#1f2937','--surface-hover':'#172033','--surface-active':'#1d2b44','--surface-glass':'rgba(10,18,32,.82)','--text':'#f8fafc','--muted':'#94a3b8','--muted-soft':'#64748b','--border':'rgba(148,163,184,.08)','--border-strong':'rgba(148,163,184,.16)','--accent':'#60a5fa','--accent-strong':'#2563eb','--accent-dim':'rgba(96,165,250,.16)','--accent-text':'#031326','--bubble-me-bg':'linear-gradient(145deg,#2563eb,#60a5fa)','--bubble-other-bg':'#111827','--bubble-other-border':'rgba(148,163,184,.13)','--bubble-other-text':'#e5e7eb','--dot-color':'rgba(96,165,250,.035)'},
+          'min-graphite': {'--bg-base':'#09090b','--bg-chat':'#0d0d10','--sidebar-bg':'#0b0b0d','--nav-bg':'rgba(10,10,12,.94)','--surface':'#141416','--surface-2':'#1f2024','--surface-3':'#2f3338','--surface-hover':'#272a30','--surface-active':'#343942','--surface-glass':'rgba(20,20,22,.84)','--text':'#f5f5f5','--muted':'#a1a1aa','--muted-soft':'#71717a','--border':'rgba(244,244,245,.08)','--border-strong':'rgba(244,244,245,.16)','--accent':'#e5e7eb','--accent-strong':'#a1a1aa','--accent-dim':'rgba(229,231,235,.12)','--accent-text':'#09090b','--bubble-me-bg':'linear-gradient(145deg,#3f3f46,#d4d4d8)','--bubble-other-bg':'#1f2024','--bubble-other-border':'rgba(244,244,245,.12)','--bubble-other-text':'#f4f4f5','--dot-color':'rgba(244,244,245,.022)'},
+          'min-amoled': {'--bg-base':'#000','--bg-chat':'#000','--sidebar-bg':'#050505','--nav-bg':'rgba(0,0,0,.96)','--surface':'#070707','--surface-2':'#101010','--surface-3':'#1b1b1b','--surface-hover':'#151515','--surface-active':'#202020','--surface-glass':'rgba(8,8,8,.86)','--text':'#f8fafc','--muted':'#8b98a8','--muted-soft':'#566170','--border':'rgba(255,255,255,.07)','--border-strong':'rgba(255,255,255,.14)','--accent':'#38bdf8','--accent-strong':'#0284c7','--accent-dim':'rgba(56,189,248,.14)','--accent-text':'#00131c','--bubble-me-bg':'linear-gradient(145deg,#0369a1,#38bdf8)','--bubble-other-bg':'#0d0d0d','--bubble-other-border':'rgba(255,255,255,.10)','--bubble-other-text':'#f1f5f9','--dot-color':'rgba(56,189,248,.025)'},
+          'min-nord': {'--bg-base':'#0f172a','--bg-chat':'#111827','--sidebar-bg':'#0b1120','--nav-bg':'rgba(11,17,32,.94)','--surface':'#172033','--surface-2':'#1f2937','--surface-3':'#334155','--surface-hover':'#253044','--surface-active':'#364862','--surface-glass':'rgba(23,32,51,.84)','--text':'#eaf2ff','--muted':'#a7b6cf','--muted-soft':'#718096','--border':'rgba(191,219,254,.09)','--border-strong':'rgba(191,219,254,.18)','--accent':'#93c5fd','--accent-strong':'#3b82f6','--accent-dim':'rgba(147,197,253,.15)','--accent-text':'#081525','--bubble-me-bg':'linear-gradient(145deg,#3b82f6,#93c5fd)','--bubble-other-bg':'#1f2937','--bubble-other-border':'rgba(191,219,254,.13)','--bubble-other-text':'#eef6ff','--dot-color':'rgba(147,197,253,.035)'},
+          'min-ink': {'--bg-base':'#060314','--bg-chat':'#09051f','--sidebar-bg':'#08041a','--nav-bg':'rgba(8,4,26,.94)','--surface':'#120d2b','--surface-2':'#1b1640','--surface-3':'#27205a','--surface-hover':'#20194d','--surface-active':'#2f2470','--surface-glass':'rgba(18,13,43,.84)','--text':'#f5f3ff','--muted':'#b8b0d9','--muted-soft':'#766b97','--border':'rgba(167,139,250,.10)','--border-strong':'rgba(167,139,250,.20)','--accent':'#818cf8','--accent-strong':'#4f46e5','--accent-dim':'rgba(129,140,248,.16)','--accent-text':'#08041a','--bubble-me-bg':'linear-gradient(145deg,#4f46e5,#818cf8)','--bubble-other-bg':'#1b1640','--bubble-other-border':'rgba(167,139,250,.16)','--bubble-other-text':'#f5f3ff','--dot-color':'rgba(129,140,248,.04)'},
+          'min-cyber': {'--bg-base':'#021014','--bg-chat':'#031820','--sidebar-bg':'#020c10','--nav-bg':'rgba(2,12,16,.94)','--surface':'#061b22','--surface-2':'#092a35','--surface-3':'#0d3f4d','--surface-hover':'#0b3440','--surface-active':'#105569','--surface-glass':'rgba(6,27,34,.84)','--text':'#ecfeff','--muted':'#9bd9e4','--muted-soft':'#5b8f9b','--border':'rgba(34,211,238,.10)','--border-strong':'rgba(34,211,238,.20)','--accent':'#22d3ee','--accent-strong':'#0891b2','--accent-dim':'rgba(34,211,238,.16)','--accent-text':'#021014','--bubble-me-bg':'linear-gradient(145deg,#0891b2,#22d3ee)','--bubble-other-bg':'#092a35','--bubble-other-border':'rgba(34,211,238,.15)','--bubble-other-text':'#ecfeff','--dot-color':'rgba(34,211,238,.04)'},
+          'min-lilac': {'--bg-base':'#10081f','--bg-chat':'#170d2b','--sidebar-bg':'#13091f','--nav-bg':'rgba(19,9,31,.94)','--surface':'#1d1231','--surface-2':'#281942','--surface-3':'#3a245f','--surface-hover':'#302051','--surface-active':'#4c2d78','--surface-glass':'rgba(29,18,49,.84)','--text':'#faf5ff','--muted':'#cab8df','--muted-soft':'#856e99','--border':'rgba(216,180,254,.10)','--border-strong':'rgba(216,180,254,.20)','--accent':'#d8b4fe','--accent-strong':'#a855f7','--accent-dim':'rgba(216,180,254,.16)','--accent-text':'#160b2e','--bubble-me-bg':'linear-gradient(145deg,#9333ea,#d8b4fe)','--bubble-other-bg':'#281942','--bubble-other-border':'rgba(216,180,254,.14)','--bubble-other-text':'#f3e8ff','--dot-color':'rgba(216,180,254,.04)'},
+          'min-rose': {'--bg-base':'#150810','--bg-chat':'#1e0b15','--sidebar-bg':'#12070d','--nav-bg':'rgba(18,7,13,.94)','--surface':'#25111b','--surface-2':'#351827','--surface-3':'#51233a','--surface-hover':'#421d31','--surface-active':'#612946','--surface-glass':'rgba(37,17,27,.84)','--text':'#fff1f5','--muted':'#e0a9bc','--muted-soft':'#936174','--border':'rgba(251,113,133,.10)','--border-strong':'rgba(251,113,133,.20)','--accent':'#fb7185','--accent-strong':'#e11d48','--accent-dim':'rgba(251,113,133,.16)','--accent-text':'#21070f','--bubble-me-bg':'linear-gradient(145deg,#e11d48,#fb7185)','--bubble-other-bg':'#351827','--bubble-other-border':'rgba(251,113,133,.14)','--bubble-other-text':'#fff1f5','--dot-color':'rgba(251,113,133,.035)'},
+          'min-emerald': {'--bg-base':'#01140b','--bg-chat':'#041b10','--sidebar-bg':'#03120b','--nav-bg':'rgba(3,18,11,.94)','--surface':'#062315','--surface-2':'#0b3320','--surface-3':'#0f4a2c','--surface-hover':'#0d3e25','--surface-active':'#145c37','--surface-glass':'rgba(6,35,21,.84)','--text':'#ecfdf5','--muted':'#a7d9c2','--muted-soft':'#65967e','--border':'rgba(52,211,153,.10)','--border-strong':'rgba(52,211,153,.20)','--accent':'#34d399','--accent-strong':'#059669','--accent-dim':'rgba(52,211,153,.16)','--accent-text':'#01140b','--bubble-me-bg':'linear-gradient(145deg,#059669,#34d399)','--bubble-other-bg':'#0b3320','--bubble-other-border':'rgba(52,211,153,.14)','--bubble-other-text':'#ecfdf5','--dot-color':'rgba(52,211,153,.035)'},
+          'min-snow': {'--bg-base':'#f8fafc','--bg-chat':'#eef4ff','--sidebar-bg':'#ffffff','--nav-bg':'rgba(255,255,255,.94)','--surface':'#ffffff','--surface-2':'#f1f5f9','--surface-3':'#e2e8f0','--surface-hover':'#edf2f7','--surface-active':'#dbeafe','--surface-glass':'rgba(255,255,255,.88)','--text':'#0f172a','--muted':'#64748b','--muted-soft':'#94a3b8','--border':'rgba(15,23,42,.08)','--border-strong':'rgba(15,23,42,.14)','--accent':'#2563eb','--accent-strong':'#1d4ed8','--accent-dim':'rgba(37,99,235,.12)','--accent-text':'#fff','--bubble-me-bg':'linear-gradient(145deg,#2563eb,#60a5fa)','--bubble-other-bg':'#fff','--bubble-other-border':'rgba(15,23,42,.08)','--bubble-other-text':'#0f172a','--dot-color':'rgba(37,99,235,.025)'},
+          'sk-blue-gel': {'--bg-base':'#061027','--bg-chat':'#081a3b','--sidebar-bg':'#071326','--nav-bg':'rgba(7,19,38,.94)','--surface':'#0f2851','--surface-2':'#173a75','--surface-3':'#22539b','--surface-hover':'#1d4787','--surface-active':'#2f6fc6','--surface-glass':'rgba(15,40,81,.88)','--text':'#f7fbff','--muted':'#c5d8f2','--muted-soft':'#8aa4c8','--border':'rgba(219,234,254,.18)','--border-strong':'rgba(219,234,254,.34)','--accent':'#dbeafe','--accent-strong':'#2f80ed','--accent-dim':'rgba(219,234,254,.20)','--accent-text':'#071326','--bubble-me-bg':'linear-gradient(180deg,#8cc8ff,#2f80ed 50%,#0d47a1)','--bubble-other-bg':'linear-gradient(180deg,#274d82,#102a5c)','--bubble-other-border':'rgba(219,234,254,.28)','--bubble-other-text':'#f7fbff','--dot-color':'rgba(219,234,254,.05)'},
+          'sk-leather': {'--bg-base':'#1a0d07','--bg-chat':'#231108','--sidebar-bg':'#1c0f08','--nav-bg':'rgba(28,15,8,.94)','--surface':'#3a1d0f','--surface-2':'#512711','--surface-3':'#743814','--surface-hover':'#5e2d13','--surface-active':'#8a3f18','--surface-glass':'rgba(58,29,15,.90)','--text':'#fff4e6','--muted':'#e4b98d','--muted-soft':'#a67146','--border':'rgba(251,191,36,.18)','--border-strong':'rgba(251,191,36,.34)','--accent':'#fbbf24','--accent-strong':'#b45309','--accent-dim':'rgba(251,191,36,.18)','--accent-text':'#201006','--bubble-me-bg':'linear-gradient(180deg,#f59e0b,#b45309)','--bubble-other-bg':'linear-gradient(180deg,#512711,#2b1208)','--bubble-other-border':'rgba(251,191,36,.22)','--bubble-other-text':'#fff4e6','--dot-color':'rgba(251,191,36,.04)'},
+          'sk-felt': {'--bg-base':'#021508','--bg-chat':'#062411','--sidebar-bg':'#03190b','--nav-bg':'rgba(3,25,11,.94)','--surface':'#0d3b1c','--surface-2':'#14532d','--surface-3':'#1f7a3b','--surface-hover':'#196634','--surface-active':'#2f7d32','--surface-glass':'rgba(13,59,28,.90)','--text':'#f0fff4','--muted':'#bce7c8','--muted-soft':'#7bad89','--border':'rgba(187,247,208,.18)','--border-strong':'rgba(187,247,208,.34)','--accent':'#bbf7d0','--accent-strong':'#65a30d','--accent-dim':'rgba(187,247,208,.17)','--accent-text':'#021508','--bubble-me-bg':'linear-gradient(180deg,#a3e635,#4d7c0f)','--bubble-other-bg':'linear-gradient(180deg,#14532d,#062411)','--bubble-other-border':'rgba(187,247,208,.22)','--bubble-other-text':'#f0fff4','--dot-color':'rgba(187,247,208,.045)'},
+          'sk-candy': {'--bg-base':'#23051f','--bg-chat':'#3b0730','--sidebar-bg':'#2a0626','--nav-bg':'rgba(42,6,38,.94)','--surface':'#5b0f4f','--surface-2':'#86198f','--surface-3':'#be185d','--surface-hover':'#9d1d79','--surface-active':'#ec4899','--surface-glass':'rgba(91,15,79,.90)','--text':'#fff5fb','--muted':'#fbcfe8','--muted-soft':'#d98abb','--border':'rgba(251,207,232,.20)','--border-strong':'rgba(251,207,232,.38)','--accent':'#fbcfe8','--accent-strong':'#ec4899','--accent-dim':'rgba(251,207,232,.18)','--accent-text':'#2a0626','--bubble-me-bg':'linear-gradient(180deg,#f9a8d4,#ec4899,#be185d)','--bubble-other-bg':'linear-gradient(180deg,#86198f,#3b0764)','--bubble-other-border':'rgba(251,207,232,.22)','--bubble-other-text':'#fff5fb','--dot-color':'rgba(251,207,232,.05)'},
+          'sk-metal': {'--bg-base':'#111827','--bg-chat':'#1f2937','--sidebar-bg':'#18202d','--nav-bg':'rgba(24,32,45,.94)','--surface':'#334155','--surface-2':'#475569','--surface-3':'#64748b','--surface-hover':'#526174','--surface-active':'#94a3b8','--surface-glass':'rgba(51,65,85,.90)','--text':'#f8fafc','--muted':'#dbe3ef','--muted-soft':'#a8b3c2','--border':'rgba(248,250,252,.20)','--border-strong':'rgba(248,250,252,.38)','--accent':'#f8fafc','--accent-strong':'#94a3b8','--accent-dim':'rgba(248,250,252,.16)','--accent-text':'#111827','--bubble-me-bg':'linear-gradient(180deg,#f8fafc,#94a3b8,#475569)','--bubble-other-bg':'linear-gradient(180deg,#64748b,#334155)','--bubble-other-border':'rgba(248,250,252,.24)','--bubble-other-text':'#f8fafc','--dot-color':'rgba(248,250,252,.035)'},
+          'sk-walnut': {'--bg-base':'#140a05','--bg-chat':'#1c0f08','--sidebar-bg':'#170c06','--nav-bg':'rgba(23,12,6,.94)','--surface':'#2d160b','--surface-2':'#4a230f','--surface-3':'#7c2d12','--surface-hover':'#613014','--surface-active':'#9a3412','--surface-glass':'rgba(45,22,11,.90)','--text':'#fff7ed','--muted':'#fdc99c','--muted-soft':'#b47b55','--border':'rgba(254,215,170,.18)','--border-strong':'rgba(254,215,170,.34)','--accent':'#fed7aa','--accent-strong':'#c2410c','--accent-dim':'rgba(254,215,170,.17)','--accent-text':'#1c0f08','--bubble-me-bg':'linear-gradient(180deg,#fdba74,#c2410c)','--bubble-other-bg':'linear-gradient(180deg,#4a230f,#1c0f08)','--bubble-other-border':'rgba(254,215,170,.22)','--bubble-other-text':'#fff7ed','--dot-color':'rgba(254,215,170,.04)'},
+          'sk-aqua': {'--bg-base':'#022325','--bg-chat':'#042f35','--sidebar-bg':'#032529','--nav-bg':'rgba(3,37,41,.94)','--surface':'#064e55','--surface-2':'#0e7490','--surface-3':'#06b6d4','--surface-hover':'#0f8aa3','--surface-active':'#22d3ee','--surface-glass':'rgba(6,78,85,.90)','--text':'#ecfeff','--muted':'#cffafe','--muted-soft':'#7dd3fc','--border':'rgba(207,250,254,.20)','--border-strong':'rgba(207,250,254,.38)','--accent':'#cffafe','--accent-strong':'#06b6d4','--accent-dim':'rgba(207,250,254,.18)','--accent-text':'#022325','--bubble-me-bg':'linear-gradient(180deg,#a5f3fc,#06b6d4,#0e7490)','--bubble-other-bg':'linear-gradient(180deg,#0e7490,#064e55)','--bubble-other-border':'rgba(207,250,254,.22)','--bubble-other-text':'#ecfeff','--dot-color':'rgba(207,250,254,.045)'},
+          'sk-cream': {'--bg-base':'#f7eadb','--bg-chat':'#f2dcc5','--sidebar-bg':'#fff7ed','--nav-bg':'rgba(255,247,237,.94)','--surface':'#fff1df','--surface-2':'#f5d0a9','--surface-3':'#f2b783','--surface-hover':'#f8c99a','--surface-active':'#fb923c','--surface-glass':'rgba(255,241,223,.92)','--text':'#2a1307','--muted':'#8a5a3b','--muted-soft':'#a47656','--border':'rgba(124,45,18,.18)','--border-strong':'rgba(124,45,18,.34)','--accent':'#7c2d12','--accent-strong':'#c2410c','--accent-dim':'rgba(124,45,18,.14)','--accent-text':'#fff7ed','--bubble-me-bg':'linear-gradient(180deg,#fed7aa,#fb923c,#c2410c)','--bubble-other-bg':'linear-gradient(180deg,#fff7ed,#f5d0a9)','--bubble-other-border':'rgba(124,45,18,.20)','--bubble-other-text':'#2a1307','--dot-color':'rgba(124,45,18,.03)'}
+        };
+        const UI_THEME_VARS_EXT = ['--bg-base','--bg-chat','--sidebar-bg','--nav-bg','--surface','--surface-2','--surface-3','--surface-hover','--surface-active','--surface-glass','--text','--muted','--muted-soft','--border','--border-strong','--accent','--accent-strong','--accent-dim','--accent-text','--bubble-me-bg','--bubble-other-bg','--bubble-other-border','--bubble-other-text','--dot-color'];
+        Object.assign(UI_SKIN_STYLE, {
+          'min-midnight':'minimal','min-carbon':'minimal','min-oceanic':'minimal','min-sunset':'minimal','min-paper':'minimal',
+          'sk-graphite-gel':'skeuo','sk-ruby':'skeuo','sk-amethyst':'skeuo','sk-slate-glass':'skeuo'
+        });
+        Object.assign(UI_SKIN_PALETTES, {
+          'min-midnight': {'--bg-base':'#020617','--bg-chat':'#06102a','--sidebar-bg':'#03091d','--nav-bg':'rgba(3,9,29,.95)','--surface':'#081129','--surface-2':'#0f1b3d','--surface-3':'#172554','--surface-hover':'#12245a','--surface-active':'#1d4ed8','--surface-glass':'rgba(8,17,41,.86)','--text':'#eff6ff','--muted':'#a9bedf','--muted-soft':'#647aa2','--border':'rgba(96,165,250,.10)','--border-strong':'rgba(96,165,250,.22)','--accent':'#60a5fa','--accent-strong':'#2563eb','--accent-dim':'rgba(96,165,250,.17)','--accent-text':'#031326','--bubble-me-bg':'linear-gradient(145deg,#1d4ed8,#60a5fa)','--bubble-other-bg':'#0f1b3d','--bubble-other-border':'rgba(96,165,250,.16)','--bubble-other-text':'#eff6ff','--dot-color':'rgba(96,165,250,.035)'},
+          'min-carbon': {'--bg-base':'#030303','--bg-chat':'#080808','--sidebar-bg':'#060606','--nav-bg':'rgba(5,5,5,.96)','--surface':'#101010','--surface-2':'#18181b','--surface-3':'#27272a','--surface-hover':'#202024','--surface-active':'#323238','--surface-glass':'rgba(16,16,16,.88)','--text':'#fafafa','--muted':'#a3a3a3','--muted-soft':'#666','--border':'rgba(255,255,255,.07)','--border-strong':'rgba(255,255,255,.15)','--accent':'#a1a1aa','--accent-strong':'#71717a','--accent-dim':'rgba(161,161,170,.13)','--accent-text':'#060606','--bubble-me-bg':'linear-gradient(145deg,#27272a,#a1a1aa)','--bubble-other-bg':'#18181b','--bubble-other-border':'rgba(255,255,255,.12)','--bubble-other-text':'#fafafa','--dot-color':'rgba(255,255,255,.018)'},
+          'min-oceanic': {'--bg-base':'#031826','--bg-chat':'#06283d','--sidebar-bg':'#041b2b','--nav-bg':'rgba(4,27,43,.94)','--surface':'#07324a','--surface-2':'#0b4664','--surface-3':'#075985','--surface-hover':'#0b587c','--surface-active':'#0284c7','--surface-glass':'rgba(7,50,74,.84)','--text':'#ecfeff','--muted':'#a5e4f0','--muted-soft':'#5f9dae','--border':'rgba(103,232,249,.10)','--border-strong':'rgba(103,232,249,.22)','--accent':'#67e8f9','--accent-strong':'#0284c7','--accent-dim':'rgba(103,232,249,.16)','--accent-text':'#021014','--bubble-me-bg':'linear-gradient(145deg,#0284c7,#67e8f9)','--bubble-other-bg':'#0b4664','--bubble-other-border':'rgba(103,232,249,.15)','--bubble-other-text':'#ecfeff','--dot-color':'rgba(103,232,249,.035)'},
+          'min-sunset': {'--bg-base':'#180707','--bg-chat':'#250d0a','--sidebar-bg':'#1a0806','--nav-bg':'rgba(26,8,6,.94)','--surface':'#2f1410','--surface-2':'#431c13','--surface-3':'#7c2d12','--surface-hover':'#5a2517','--surface-active':'#c2410c','--surface-glass':'rgba(47,20,16,.84)','--text':'#fff7ed','--muted':'#f4c7a3','--muted-soft':'#9b7258','--border':'rgba(251,146,60,.10)','--border-strong':'rgba(251,146,60,.22)','--accent':'#fb923c','--accent-strong':'#ea580c','--accent-dim':'rgba(251,146,60,.15)','--accent-text':'#190703','--bubble-me-bg':'linear-gradient(145deg,#c2410c,#fb923c)','--bubble-other-bg':'#431c13','--bubble-other-border':'rgba(251,146,60,.16)','--bubble-other-text':'#fff7ed','--dot-color':'rgba(251,146,60,.035)'},
+          'min-paper': {'--bg-base':'#fffaf0','--bg-chat':'#fff4d9','--sidebar-bg':'#fffdf5','--nav-bg':'rgba(255,253,245,.94)','--surface':'#fffaf0','--surface-2':'#fef3c7','--surface-3':'#fde68a','--surface-hover':'#ffedb5','--surface-active':'#fed7aa','--surface-glass':'rgba(255,250,240,.90)','--text':'#241407','--muted':'#805c37','--muted-soft':'#a9835b','--border':'rgba(120,53,15,.10)','--border-strong':'rgba(120,53,15,.18)','--accent':'#f97316','--accent-strong':'#c2410c','--accent-dim':'rgba(249,115,22,.14)','--accent-text':'#fff7ed','--bubble-me-bg':'linear-gradient(145deg,#f97316,#fdba74)','--bubble-other-bg':'#fffaf0','--bubble-other-border':'rgba(120,53,15,.12)','--bubble-other-text':'#241407','--dot-color':'rgba(120,53,15,.025)'},
+          'sk-graphite-gel': {'--bg-base':'#0b0b0f','--bg-chat':'#14151b','--sidebar-bg':'#101116','--nav-bg':'rgba(16,17,22,.94)','--surface':'#1d2028','--surface-2':'#2f3542','--surface-3':'#4b5563','--surface-hover':'#3b4351','--surface-active':'#6b7280','--surface-glass':'rgba(29,32,40,.90)','--text':'#f8fafc','--muted':'#d1d5db','--muted-soft':'#8c95a3','--border':'rgba(229,231,235,.18)','--border-strong':'rgba(229,231,235,.34)','--accent':'#e5e7eb','--accent-strong':'#6b7280','--accent-dim':'rgba(229,231,235,.15)','--accent-text':'#0b0b0f','--bubble-me-bg':'linear-gradient(180deg,#f8fafc,#9ca3af,#4b5563)','--bubble-other-bg':'linear-gradient(180deg,#4b5563,#1f2937)','--bubble-other-border':'rgba(229,231,235,.22)','--bubble-other-text':'#f8fafc','--dot-color':'rgba(229,231,235,.035)'},
+          'sk-ruby': {'--bg-base':'#210505','--bg-chat':'#3a0b0b','--sidebar-bg':'#2a0808','--nav-bg':'rgba(42,8,8,.94)','--surface':'#5b1010','--surface-2':'#7f1d1d','--surface-3':'#b91c1c','--surface-hover':'#991b1b','--surface-active':'#ef4444','--surface-glass':'rgba(91,16,16,.90)','--text':'#fff1f2','--muted':'#fecaca','--muted-soft':'#d88b8b','--border':'rgba(254,202,202,.20)','--border-strong':'rgba(254,202,202,.38)','--accent':'#fecaca','--accent-strong':'#dc2626','--accent-dim':'rgba(254,202,202,.18)','--accent-text':'#210505','--bubble-me-bg':'linear-gradient(180deg,#fecaca,#ef4444,#991b1b)','--bubble-other-bg':'linear-gradient(180deg,#7f1d1d,#3a0b0b)','--bubble-other-border':'rgba(254,202,202,.22)','--bubble-other-text':'#fff1f2','--dot-color':'rgba(254,202,202,.045)'},
+          'sk-amethyst': {'--bg-base':'#12081f','--bg-chat':'#220d3d','--sidebar-bg':'#180a2d','--nav-bg':'rgba(24,10,45,.94)','--surface':'#351258','--surface-2':'#581c87','--surface-3':'#7e22ce','--surface-hover':'#6b21a8','--surface-active':'#a855f7','--surface-glass':'rgba(53,18,88,.90)','--text':'#faf5ff','--muted':'#e9d5ff','--muted-soft':'#b184d3','--border':'rgba(233,213,255,.20)','--border-strong':'rgba(233,213,255,.38)','--accent':'#f0abfc','--accent-strong':'#a855f7','--accent-dim':'rgba(240,171,252,.17)','--accent-text':'#180a2d','--bubble-me-bg':'linear-gradient(180deg,#f0abfc,#a855f7,#6b21a8)','--bubble-other-bg':'linear-gradient(180deg,#581c87,#220d3d)','--bubble-other-border':'rgba(233,213,255,.22)','--bubble-other-text':'#faf5ff','--dot-color':'rgba(233,213,255,.045)'},
+          'sk-slate-glass': {'--bg-base':'#0f172a','--bg-chat':'#1e293b','--sidebar-bg':'#111827','--nav-bg':'rgba(17,24,39,.94)','--surface':'#273449','--surface-2':'#475569','--surface-3':'#64748b','--surface-hover':'#52657d','--surface-active':'#94a3b8','--surface-glass':'rgba(39,52,73,.90)','--text':'#f8fafc','--muted':'#dbeafe','--muted-soft':'#9db0c7','--border':'rgba(219,234,254,.20)','--border-strong':'rgba(219,234,254,.36)','--accent':'#dbeafe','--accent-strong':'#64748b','--accent-dim':'rgba(219,234,254,.16)','--accent-text':'#0f172a','--bubble-me-bg':'linear-gradient(180deg,#dbeafe,#94a3b8,#475569)','--bubble-other-bg':'linear-gradient(180deg,#64748b,#273449)','--bubble-other-border':'rgba(219,234,254,.24)','--bubble-other-text':'#f8fafc','--dot-color':'rgba(219,234,254,.035)'}
+        });
+
+
+        Object.assign(UI_SKIN_STYLE, {
+          'style-flat':'flat','style-material':'material','style-neumo':'neumo','style-glass':'glass','style-brutal':'brutal','style-cyberpunk':'cyberpunk','style-retro':'retro','style-swiss':'swiss','style-bauhaus':'bauhaus','style-maximal':'maximal','style-corporate':'corporate','style-dark':'dark','style-clay':'clay','style-immersive':'immersive','style-pixel':'pixel','style-y2k':'y2k'
+        });
+        Object.assign(UI_SKIN_PALETTES, {
+          'style-flat': {'--bg-base':'#f8fafc','--bg-chat':'#f1f5f9','--sidebar-bg':'#ffffff','--nav-bg':'rgba(255,255,255,.98)','--surface':'#ffffff','--surface-2':'#f8fafc','--surface-3':'#e2e8f0','--surface-hover':'#e2e8f0','--surface-active':'#dbeafe','--surface-glass':'#ffffff','--text':'#111827','--muted':'#64748b','--muted-soft':'#94a3b8','--border':'rgba(15,23,42,.12)','--border-strong':'rgba(15,23,42,.22)','--accent':'#2563eb','--accent-strong':'#1d4ed8','--accent-dim':'rgba(37,99,235,.12)','--accent-text':'#ffffff','--bubble-me-bg':'#2563eb','--bubble-other-bg':'#ffffff','--bubble-other-border':'rgba(15,23,42,.12)','--bubble-other-text':'#111827','--dot-color':'rgba(15,23,42,.025)'},
+          'style-material': {'--bg-base':'#eef2ff','--bg-chat':'#f7faff','--sidebar-bg':'#ffffff','--nav-bg':'rgba(255,255,255,.96)','--surface':'#ffffff','--surface-2':'#f8fbff','--surface-3':'#e8f0fe','--surface-hover':'#edf4ff','--surface-active':'#dbeafe','--surface-glass':'rgba(255,255,255,.92)','--text':'#172554','--muted':'#5b6b84','--muted-soft':'#9aa7bb','--border':'rgba(37,99,235,.08)','--border-strong':'rgba(37,99,235,.16)','--accent':'#1a73e8','--accent-strong':'#1765cc','--accent-dim':'rgba(26,115,232,.14)','--accent-text':'#ffffff','--bubble-me-bg':'linear-gradient(145deg,#1a73e8,#4285f4)','--bubble-other-bg':'#ffffff','--bubble-other-border':'rgba(23,101,204,.10)','--bubble-other-text':'#172554','--dot-color':'rgba(26,115,232,.028)'},
+          'style-neumo': {'--bg-base':'#dfe6ef','--bg-chat':'#e8edf5','--sidebar-bg':'#e8edf5','--nav-bg':'rgba(232,237,245,.96)','--surface':'#e8edf5','--surface-2':'#dfe6ef','--surface-3':'#cfd8e6','--surface-hover':'#e2e8f0','--surface-active':'#d6deeb','--surface-glass':'rgba(232,237,245,.90)','--text':'#334155','--muted':'#64748b','--muted-soft':'#94a3b8','--border':'rgba(100,116,139,.12)','--border-strong':'rgba(100,116,139,.20)','--accent':'#64748b','--accent-strong':'#475569','--accent-dim':'rgba(100,116,139,.18)','--accent-text':'#ffffff','--bubble-me-bg':'linear-gradient(145deg,#64748b,#94a3b8)','--bubble-other-bg':'#e8edf5','--bubble-other-border':'rgba(100,116,139,.12)','--bubble-other-text':'#334155','--dot-color':'rgba(100,116,139,.022)'},
+          'style-glass': {'--bg-base':'#08111f','--bg-chat':'#0f172a','--sidebar-bg':'rgba(15,23,42,.64)','--nav-bg':'rgba(15,23,42,.58)','--surface':'rgba(30,41,59,.62)','--surface-2':'rgba(51,65,85,.56)','--surface-3':'rgba(71,85,105,.58)','--surface-hover':'rgba(71,85,105,.48)','--surface-active':'rgba(103,232,249,.18)','--surface-glass':'rgba(30,41,59,.48)','--text':'#f8fafc','--muted':'#cbd5e1','--muted-soft':'#94a3b8','--border':'rgba(255,255,255,.10)','--border-strong':'rgba(255,255,255,.22)','--accent':'#67e8f9','--accent-strong':'#22d3ee','--accent-dim':'rgba(103,232,249,.20)','--accent-text':'#082f49','--bubble-me-bg':'linear-gradient(145deg,rgba(34,211,238,.72),rgba(96,165,250,.60))','--bubble-other-bg':'rgba(30,41,59,.56)','--bubble-other-border':'rgba(255,255,255,.18)','--bubble-other-text':'#f8fafc','--dot-color':'rgba(255,255,255,.035)'},
+          'style-brutal': {'--bg-base':'#fef200','--bg-chat':'#fef200','--sidebar-bg':'#ffffff','--nav-bg':'#ffffff','--surface':'#ffffff','--surface-2':'#fef200','--surface-3':'#ff4b00','--surface-hover':'#00e5ff','--surface-active':'#ff4b00','--surface-glass':'#ffffff','--text':'#050505','--muted':'#1f2937','--muted-soft':'#475569','--border':'#050505','--border-strong':'#050505','--accent':'#ff0055','--accent-strong':'#050505','--accent-dim':'rgba(255,0,85,.20)','--accent-text':'#ffffff','--bubble-me-bg':'#ff0055','--bubble-other-bg':'#ffffff','--bubble-other-border':'#050505','--bubble-other-text':'#050505','--dot-color':'rgba(0,0,0,.10)'},
+          'style-cyberpunk': {'--bg-base':'#05000d','--bg-chat':'#080015','--sidebar-bg':'#090017','--nav-bg':'rgba(9,0,23,.94)','--surface':'#120322','--surface-2':'#1b0535','--surface-3':'#2b0757','--surface-hover':'#240546','--surface-active':'#3d0a6f','--surface-glass':'rgba(18,3,34,.86)','--text':'#fdf4ff','--muted':'#f0abfc','--muted-soft':'#a855f7','--border':'rgba(0,245,255,.16)','--border-strong':'rgba(0,245,255,.34)','--accent':'#00f5ff','--accent-strong':'#ff007a','--accent-dim':'rgba(0,245,255,.18)','--accent-text':'#05000d','--bubble-me-bg':'linear-gradient(145deg,#ff007a,#00f5ff)','--bubble-other-bg':'#1b0535','--bubble-other-border':'rgba(0,245,255,.25)','--bubble-other-text':'#fdf4ff','--dot-color':'rgba(0,245,255,.055)'},
+          'style-retro': {'--bg-base':'#24160d','--bg-chat':'#2d1b0f','--sidebar-bg':'#1f130a','--nav-bg':'rgba(31,19,10,.95)','--surface':'#3b2414','--surface-2':'#4a2f1a','--surface-3':'#65401f','--surface-hover':'#5a371d','--surface-active':'#7c4a22','--surface-glass':'rgba(59,36,20,.90)','--text':'#ffe8c2','--muted':'#d2a46e','--muted-soft':'#936b3d','--border':'rgba(245,158,11,.18)','--border-strong':'rgba(245,158,11,.34)','--accent':'#f59e0b','--accent-strong':'#b45309','--accent-dim':'rgba(245,158,11,.18)','--accent-text':'#211205','--bubble-me-bg':'linear-gradient(180deg,#f59e0b,#92400e)','--bubble-other-bg':'#4a2f1a','--bubble-other-border':'rgba(245,158,11,.24)','--bubble-other-text':'#ffe8c2','--dot-color':'rgba(245,158,11,.05)'},
+          'style-swiss': {'--bg-base':'#ffffff','--bg-chat':'#ffffff','--sidebar-bg':'#f8f8f8','--nav-bg':'rgba(255,255,255,.98)','--surface':'#ffffff','--surface-2':'#f5f5f5','--surface-3':'#e5e5e5','--surface-hover':'#eeeeee','--surface-active':'#e5e5e5','--surface-glass':'#ffffff','--text':'#111111','--muted':'#555555','--muted-soft':'#888888','--border':'#d4d4d4','--border-strong':'#111111','--accent':'#e11d48','--accent-strong':'#111111','--accent-dim':'rgba(225,29,72,.10)','--accent-text':'#ffffff','--bubble-me-bg':'#111111','--bubble-other-bg':'#ffffff','--bubble-other-border':'#d4d4d4','--bubble-other-text':'#111111','--dot-color':'rgba(0,0,0,.018)'},
+          'style-bauhaus': {'--bg-base':'#f8f5e6','--bg-chat':'#fff8db','--sidebar-bg':'#f2ecd4','--nav-bg':'rgba(248,245,230,.96)','--surface':'#fffdf2','--surface-2':'#fef3c7','--surface-3':'#fde047','--surface-hover':'#fde68a','--surface-active':'#ef4444','--surface-glass':'rgba(255,253,242,.92)','--text':'#111111','--muted':'#4b5563','--muted-soft':'#6b7280','--border':'rgba(17,17,17,.16)','--border-strong':'#111111','--accent':'#2563eb','--accent-strong':'#e11d48','--accent-dim':'rgba(37,99,235,.14)','--accent-text':'#ffffff','--bubble-me-bg':'linear-gradient(135deg,#2563eb,#e11d48)','--bubble-other-bg':'#fffdf2','--bubble-other-border':'#111111','--bubble-other-text':'#111111','--dot-color':'rgba(17,17,17,.035)'},
+          'style-maximal': {'--bg-base':'#21002f','--bg-chat':'#2e064f','--sidebar-bg':'#260342','--nav-bg':'rgba(38,3,66,.94)','--surface':'#41106f','--surface-2':'#5b21b6','--surface-3':'#ff3d8b','--surface-hover':'#6d28d9','--surface-active':'#00d4ff','--surface-glass':'rgba(65,16,111,.88)','--text':'#ffffff','--muted':'#fde68a','--muted-soft':'#c4b5fd','--border':'rgba(255,255,255,.18)','--border-strong':'rgba(255,255,255,.32)','--accent':'#ffef00','--accent-strong':'#ff3d8b','--accent-dim':'rgba(255,239,0,.20)','--accent-text':'#21002f','--bubble-me-bg':'linear-gradient(135deg,#ff3d8b,#ffef00,#00d4ff)','--bubble-other-bg':'#5b21b6','--bubble-other-border':'rgba(255,255,255,.22)','--bubble-other-text':'#ffffff','--dot-color':'rgba(255,239,0,.055)'},
+          'style-corporate': {'--bg-base':'#edf2f7','--bg-chat':'#f6f8fb','--sidebar-bg':'#ffffff','--nav-bg':'rgba(255,255,255,.98)','--surface':'#ffffff','--surface-2':'#f8fafc','--surface-3':'#e2e8f0','--surface-hover':'#eef2f7','--surface-active':'#dbeafe','--surface-glass':'rgba(255,255,255,.92)','--text':'#1f2937','--muted':'#64748b','--muted-soft':'#94a3b8','--border':'rgba(31,41,55,.10)','--border-strong':'rgba(31,41,55,.18)','--accent':'#1e3a8a','--accent-strong':'#1d4ed8','--accent-dim':'rgba(30,58,138,.10)','--accent-text':'#ffffff','--bubble-me-bg':'linear-gradient(145deg,#1e3a8a,#2563eb)','--bubble-other-bg':'#ffffff','--bubble-other-border':'rgba(31,41,55,.10)','--bubble-other-text':'#1f2937','--dot-color':'rgba(31,41,55,.018)'},
+          'style-dark': {'--bg-base':'#000000','--bg-chat':'#000000','--sidebar-bg':'#050505','--nav-bg':'rgba(0,0,0,.97)','--surface':'#070707','--surface-2':'#101010','--surface-3':'#1b1b1b','--surface-hover':'#151515','--surface-active':'#202020','--surface-glass':'rgba(8,8,8,.90)','--text':'#f8fafc','--muted':'#8b98a8','--muted-soft':'#566170','--border':'rgba(255,255,255,.07)','--border-strong':'rgba(255,255,255,.14)','--accent':'#22c55e','--accent-strong':'#16a34a','--accent-dim':'rgba(34,197,94,.16)','--accent-text':'#001407','--bubble-me-bg':'linear-gradient(145deg,#16a34a,#22c55e)','--bubble-other-bg':'#101010','--bubble-other-border':'rgba(255,255,255,.10)','--bubble-other-text':'#f1f5f9','--dot-color':'rgba(34,197,94,.026)'},
+          'style-clay': {'--bg-base':'#fff1f2','--bg-chat':'#ffe4e6','--sidebar-bg':'#fff7ed','--nav-bg':'rgba(255,247,237,.96)','--surface':'#ffe7d6','--surface-2':'#ffc4a3','--surface-3':'#fb7185','--surface-hover':'#fed7aa','--surface-active':'#fb7185','--surface-glass':'rgba(255,231,214,.92)','--text':'#4a1d0f','--muted':'#9f5f46','--muted-soft':'#c28b78','--border':'rgba(244,114,182,.14)','--border-strong':'rgba(244,114,182,.28)','--accent':'#f472b6','--accent-strong':'#fb7185','--accent-dim':'rgba(244,114,182,.18)','--accent-text':'#4a1d0f','--bubble-me-bg':'linear-gradient(145deg,#fb7185,#ffc4a3)','--bubble-other-bg':'#fff7ed','--bubble-other-border':'rgba(244,114,182,.18)','--bubble-other-text':'#4a1d0f','--dot-color':'rgba(244,114,182,.035)'},
+          'style-immersive': {'--bg-base':'#050816','--bg-chat':'#08111f','--sidebar-bg':'#0b1220','--nav-bg':'rgba(11,18,32,.92)','--surface':'#101a2e','--surface-2':'#17233a','--surface-3':'#25385c','--surface-hover':'#1e2d4a','--surface-active':'#312e81','--surface-glass':'rgba(16,26,46,.86)','--text':'#eef2ff','--muted':'#c7d2fe','--muted-soft':'#818cf8','--border':'rgba(129,140,248,.14)','--border-strong':'rgba(103,232,249,.24)','--accent':'#67e8f9','--accent-strong':'#8b5cf6','--accent-dim':'rgba(103,232,249,.18)','--accent-text':'#06101b','--bubble-me-bg':'linear-gradient(145deg,#8b5cf6,#67e8f9)','--bubble-other-bg':'#17233a','--bubble-other-border':'rgba(103,232,249,.18)','--bubble-other-text':'#eef2ff','--dot-color':'rgba(103,232,249,.04)'},
+          'style-pixel': {'--bg-base':'#050505','--bg-chat':'#101820','--sidebar-bg':'#0b1118','--nav-bg':'#0b1118','--surface':'#18212b','--surface-2':'#101820','--surface-3':'#263341','--surface-hover':'#263341','--surface-active':'#39ff14','--surface-glass':'#101820','--text':'#d7ffd7','--muted':'#9ccc9c','--muted-soft':'#608f60','--border':'#39ff14','--border-strong':'#39ff14','--accent':'#39ff14','--accent-strong':'#00cc00','--accent-dim':'rgba(57,255,20,.18)','--accent-text':'#050505','--bubble-me-bg':'#39ff14','--bubble-other-bg':'#18212b','--bubble-other-border':'#39ff14','--bubble-other-text':'#d7ffd7','--dot-color':'rgba(57,255,20,.055)'},
+          'style-y2k': {'--bg-base':'#f0f9ff','--bg-chat':'#e0f2fe','--sidebar-bg':'#fdf4ff','--nav-bg':'rgba(255,255,255,.82)','--surface':'#ffffff','--surface-2':'#e0f2fe','--surface-3':'#fbcfe8','--surface-hover':'#bae6fd','--surface-active':'#f9a8d4','--surface-glass':'rgba(255,255,255,.72)','--text':'#101827','--muted':'#6b21a8','--muted-soft':'#0e7490','--border':'rgba(255,255,255,.42)','--border-strong':'rgba(139,92,246,.26)','--accent':'#fb7185','--accent-strong':'#8b5cf6','--accent-dim':'rgba(251,113,133,.18)','--accent-text':'#ffffff','--bubble-me-bg':'linear-gradient(180deg,#ffffff,#a5f3fc 32%,#fb7185 66%,#8b5cf6)','--bubble-other-bg':'rgba(255,255,255,.78)','--bubble-other-border':'rgba(139,92,246,.22)','--bubble-other-text':'#101827','--dot-color':'rgba(139,92,246,.035)'}
+        });
+
+        function getUiAppearanceSettings(){let style=localStorage.getItem(UI_STYLE_KEY)||'minimal';if(!Object.prototype.hasOwnProperty.call(UI_SKIN_DEFAULTS,style))style='minimal';let skin=localStorage.getItem(UI_SKIN_KEY)||UI_SKIN_DEFAULTS[style];if(UI_SKIN_STYLE[skin]!==style)skin=UI_SKIN_DEFAULTS[style];let radius=localStorage.getItem(UI_RADIUS_KEY)||'soft';let density=localStorage.getItem(UI_DENSITY_KEY)||'comfortable';let motion=localStorage.getItem(UI_MOTION_KEY)||'balanced';let glass=localStorage.getItem(UI_GLASS_KEY)||'on';let contrast=localStorage.getItem(UI_CONTRAST_KEY)||'normal';let texture=localStorage.getItem(UI_TEXTURE_KEY)||'subtle';let bubble=localStorage.getItem(UI_BUBBLE_KEY)||'tail';let performance=localStorage.getItem(UI_PERFORMANCE_KEY)||'auto';return{style,skin,radius,density,motion,glass,contrast,texture,bubble,performance};}
+        function clearLegacyWallpaperState(){try{localStorage.removeItem('index6a_chat_wallpaper_v3');localStorage.removeItem('index6a_chat_wallpaper_v2');localStorage.removeItem('index6a_chat_wallpaper');}catch(_){} if(typeof clearAdaptiveUiTheme==='function'){try{clearAdaptiveUiTheme();}catch(_){}} if(tgMain){['--chat-wallpaper-bg','--chat-wallpaper-image','--chat-wallpaper-size','--chat-wallpaper-position','--chat-wallpaper-repeat','--chat-wallpaper-attachment'].forEach(k=>tgMain.style.removeProperty(k));}}
+        function applyUiAppearance(settings=getUiAppearanceSettings()){const root=document.documentElement;clearLegacyWallpaperState();root.setAttribute('data-ui-style',settings.style);root.setAttribute('data-ui-skin',settings.skin);root.setAttribute('data-ui-radius',settings.radius);root.setAttribute('data-ui-density',settings.density);root.setAttribute('data-ui-motion',settings.motion);root.setAttribute('data-ui-glass',settings.glass);root.setAttribute('data-ui-contrast',settings.contrast);root.setAttribute('data-ui-texture',settings.texture);root.setAttribute('data-ui-bubble',settings.bubble);root.setAttribute('data-ui-performance',settings.performance||'auto');root.removeAttribute('data-chat-ui-theme');UI_THEME_VARS_EXT.forEach(k=>root.style.removeProperty(k));Object.entries(UI_SKIN_PALETTES[settings.skin]||{}).forEach(([k,v])=>root.style.setProperty(k,v));if(tgMain){tgMain.style.setProperty('--chat-wallpaper-bg','var(--bg-chat)');tgMain.style.setProperty('--chat-wallpaper-image',settings.texture==='off'?'none':'radial-gradient(var(--dot-color) 1px, transparent 1px)');tgMain.style.setProperty('--chat-wallpaper-size',settings.texture==='strong'?'16px 16px':'24px 24px');}}
+        function persistUiAppearance(settings){localStorage.setItem(UI_STYLE_KEY,settings.style);localStorage.setItem(UI_SKIN_KEY,settings.skin);localStorage.setItem(UI_RADIUS_KEY,settings.radius);localStorage.setItem(UI_DENSITY_KEY,settings.density);localStorage.setItem(UI_MOTION_KEY,settings.motion);localStorage.setItem(UI_GLASS_KEY,settings.glass);localStorage.setItem(UI_CONTRAST_KEY,settings.contrast);localStorage.setItem(UI_TEXTURE_KEY,settings.texture);localStorage.setItem(UI_BUBBLE_KEY,settings.bubble);localStorage.setItem(UI_PERFORMANCE_KEY,settings.performance||'auto');applyUiAppearance(settings);syncAppearanceControls(settings);}
+        function syncAppearanceControls(settings=getUiAppearanceSettings()){document.querySelectorAll('[data-ui-style-choice]').forEach(btn=>btn.classList.toggle('is-active',btn.dataset.uiStyleChoice===settings.style));document.querySelectorAll('[data-ui-skin-choice]').forEach(btn=>btn.classList.toggle('is-active',btn.dataset.uiSkinChoice===settings.skin));const ids={uiRadiusSelect:'radius',uiDensitySelect:'density',uiMotionSelect:'motion',uiGlassSelect:'glass',uiContrastSelect:'contrast',uiTextureSelect:'texture',uiBubbleSelect:'bubble',uiPerformanceSelect:'performance'};Object.entries(ids).forEach(([id,key])=>{const el=document.getElementById(id);if(el)el.value=settings[key];});const moreBtn=document.getElementById('uiMoreDesignsBtn');const moreGrid=document.getElementById('uiMoreDesignsGrid');if(moreBtn&&moreGrid){const mustShow=!['minimal','skeuo'].includes(settings.style);const savedOpen=localStorage.getItem('index6a_ui_more_designs_open')==='1';const open=mustShow||savedOpen;moreGrid.hidden=!open;moreBtn.setAttribute('aria-expanded',String(open));moreBtn.textContent=open?'Скрыть дизайны':'Ещё дизайны';}}
+        function readAppearanceControls(){const current=getUiAppearanceSettings();return{style:document.querySelector('[data-ui-style-choice].is-active')?.dataset.uiStyleChoice||current.style,skin:document.querySelector('[data-ui-skin-choice].is-active')?.dataset.uiSkinChoice||current.skin,radius:document.getElementById('uiRadiusSelect')?.value||current.radius,density:document.getElementById('uiDensitySelect')?.value||current.density,motion:document.getElementById('uiMotionSelect')?.value||current.motion,glass:document.getElementById('uiGlassSelect')?.value||current.glass,contrast:document.getElementById('uiContrastSelect')?.value||current.contrast,texture:document.getElementById('uiTextureSelect')?.value||current.texture,bubble:document.getElementById('uiBubbleSelect')?.value||current.bubble,performance:document.getElementById('uiPerformanceSelect')?.value||current.performance};}
+        function initAppearanceControls(){applyUiAppearance();syncAppearanceControls();const moreBtn=document.getElementById('uiMoreDesignsBtn');if(moreBtn)moreBtn.addEventListener('click',()=>{const grid=document.getElementById('uiMoreDesignsGrid');const open=grid?grid.hidden:true;localStorage.setItem('index6a_ui_more_designs_open',open?'1':'0');syncAppearanceControls();});document.querySelectorAll('[data-ui-style-choice]').forEach(btn=>btn.addEventListener('click',()=>{const nextStyle=btn.dataset.uiStyleChoice||'minimal';persistUiAppearance({...getUiAppearanceSettings(),style:nextStyle,skin:UI_SKIN_DEFAULTS[nextStyle]||'min-obsidian'});}));document.querySelectorAll('[data-ui-skin-choice]').forEach(btn=>btn.addEventListener('click',()=>{const skin=btn.dataset.uiSkinChoice;if(!skin)return;persistUiAppearance({...getUiAppearanceSettings(),style:UI_SKIN_STYLE[skin]||'minimal',skin});}));['uiRadiusSelect','uiDensitySelect','uiMotionSelect','uiGlassSelect','uiContrastSelect','uiTextureSelect','uiBubbleSelect','uiPerformanceSelect'].forEach(id=>{const el=document.getElementById(id);if(!el)return;el.addEventListener('change',()=>persistUiAppearance(readAppearanceControls()));});}
+        function saveUiAppearanceFromControls(){let settings=readAppearanceControls();if(UI_SKIN_STYLE[settings.skin]!==settings.style)settings.skin=UI_SKIN_DEFAULTS[settings.style];persistUiAppearance(settings);}
+        initAppearanceControls();
+
+
+        /* ══════════════════════════════
+           THEME
+        ══════════════════════════════ */
+        function setTheme(mode) {
+            const theme = mode==='system'
+                ? (matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light')
+                : (mode==='light' ? 'light' : 'dark');
+            document.documentElement.setAttribute('data-theme', theme);
+            localStorage.setItem(THEME_KEY, mode); // store 'system'/'dark'/'light'
+            updateThemeIcons();
+        }
+        // Apply system theme on load properly
+        (function(){
+            const saved = localStorage.getItem(THEME_KEY)||'dark';
+            setTheme(saved);
+        })();
+        // Listen for OS theme changes when mode=system
+        matchMedia('(prefers-color-scheme:dark)').addEventListener('change', ()=>{
+            if ((localStorage.getItem(THEME_KEY)||'dark')==='system') setTheme('system');
+        });
+        function updateThemeIcons() {
+            const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+            const sun = document.querySelector('.icon-sun'), moon = document.querySelector('.icon-moon');
+            if (sun) { sun.style.opacity = isDark?'1':'0'; sun.style.transform = isDark?'scale(1)':'scale(0.4) rotate(-90deg)'; sun.style.color='var(--accent)'; }
+            if (moon) { moon.style.opacity = isDark?'0':'1'; moon.style.transform = isDark?'scale(0.4) rotate(90deg)':'scale(1)'; moon.style.color='var(--accent)'; }
+        }
+        new MutationObserver(updateThemeIcons).observe(document.documentElement, {attributes:true,attributeFilter:['data-theme']});
+        updateThemeIcons();
+
+        /* ══════════════════════════════
+           AUTH UI
+        ══════════════════════════════ */
+        function showAuthError(msg) { authError.textContent = msg||''; }
+        function setAuthLoading(on) {
+            authSpinner.classList.toggle('hidden',!on);
+            btnLogin.disabled=btnRegister.disabled=authNick.disabled=authPass.disabled=on;
+        }
+        function registerMode(on) {
+            btnRegister.classList.toggle('hidden',!on);
+            btnBackLogin.classList.toggle('hidden',!on);
+            btnRegisterMode.classList.toggle('hidden',on);
+            btnLogin.classList.toggle('hidden',on);
+            authSub.textContent = on
+                ? 'Придумай ник и пароль (от 6 символов).'
+                : 'Вход по нику класса. Пароль — не короче 6 символов.';
+            showAuthError('');
+        }
+        btnRegisterMode.addEventListener('click', ()=>registerMode(true));
+        btnBackLogin.addEventListener('click',    ()=>registerMode(false));
+        btnLogin.addEventListener('click', async () => {
+            showAuthError(''); setAuthLoading(true);
+            try { await signInWithEmailAndPassword(auth, nickToEmail(authNick.value), authPass.value); }
+            catch(e) { showAuthError(e.message||String(e)); } finally { setAuthLoading(false); }
+        });
+        btnRegister.addEventListener('click', async () => {
+            showAuthError(''); setAuthLoading(true);
+            try {
+                const nick = nickFromInput(authNick.value);
+                if (!nick) { showAuthError('Введите ник'); return; }
+                const cred = await createUserWithEmailAndPassword(auth, nickToEmail(authNick.value), authPass.value);
+                await updateProfile(cred.user, {displayName:nick});
+                try {
+                    await setDoc(doc(db,'users',cred.user.uid), {
+                        displayName: nick,
+                        uid: cred.user.uid,
+                        email: cred.user.email || '',
+                        stars: 0,
+                        createdAt: serverTimestamp(),
+                        lastSeen: serverTimestamp(),
+                        banned: false,
+                    });
+                } catch(_){}
+            } catch(e) { showAuthError(e.message||String(e)); } finally { setAuthLoading(false); }
+        });
+        [authNick,authPass].forEach(inp=>inp.addEventListener('keydown',e=>{
+            if (e.key==='Enter') {
+                e.preventDefault();
+                if (!btnLogin.classList.contains('hidden')&&!btnLogin.disabled) btnLogin.click();
+                else if (!btnRegister.classList.contains('hidden')&&!btnRegister.disabled) btnRegister.click();
+            }
+        }));
+        document.getElementById('btnLogout').addEventListener('click', ()=>signOut(auth));
+
+        /* ══════════════════════════════
+           MOBILE SIDEBAR
+        ══════════════════════════════ */
+        burgerBtn.addEventListener('click', ()=>{
+            tgSidebar.classList.toggle('is-open');
+            sidebarOverlay.classList.toggle('is-on', tgSidebar.classList.contains('is-open'));
+        });
+        sidebarOverlay.addEventListener('click', ()=>{
+            tgSidebar.classList.remove('is-open');
+            sidebarOverlay.classList.remove('is-on');
+        });
+        function closeMobileSidebar() {
+            if (window.innerWidth<=768) { tgSidebar.classList.remove('is-open'); sidebarOverlay.classList.remove('is-on'); }
+        }
+
+        /* ══════════════════════════════
+           FOLDER BAR
+        ══════════════════════════════ */
+        folderBar.addEventListener('click', e=>{
+            const btn = e.target.closest('.folder-tab');
+            if (!btn) return;
+            folderBar.querySelectorAll('.folder-tab').forEach(b=>b.classList.remove('is-active'));
+            btn.classList.add('is-active');
+            currentFolder = btn.dataset.folder;
+            buildSidebarList(sidebarSearch.value);
+        });
+
+        /* ══════════════════════════════
+           PINNED CHATS
+        ══════════════════════════════ */
+        function savePinned() { lsSet(PINNED_KEY, pinnedChats); }
+        function isPinned(id) { return pinnedChats.includes(id); }
+        function togglePin(id) {
+            pinnedChats = isPinned(id) ? pinnedChats.filter(x=>x!==id) : [id,...pinnedChats];
+            savePinned(); buildSidebarList(sidebarSearch.value);
+            showToast(isPinned(id)?'📌 Закреплено':'📌 Откреплено');
+        }
+        function saveMuted() { lsSet(MUTED_KEY, mutedChats); }
+        function isMuted(id) { return mutedChats.includes(id); }
+        function toggleMute(id) {
+            mutedChats = isMuted(id) ? mutedChats.filter(x=>x!==id) : [id,...mutedChats];
+            saveMuted(); buildSidebarList(sidebarSearch.value);
+            showToast(isMuted(id)?'🔕 Чат заглушен':'🔔 Уведомления включены');
+        }
+        function saveArchived() { lsSet(ARCHIVED_KEY, archivedChats); }
+        function isArchived(id) { return archivedChats.includes(id); }
+        function toggleArchive(id) {
+            archivedChats = isArchived(id) ? archivedChats.filter(x=>x!==id) : [id,...archivedChats];
+            saveArchived(); buildSidebarList(sidebarSearch.value);
+            showToast(isArchived(id)?'📦 В архиве':'✅ Из архива');
+        }
+
+        /* ══════════════════════════════
+           DELETE CHAT (for current user)
+        ══════════════════════════════ */
+        function deleteChatForMe(chatId, chatName) {
+            openConfirmModal(
+                '🗑 Удалить чат',
+                `Вы уверены, что хотите удалить чат с ${escapeHtml(chatName)}? Это действие нельзя отменить. Другой участник не узнает об удалении.`,
+                async () => {
+                    // Mark as deleted for current user in dmConvs doc
+                    const u = auth.currentUser; if (!u) return;
+                    try {
+                        const convRef = doc(db, 'dmConvs', chatId);
+                        await updateDoc(convRef, { [`deleted.${u.uid}`]: true });
+                        // Remove from sidebar
+                        sidebarItems = sidebarItems.filter(x=>x.id !== 'dm_'+currentDMPeerUid);
+                        // If currently viewing it, go back to group
+                        if (currentChatMode==='dm' && currentDMConvId===chatId) openGroupChat();
+                        buildSidebarList(sidebarSearch.value);
+                        showToast('🗑 Чат удалён');
+                    } catch(e) { showToast('Ошибка: '+e.message); }
+                },
+                'Удалить'
+            );
+        }
+
+        /* ══════════════════════════════
+           SIDEBAR RENDERING
+        ══════════════════════════════ */
+        function buildSidebarList(filter = '') {
+            sidebarList.innerHTML = '';
+            const q = filter.trim().toLowerCase();
+
+            // Group chat entry
+            const groupItem = { id:'group', type:'group', name:'Основной чат', peerUid:null, lastText:'Чат класса 6А', lastAt:null, unread:0 };
+
+            let dmItems = sidebarItems.filter(x=>x.type==='dm');
+
+            // Filter by folder
+            if (currentFolder === 'dm') { /* only dm – hide group */ }
+            if (currentFolder === 'unread') dmItems = dmItems.filter(x=>x.unread>0);
+            if (currentFolder === 'archived') { dmItems = dmItems.filter(x=>isArchived(x.id)); }
+            else dmItems = dmItems.filter(x=>!isArchived(x.id));
+
+            // Search filter
+            let allItems = currentFolder==='dm' ? dmItems : [groupItem, ...dmItems];
+            if (q) {
+                allItems = allItems.filter(x=>x.name.toLowerCase().includes(q));
+                // Also surface online users not in DMs
+                const me = auth.currentUser;
+                if (me) Object.entries(onlineUsers).forEach(([uid,name])=>{
+                    if (uid===me.uid) return;
+                    if (!name.toLowerCase().includes(q)) return;
+                    if (!allItems.some(x=>x.type==='dm'&&x.peerUid===uid))
+                        allItems.push({id:'dm_'+uid,type:'dm',name,peerUid:uid,lastText:'Онлайн',lastAt:null,unread:0});
+                });
+            }
+
+            // Separate pinned (group always up top)
+            const pinned = allItems.filter(x=>x.type==='group'||(x.type==='dm'&&isPinned(x.id)));
+            const normal = allItems.filter(x=>x.type!=='group'&&!isPinned(x.id));
+
+            if (pinned.length) {
+                const lbl = document.createElement('div'); lbl.className='sidebar-section-label'; lbl.textContent='📌 Закреплённые';
+                sidebarList.appendChild(lbl);
+                pinned.forEach((item,i)=>sidebarList.appendChild(createChatListItem(item,i)));
+            }
+            if (normal.length) {
+                const lbl = document.createElement('div'); lbl.className='sidebar-section-label'; lbl.textContent=normal.some(x=>x.type==='dm')?'💬 Личные чаты':'Чаты';
+                sidebarList.appendChild(lbl);
+                normal.forEach((item,i)=>sidebarList.appendChild(createChatListItem(item,pinned.length+i)));
+            }
+            if (!allItems.length) {
+                const empty = document.createElement('div');
+                empty.style.cssText='padding:24px;text-align:center;color:var(--muted);font-size:.84rem';
+                empty.textContent = q ? 'Ничего не найдено' : (currentFolder==='archived' ? 'Архив пуст' : 'Нет чатов');
+                sidebarList.appendChild(empty);
+            }
+        }
+
+        function createChatListItem(item, idx) {
+            const el = document.createElement('div');
+            el.className = 'chat-list-item';
+            el.style.animationDelay = Math.min(idx*25,200)+'ms';
+            const isActive = (item.type==='group'&&currentChatMode==='group') || (item.type==='dm'&&currentDMPeerUid===item.peerUid);
+            if (isActive) el.classList.add('is-active');
+            if (item.unread>0) el.classList.add('is-unread');
+
+            // Avatar
+            const avWrap = document.createElement('div'); avWrap.className='cli-avatar';
+            const avInner = document.createElement('div'); avInner.className='cli-avatar-inner';
+            if (item.type==='group') {
+                avInner.style.background='linear-gradient(135deg,#5ec8ff,#a78bfa)';
+                avInner.textContent='💬'; avInner.style.fontSize='1.2rem';
+            } else {
+                avInner.style.background=avatarGradient(item.peerUid);
+                avInner.textContent=firstLetter(item.name,item.name);
+                if (avatarCache[item.peerUid]) applyAvatarToEl(avInner,item.peerUid,item.name,item.name,avatarCache[item.peerUid]);
+            }
+            avWrap.appendChild(avInner);
+            // Online dot
+            if (item.type==='dm'&&item.peerUid&&onlineUsers[item.peerUid]) {
+                const dot=document.createElement('span'); dot.className='cli-online-dot'; avWrap.appendChild(dot);
+            }
+
+            const body = document.createElement('div'); body.className='cli-body';
+            const row1 = document.createElement('div'); row1.className='cli-row1';
+            const nameEl = document.createElement('span'); nameEl.className='cli-name'; nameEl.textContent=item.name;
+            const timeEl = document.createElement('span'); timeEl.className='cli-time'; timeEl.textContent=item.lastAt?formatTimeShort(item.lastAt):'';
+            row1.appendChild(nameEl); row1.appendChild(timeEl);
+            const row2 = document.createElement('div'); row2.className='cli-row2';
+            const prev = document.createElement('span'); prev.className='cli-preview'; prev.textContent=item.lastText||'';
+            row2.appendChild(prev);
+            if (item.type==='dm'&&isPinned(item.id)) { const p=document.createElement('span'); p.className='cli-pin-icon'; p.textContent='📌'; row2.appendChild(p); }
+            if (isMuted(item.id)) { const m=document.createElement('span'); m.className='cli-muted-icon'; m.textContent='🔕'; row2.appendChild(m); }
+            if (item.unread>0) {
+                const badge=document.createElement('span'); badge.className='cli-badge'+(isMuted(item.id)?' is-muted':'');
+                badge.textContent=item.unread>99?'99+':item.unread; row2.appendChild(badge);
+            }
+            body.appendChild(row1); body.appendChild(row2);
+            el.appendChild(avWrap); el.appendChild(body);
+
+            el.addEventListener('click', ()=>{ if(item.type==='group') openGroupChat(); else openDMWith(item.peerUid,item.name); closeMobileSidebar(); });
+
+            // Right-click context menu
+            el.addEventListener('contextmenu', e=>{
+                e.preventDefault();
+                if (item.type==='group') return;
+                const items = [
+                    { label: isPinned(item.id)?'Открепить':'Закрепить', icon:'📌', onClick:()=>togglePin(item.id) },
+                    { label: isMuted(item.id)?'Включить уведомления':'Заглушить', icon:isMuted(item.id)?'🔔':'🔕', onClick:()=>toggleMute(item.id) },
+                    { label: isArchived(item.id)?'Из архива':'Архивировать', icon:'📦', onClick:()=>toggleArchive(item.id) },
+                    { label:'---' },
+                    { label:'Настройки чата', icon:'⚙️', onClick:()=>openChatSettings(item.id) },
+                    { label:'---' },
+                    { label:'Удалить чат', icon:'🗑', danger:true, onClick:()=>deleteChatForMe(item.id.replace('dm_',''), item.name) },
+                ];
+                openCtxMenu(e.clientX, e.clientY, items);
+            });
+            return el;
+        }
+
+        /* ══════════════════════════════
+           OPEN GROUP CHAT
+        ══════════════════════════════ */
+        const messagesCol   = collection(db, 'messages');
+        const messagesQuery = query(messagesCol, orderBy('createdAt','asc'));
+        const typingRef     = doc(db, 'presence', 'typing_dm_group');
+        const presenceCol   = collection(db, 'presence');
+        function ownPresenceRef(uid){ return doc(db, 'presence', uid); }
+
+        function openGroupChat() {
+            if (currentChatMode==='group') return;
+            currentChatMode='group'; currentDMPeerUid=null; currentDMPeerName=null; currentDMConvId=null;
+            _unbindDMHeaderProfile();
+            startTypingListeners(); // back to group typing doc
+            startPollsListener();
+            tgHeaderAv.style.background='linear-gradient(135deg,#5ec8ff,#a78bfa)';
+            tgHeaderAv.textContent='💬';
+            tgHeaderName.textContent='Основной чат';
+            tgHeaderStatus.textContent='Чат класса 6А';
+            tgHeaderStatus.classList.remove('online');
+            tearDownChat();
+            startGroupListeners();
+            buildSidebarList(sidebarSearch.value);
+            updateAutodelBanner('group');
+            animateChatOpen();
+        }
+
+        function startGroupListeners() {
+            messagesUnsub = onSnapshot(messagesQuery,
+                snap=>{ globalStatus.textContent=''; globalStatus.classList.remove('is-error'); updateMessagesDOM(snap); },
+                ()=>{ globalStatus.textContent='Не удалось загрузить чат.'; globalStatus.classList.add('is-error'); }
+            );
+            startTypingListeners();
+            loadPinnedMsg();
+            startPollsListener();
+        }
+
+        let _pinnedUnsub = null;
+        function loadPinnedMsg() {
+            // Защита от утечки: всегда отписываемся перед новой подпиской
+            if (_pinnedUnsub) { _pinnedUnsub(); _pinnedUnsub = null; }
+            // Скрываем баннер пока не пришёл снапшот
+            pinnedBanner.classList.remove('is-on');
+            const pRef = doc(db, 'chatMeta', 'group_pinned');
+            _pinnedUnsub = onSnapshot(pRef, snap => {
+                if (snap.exists()) {
+                    const d = snap.data();
+                    if (!d.msgId) {
+                        // Документ есть, но msgId пуст — закреп снят
+                        pinnedMsgId = null; _pinnedBannerLastText = '';
+                        pinnedBanner.classList.remove('is-on');
+                        return;
+                    }
+                    // Новый msgId — сбрасываем dismiss, показываем свежий закреп
+                    if (pinnedMsgId !== d.msgId) _pinnedBannerDismissed = null;
+                    showPinnedBanner(d.msgId, d.text, d.author);
+                } else {
+                    // Документ не существует — закрепов нет
+                    pinnedMsgId = null; _pinnedBannerLastText = '';
+                    pinnedBanner.classList.remove('is-on');
+                }
+            }, () => {
+                // Ошибка слушателя — просто скрываем баннер
+                pinnedBanner.classList.remove('is-on');
+            });
+        }
+
+        let _pinnedBannerDismissed = null;
+        let _pinnedBannerLastText  = '';
+
+        function showPinnedBanner(msgId, text, author) {
+            const fullText = (author ? author + ': ' : '') + (text || '');
+            // Stay hidden only if same msgId AND same text was already dismissed
+            if (_pinnedBannerDismissed === msgId && _pinnedBannerLastText === fullText) return;
+            pinnedMsgId = msgId;
+            _pinnedBannerLastText = fullText;
+            pinnedBannerText.textContent = fullText;
+            pinnedBanner.classList.add('is-on');
+        }
+        pinnedBannerClose.addEventListener('click', ()=>{
+            _pinnedBannerDismissed = pinnedMsgId;
+            pinnedBanner.classList.remove('is-on');
+        });
+        pinnedBanner.addEventListener('click', e=>{
+            if (e.target===pinnedBannerClose) return;
+            if (pinnedMsgId) {
+                const target = chatMessages.querySelector(`[data-msg-id="${pinnedMsgId}"]`);
+                if (target) { target.scrollIntoView({behavior:'smooth',block:'center'}); target.style.outline='2px solid var(--pin-color)'; setTimeout(()=>target.style.outline='',1400); }
+            }
+        });
+
+        /* ══════════════════════════════
+           OPEN DM CHAT
+        ══════════════════════════════ */
+        function dmConvId(uid1, uid2) { return [uid1,uid2].sort().join('_'); }
+
+        /* Mark DM messages as read for current user.
+           Read receipts are per-message: outgoing message shows ✓✓ only when msg.readBy contains peerUid. */
+        let _markReadInFlight = false;
+        async function markAsRead(chatId = currentDMConvId) {
+            const u = auth.currentUser;
+            if (!u || currentChatMode !== 'dm' || !chatId || !currentDMPeerUid || _markReadInFlight) return;
+            _markReadInFlight = true;
+            try {
+                await updateDoc(doc(db,'dmConvs',chatId), { [`unread.${u.uid}`]: 0 }).catch(()=>{});
+                const qUnread = query(
+                    collection(db,'dmConvs',chatId,'messages'),
+                    where('uid','==',currentDMPeerUid),
+                    limit(80)
+                );
+                const snap = await getDocs(qUnread);
+                const batch = writeBatch(db);
+                let updates = 0;
+                snap.forEach(ms => {
+                    const data = ms.data() || {};
+                    const readBy = Array.isArray(data.readBy) ? data.readBy.map(String) : [];
+                    if (!readBy.includes(String(u.uid))) {
+                        batch.update(ms.ref, { readBy: arrayUnion(u.uid) });
+                        updates++;
+                    }
+                });
+                if (updates > 0) await batch.commit();
+            } catch(e) {
+                // If Firestore rules have not yet allowed readBy updates, keep UI usable.
+                console.warn('[read receipts] markAsRead failed:', e?.message || e);
+            } finally {
+                _markReadInFlight = false;
+            }
+        }
+        async function markDMRead() { return markAsRead(currentDMConvId); }
+
+        function startPeerReadListener(convId, peerUid) {
+            if (peerReadUnsub) { peerReadUnsub(); peerReadUnsub=null; }
+            peerHasRead = false;
+        }
+
+        // DM header click → profile of peer
+        function _bindDMHeaderProfile(peerUid, peerName) {
+            const handler = () => { if (peerUid) openUserProfile(peerUid, peerName); };
+            tgHeaderAv._dmProfileHandler && tgHeaderAv.removeEventListener('click', tgHeaderAv._dmProfileHandler);
+            tgHeaderName._dmProfileHandler && tgHeaderName.removeEventListener('click', tgHeaderName._dmProfileHandler);
+            tgHeaderAv._dmProfileHandler = handler;
+            tgHeaderName._dmProfileHandler = handler;
+            tgHeaderAv.addEventListener('click', handler);
+            tgHeaderName.addEventListener('click', handler);
+            tgHeaderAv.style.cursor = 'pointer';
+            tgHeaderName.style.cursor = 'pointer';
+        }
+        function _unbindDMHeaderProfile() {
+            tgHeaderAv._dmProfileHandler && tgHeaderAv.removeEventListener('click', tgHeaderAv._dmProfileHandler);
+            tgHeaderName._dmProfileHandler && tgHeaderName.removeEventListener('click', tgHeaderName._dmProfileHandler);
+            tgHeaderAv._dmProfileHandler = null;
+            tgHeaderName._dmProfileHandler = null;
+            tgHeaderAv.style.cursor = '';
+            tgHeaderName.style.cursor = '';
+        }
+
+        async function openDMWith(peerUid, peerName) {
+            const u = auth.currentUser; if (!u) return;
+            if (currentChatMode==='dm'&&currentDMPeerUid===peerUid) return;
+
+            const unlocked = await ensureDME2EUnlocked(u.uid);
+            if (!unlocked) return;
+
+            currentChatMode='dm'; currentDMPeerUid=peerUid; currentDMPeerName=peerName;
+            currentDMConvId=dmConvId(u.uid, peerUid);
+
+            // Update header
+            tgHeaderAv.style.background=avatarGradient(peerUid);
+            tgHeaderAv.textContent=firstLetter(peerName,peerName);
+            if (avatarCache[peerUid]) applyAvatarToEl(tgHeaderAv,peerUid,peerName,peerName,avatarCache[peerUid]);
+            else renderAvatarCircle(tgHeaderAv,peerUid,peerName,peerName);
+            tgHeaderName.textContent=peerName;
+            const online = onlineUsers[peerUid];
+            tgHeaderStatus.textContent=online?'в сети':'не в сети';
+            tgHeaderStatus.classList.toggle('online',!!online);
+            pinnedBanner.classList.remove('is-on');
+            // Bind profile click on DM header
+            _bindDMHeaderProfile(peerUid, peerName);
+            // Restart typing listener for this DM channel
+            startTypingListeners();
+
+            buildSidebarList(sidebarSearch.value);
+            tearDownChat();
+
+            // Ensure conversation document exists + mark as read
+            const convRef=doc(db,'dmConvs',currentDMConvId);
+            try {
+                await setDoc(convRef,{members:[u.uid,peerUid],names:{[u.uid]:displayNick(u),[peerUid]:peerName}},{merge:true});
+                await updateDoc(convRef,{[`unread.${u.uid}`]:0}).catch(()=>{});
+                markAsRead(currentDMConvId);
+            } catch(_){}
+
+            // Subscribe DM messages
+            const msgsQ = query(collection(db,'dmConvs',currentDMConvId,'messages'),orderBy('createdAt','asc'),limit(100));
+            messagesUnsub = onSnapshot(msgsQ,
+                snap=>{ globalStatus.textContent=''; globalStatus.classList.remove('is-error'); updateMessagesDOM(snap); markDMRead(); },
+                ()=>{ globalStatus.textContent='Не удалось загрузить сообщения.'; globalStatus.classList.add('is-error'); }
+            );
+            startPeerReadListener(currentDMConvId, peerUid);
+            updateAutodelBanner(currentDMConvId);
+            animateChatOpen();
+        }
+
+        function animateChatOpen() {
+            chatMessages.style.animation=''; void chatMessages.offsetWidth; chatMessages.style.animation='chatOpen .3s ease';
+        }
+
+        /* ══════════════════════════════
+           AUTO-DELETE SETTINGS
+        ══════════════════════════════ */
+        function getAutoDelSec(chatId) { return autoDelSettings[chatId]||0; }
+        function setAutoDelSec(chatId, sec) { autoDelSettings[chatId]=sec; lsSet(AUTODEL_KEY,autoDelSettings); }
+        function updateAutodelBanner(chatId) {
+            const sec = getAutoDelSec(chatId);
+            if (sec>0) {
+                const labels={60:'1 мин',300:'5 мин',3600:'1 час',86400:'24 ч',604800:'7 дней'};
+                autodelBannerText.textContent='Авто-удаление через '+(labels[sec]||sec+'с');
+                autodelBanner.classList.add('is-on');
+            } else { autodelBanner.classList.remove('is-on'); }
+        }
+        function scheduleAutoDelete(msgId, sec) {
+            if (!sec||sec<=0) return;
+            if (autodelTimers[msgId]) clearTimeout(autodelTimers[msgId]);
+            autodelTimers[msgId] = setTimeout(async()=>{
+                try {
+                    if (currentChatMode==='group') await deleteDoc(doc(db,'messages',msgId));
+                    else if (currentDMConvId) await deleteDoc(doc(db,'dmConvs',currentDMConvId,'messages',msgId));
+                } catch(_){}
+                delete autodelTimers[msgId];
+            }, sec*1000);
+        }
+
+        /* ══════════════════════════════
+           CHAT SETTINGS MODAL
+        ══════════════════════════════ */
+        let chatSettingsTargetId = null;
+        function openChatSettings(chatId) {
+            chatSettingsTargetId = chatId;
+            document.getElementById('chatSettingsTitle').textContent='⚙️ Настройки: '+chatId.replace('dm_','');
+            document.getElementById('autoDelSelect').value = String(getAutoDelSec(chatId)||0);
+            document.getElementById('chatSettingsModal').classList.add('is-open');
+        }
+        document.getElementById('chatSettingsCancel').addEventListener('click',()=>document.getElementById('chatSettingsModal').classList.remove('is-open'));
+        document.getElementById('chatSettingsSave').addEventListener('click',()=>{
+            if (!chatSettingsTargetId) return;
+            const sec = parseInt(document.getElementById('autoDelSelect').value)||0;
+            setAutoDelSec(chatSettingsTargetId, sec);
+            const curChatId = currentChatMode==='group'?'group':currentDMConvId;
+            if (chatSettingsTargetId===curChatId) updateAutodelBanner(curChatId);
+            document.getElementById('chatSettingsModal').classList.remove('is-open');
+            showToast(sec>0?'⏱️ Авто-удаление установлено':'✅ Авто-удаление отключено');
+        });
+
+        /* ══════════════════════════════
+           PROFILE MODAL
+        ══════════════════════════════ */
+        async function openProfileModal() {
+            const u = auth.currentUser; if (!u) return;
+            // Берём ник из Firestore-кеша (источник правды), без localStorage
+            const inp = document.getElementById('profileName');
+            if (inp) {
+                inp.value = displayNick(u);
+                // Сброс превью и ошибок
+                const errEl = document.getElementById('nickError');
+                const prev  = document.getElementById('nickPreview');
+                if (errEl) errEl.style.display='none';
+                if (prev)  prev.style.display='none';
+            }
+            // Load bio/status from Firestore (source of truth)
+            try {
+                const snap = await getDoc(doc(db,'users',u.uid));
+                if (snap.exists()) {
+                    const d = snap.data();
+                    if (d.bio  !== undefined) { userProfile.bio    = d.bio||'';     lsSet(PROFILE_KEY, userProfile); }
+                    if (d.status!== undefined) { userProfile.status = d.status||'online'; lsSet(PROFILE_KEY, userProfile); }
+                }
+            } catch(_){}
+            const profileBioEl = document.getElementById('profileBio');
+            if (profileBioEl) profileBioEl.value = userProfile.bio || '';
+            const cur = avatarCache[u.uid]||null;
+            const profileAvBigEl = document.getElementById('profileAvBig');
+            if (profileAvBigEl) {
+                applyAvatarToEl(profileAvBigEl,u.uid,u.displayName,displayNick(u),cur);
+                profileAvBigEl.style.background = cur?'':avatarGradient(u.uid);
+            }
+            // Status chips
+            document.querySelectorAll('.status-chip').forEach(c=>c.classList.toggle('is-active',c.dataset.status===(userProfile.status||'online')));
+            // Theme select + extended appearance. profileTheme may be absent when the old basic-theme block is removed.
+            const profileThemeEl = document.getElementById('profileTheme');
+            if (profileThemeEl) profileThemeEl.value = localStorage.getItem(THEME_KEY)||'dark';
+            try { syncAppearanceControls(getUiAppearanceSettings()); } catch(_) {}
+            // Header + reset tabs
+            const heroName = document.getElementById('settingsHeroName');
+            if (heroName) heroName.textContent = displayNick(u);
+            document.querySelectorAll('.settings-tab-btn').forEach(btn => btn.classList.toggle('is-active', btn.dataset.settingsTab === 'account'));
+            document.querySelectorAll('.settings-panel').forEach(panel => panel.classList.toggle('is-active', panel.dataset.settingsPanel === 'account'));
+            // Reset music state and load existing
+            _profileMusicB64 = null; _profileMusicAction = null;
+            _hideProfileMusicCard();
+            _loadExistingProfileMusic();
+            const profileModalEl = document.getElementById('profileModal');
+            if (profileModalEl) profileModalEl.classList.add('is-open');
+        }
+        document.getElementById('profileAvBig')?.addEventListener('click', openAvatarModal);
+        document.getElementById('btnChangeAvatarInProfile')?.addEventListener('click', openAvatarModal);
+
+        document.querySelectorAll('.settings-tab-btn').forEach(btn => btn.addEventListener('click', () => {
+            const tab = btn.dataset.settingsTab;
+            document.querySelectorAll('.settings-tab-btn').forEach(x => x.classList.toggle('is-active', x === btn));
+            document.querySelectorAll('.settings-panel').forEach(panel => panel.classList.toggle('is-active', panel.dataset.settingsPanel === tab));
+        }));
+
+        document.querySelectorAll('.status-chip').forEach(c=>c.addEventListener('click',()=>{
+            document.querySelectorAll('.status-chip').forEach(x=>x.classList.remove('is-active'));
+            c.classList.add('is-active');
+        }));
+        document.getElementById('profileCancel')?.addEventListener('click', () => {
+            document.getElementById('profileModal')?.classList.remove('is-open');
+        });
+        document.getElementById('userProfileClose').addEventListener('click',()=>{
+            document.getElementById('userProfileModal').classList.remove('is-open');
+            if (_userProfileUnsub) { _userProfileUnsub(); _userProfileUnsub = null; }
+            // Stop profile music if playing
+            ChatPlayer.stop();
+        });
+
+        /* ── Профиль: музыка ── */
+        let _profileMusicB64      = null;
+        let _profileMusicTitleVal = '';
+        let _profileMusicDur      = 0;
+        let _profileMusicAction   = null; // 'set' | 'clear' | null
+
+        const _pmInput    = document.getElementById('profileMusicInput');
+        const _pmCard     = document.getElementById('profileMusicCard');
+        const _pmTitle    = document.getElementById('profileMusicTitle');
+        const _pmSize     = document.getElementById('profileMusicSize');
+        const _pmRemove   = document.getElementById('profileMusicRemove');
+        const _pmBtn      = document.getElementById('profileMusicBtn');
+        const _pmClearBtn = document.getElementById('profileMusicClearBtn');
+        const _pmUrlInput = document.getElementById('profileMusicUrl');
+
+        /* ── Логика выбора музыки для профиля (Cloudinary) ── */
+        if (_pmInput) {
+            _pmInput.onchange = async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                if (file.size > UPLOAD_MAX_AUDIO_BYTES) {
+                    alert('Файл слишком большой! Максимум 15 МБ.');
+                    return;
+                }
+
+                // Показываем поле для кастомного названия
+                const customTitleField = document.getElementById('musicCustomTitleField');
+                const customTitleInp = document.getElementById('profileMusicCustomTitle');
+                if (customTitleField) customTitleField.style.display = 'block';
+                // Clean filename
+                let _rawName = file.name.replace(/\.[^.]+$/, '');
+                _rawName = _rawName.replace(/^soundcloud[-_]https?[-_][^\s]*/i, '');
+                _rawName = _rawName.replace(/[-_]+/g, ' ').trim() || 'Трек';
+                if (customTitleInp) customTitleInp.value = _rawName;
+
+                // Показываем, что начали загрузку
+                _showProfileMusicCard(file.name, 'Загрузка в облако...');
+
+                const url = await uploadToCloudinary(file);
+
+                if (url) {
+                    const u = auth.currentUser;
+                    try {
+                        const displayTitle = (customTitleInp && customTitleInp.value.trim()) || file.name;
+                        await updateDoc(doc(db, 'users', u.uid), {
+                            musicUrl: url,
+                            musicTitle: displayTitle,
+                            musicBase64: deleteField()
+                        });
+                        
+                        _showProfileMusicCard(displayTitle, 'Сохранено ✓');
+                        if (_pmUrlInput) _pmUrlInput.value = url;
+                        updateMiniProfilePlayer({ url, title: displayTitle });
+                        
+                        _pmCard.onclick = () => { startMiniProfilePlayer(url, displayTitle); };
+                    } catch (err) {
+                        console.error("Ошибка БД:", err);
+                        _showProfileMusicCard('Ошибка', 'Не удалось сохранить');
+                    }
+                } else {
+                    _showProfileMusicCard('Ошибка', 'Облако не ответило');
+                }
+            };
+        }
+
+        // Кнопка очистки музыки в профиле
+        if (_pmClearBtn) {
+            _pmClearBtn.onclick = async () => {
+                if (!confirm('Удалить музыку из профиля?')) return;
+                const u = auth.currentUser;
+                try {
+                    await updateDoc(doc(db, 'users', u.uid), {
+                        musicUrl: deleteField(),
+                        musicTitle: deleteField(),
+                        musicBase64: deleteField()
+                    });
+                    _hideProfileMusicCard();
+                    if (_pmUrlInput) _pmUrlInput.value = '';
+                    updateMiniProfilePlayer(null);
+                    showToast('Музыка удалена');
+                } catch (e) { showToast('Ошибка удаления'); }
+            };
+        }
+
+        function _showProfileMusicCard(title, sizeStr) {
+            if (_pmTitle) _pmTitle.textContent  = title;
+            if (_pmSize) _pmSize.textContent   = sizeStr;
+            if (_pmCard) _pmCard.style.display = 'flex';
+            if (_pmClearBtn) _pmClearBtn.style.display = 'inline-flex';
+        }
+        function _hideProfileMusicCard() {
+            if (_pmCard) _pmCard.style.display = 'none';
+            if (_pmClearBtn) _pmClearBtn.style.display = 'none';
+        }
+
+        async function _loadExistingProfileMusic() {
+            const u = auth.currentUser;
+            if (!u) return;
+            try {
+                const snap = await getDoc(doc(db, 'users', u.uid));
+                if (snap.exists()) {
+                    const d = snap.data();
+                    const customTitleField = document.getElementById('musicCustomTitleField');
+                    const customTitleInp = document.getElementById('profileMusicCustomTitle');
+                    if (_pmUrlInput) _pmUrlInput.value = d.musicUrl || '';
+                    if (d.musicUrl) {
+                        const displayTitle = d.musicTitle || 'Мой трек';
+                        _showProfileMusicCard(displayTitle, 'Сохранено ✓');
+                        if (customTitleField) customTitleField.style.display = 'block';
+                        if (customTitleInp) customTitleInp.value = displayTitle;
+                        if (_pmCard) _pmCard.onclick = () => { startMiniProfilePlayer(d.musicUrl, displayTitle); };
+                        updateMiniProfilePlayer({ url: d.musicUrl, title: displayTitle });
+                    } else {
+                        if (typeof _hideProfileMusicCard === 'function') _hideProfileMusicCard();
+                        if (customTitleField) customTitleField.style.display = 'none';
+                        updateMiniProfilePlayer(null);
+                    }
+                }
+            } catch(e) {
+                console.error("Ошибка при загрузке музыки профиля:", e);
+            }
+        }
+
+        _pmBtn.addEventListener('click', () => { _pmInput.value = ''; _pmInput.click(); });
+
+        // ✕ — отменить только что выбранный файл, показать сохранённый
+        _pmRemove.addEventListener('click', () => {
+            _profileMusicB64 = null; _profileMusicAction = null;
+            _hideProfileMusicCard();
+            _loadExistingProfileMusic();
+        });
+
+        // 🗑 Удалить — при сохранении сотрёт из Firestore
+        _pmClearBtn.addEventListener('click', () => {
+            _profileMusicB64 = null; _profileMusicAction = 'clear';
+            _hideProfileMusicCard();
+        });
+
+        // ✏️ Редактировать название трека прямо в карточке профиля
+        const _pmEditTitle = document.getElementById('profileMusicEditTitle');
+        if (_pmEditTitle) {
+            _pmEditTitle.addEventListener('click', async () => {
+                const current = (_pmTitle.textContent || '').replace('—','').trim();
+                const newTitle = prompt('Новое название трека:', current);
+                if (newTitle === null) return;
+                const trimmed = newTitle.trim();
+                if (!trimmed) return showToast('Название не может быть пустым');
+                _pmTitle.textContent = trimmed;
+                _profileMusicTitleVal = trimmed;
+                // Also update custom title input
+                const customTitleInp = document.getElementById('profileMusicCustomTitle');
+                if (customTitleInp) customTitleInp.value = trimmed;
+                const u = auth.currentUser; if (!u) return;
+                try {
+                    const snap = await getDoc(doc(db, 'users', u.uid));
+                    if (snap.exists() && snap.data().musicUrl) {
+                        await updateDoc(doc(db, 'users', u.uid), { musicTitle: trimmed });
+                        showToast('✅ Название обновлено');
+                    }
+                } catch(e) { showToast('Ошибка сохранения названия'); }
+            });
+        }
+
+        // Listen for changes in custom title input to update display title
+        const _pmCustomTitle = document.getElementById('profileMusicCustomTitle');
+        if (_pmCustomTitle) {
+            _pmCustomTitle.addEventListener('input', () => {
+                const val = _pmCustomTitle.value.trim();
+                if (val && _pmTitle) _pmTitle.textContent = val;
+            });
+        }
+
+        /* ── Мини-плеер профиля: не привязан к открытию чатов и не останавливается при переключении ── */
+        const miniProfilePlayer = document.getElementById('miniProfilePlayer');
+        const miniProfilePlay   = document.getElementById('miniProfilePlay');
+        const miniProfileTitle  = document.getElementById('miniProfileTitle');
+        const miniProfileSub    = document.getElementById('miniProfileSub');
+        const miniProfileClose  = document.getElementById('miniProfileClose');
+        const _miniAudio = new Audio();
+        let _miniTrack = null;
+
+        function _miniPlayIcon(isPlaying) {
+            if (!miniProfilePlay) return;
+            miniProfilePlay.innerHTML = isPlaying
+                ? '<i class="ph ph-pause" aria-hidden="true"></i>'
+                : '<i class="ph ph-play" aria-hidden="true"></i>';
+        }
+        function updateMiniProfilePlayer(track) {
+            _miniTrack = track && track.url ? track : null;
+            if (!miniProfilePlayer) return;
+            if (!_miniTrack) {
+                miniProfilePlayer.classList.remove('is-visible');
+                _miniAudio.pause();
+                _miniAudio.removeAttribute('src');
+                _miniPlayIcon(false);
+                if (miniProfileSub) miniProfileSub.textContent = 'нет трека';
+                return;
+            }
+            if (miniProfileTitle) miniProfileTitle.textContent = _miniTrack.title || 'Музыка профиля';
+            if (miniProfileSub) miniProfileSub.textContent = 'нажми ▶ чтобы включить';
+            if (_miniAudio.paused) miniProfilePlayer.classList.remove('is-visible');
+        }
+                function startMiniProfilePlayer(url, title) {
+            if (!url) return;
+            if (_miniAudio.src !== url) {
+                _miniAudio.src = url;
+                _miniAudio.currentTime = 0;
+                if (miniProfileTitle) miniProfileTitle.textContent = title || 'Музыка профиля';
+            }
+            miniProfilePlayer?.classList.add('is-visible');
+            _miniAudio.play().then(() => {
+                _miniPlayIcon(true);
+                if (miniProfileSub) miniProfileSub.textContent = 'играет';
+            }).catch(() => showToast('Не удалось воспроизвести музыку'));
+        }
+        miniProfilePlay?.addEventListener('click', () => {
+            if (!_miniTrack?.url) return;
+            if (!_miniAudio.paused) {
+                _miniAudio.pause();
+                _miniPlayIcon(false);
+                if (miniProfileSub) miniProfileSub.textContent = 'пауза';
+            } else {
+                startMiniProfilePlayer(_miniTrack.url, _miniTrack.title);
+            }
+        });
+        miniProfileClose?.addEventListener('click', () => {
+            miniProfilePlayer?.classList.remove('is-visible');
+            _miniAudio.pause();
+            _miniPlayIcon(false);
+        });
+        _miniAudio.addEventListener('ended', () => {
+            _miniPlayIcon(false);
+            if (miniProfileSub) miniProfileSub.textContent = 'завершено';
+        });
+        async function refreshMiniProfilePlayer() {
+            const u = auth.currentUser; if (!u) return;
+            try {
+                const snap = await getDoc(doc(db, 'users', u.uid));
+                if (!snap.exists()) return updateMiniProfilePlayer(null);
+                const d = snap.data();
+                updateMiniProfilePlayer(d.musicUrl ? { url: d.musicUrl, title: d.musicTitle || 'Музыка профиля' } : null);
+            } catch(_) {}
+        }
+
+
+
+        /* ── Фоны чата: пресеты / цвет / своя картинка ── */
+        const WALLPAPER_KEY = 'index6a_chat_wallpaper_v3';
+        const WALLPAPERS = {
+            default: { key:'default', type:'preset', value:'default' },
+            aurora:  { key:'aurora',  type:'gradient', value:'linear-gradient(135deg,#020617 0%,#0f172a 38%,#1e3a8a 68%,#7c3aed 100%)', palette:{'--bg-base':'#020617','--bg-chat':'#07101f','--sidebar-bg':'#050b18','--nav-bg':'rgba(5,11,24,.94)','--surface':'#0b1324','--surface-2':'#111a31','--surface-3':'#17223d','--surface-hover':'#16213a','--surface-active':'#1a2b54','--surface-glass':'rgba(11,19,36,.82)','--text':'#eef5ff','--muted':'#9badca','--muted-soft':'#64748b','--border':'rgba(191,219,254,.08)','--border-strong':'rgba(191,219,254,.16)','--accent':'#a78bfa','--accent-strong':'#6366f1','--accent-dim':'rgba(167,139,250,.16)','--accent-text':'#ffffff','--bubble-me-bg':'linear-gradient(145deg,#2563eb 0%,#7c3aed 100%)','--bubble-me-glow':'rgba(124,58,237,.32)','--bubble-other-bg':'rgba(15,23,42,.88)','--bubble-other-border':'rgba(191,219,254,.12)','--bubble-other-text':'#e2e8f0','--dot-color':'rgba(167,139,250,.055)','--ui-modal-backdrop':'rgba(2,6,23,.68)'} },
+            ocean:   { key:'ocean',   type:'gradient', value:'linear-gradient(135deg,#031520 0%,#082f49 42%,#0369a1 78%,#67e8f9 100%)', palette:{'--bg-base':'#02131d','--bg-chat':'#062336','--sidebar-bg':'#061521','--nav-bg':'rgba(3,20,31,.94)','--surface':'#0a2230','--surface-2':'#0d2c3e','--surface-3':'#113a50','--surface-hover':'#0f3449','--surface-active':'#124d69','--surface-glass':'rgba(10,34,48,.82)','--text':'#e7faff','--muted':'#98bfd0','--muted-soft':'#5e8798','--border':'rgba(125,211,252,.10)','--border-strong':'rgba(125,211,252,.20)','--accent':'#67e8f9','--accent-strong':'#0284c7','--accent-dim':'rgba(103,232,249,.16)','--accent-text':'#02131d','--bubble-me-bg':'linear-gradient(145deg,#0284c7 0%,#06b6d4 100%)','--bubble-me-glow':'rgba(34,211,238,.28)','--bubble-other-bg':'rgba(8,47,73,.86)','--bubble-other-border':'rgba(125,211,252,.16)','--bubble-other-text':'#e0f7ff','--dot-color':'rgba(125,211,252,.06)','--ui-modal-backdrop':'rgba(3,21,32,.68)'} },
+            sunset:  { key:'sunset',  type:'gradient', value:'linear-gradient(135deg,#1c0802 0%,#451a03 38%,#c2410c 74%,#f97316 100%)', palette:{'--bg-base':'#140602','--bg-chat':'#241006','--sidebar-bg':'#180905','--nav-bg':'rgba(24,9,5,.94)','--surface':'#23100a','--surface-2':'#32170d','--surface-3':'#452011','--surface-hover':'#3b1b0f','--surface-active':'#5a2a13','--surface-glass':'rgba(35,16,10,.82)','--text':'#fff7ed','--muted':'#d6b49b','--muted-soft':'#916b55','--border':'rgba(251,146,60,.11)','--border-strong':'rgba(251,146,60,.22)','--accent':'#fb923c','--accent-strong':'#ea580c','--accent-dim':'rgba(251,146,60,.17)','--accent-text':'#1c0802','--bubble-me-bg':'linear-gradient(145deg,#c2410c 0%,#f97316 100%)','--bubble-me-glow':'rgba(249,115,22,.30)','--bubble-other-bg':'rgba(69,26,3,.84)','--bubble-other-border':'rgba(251,146,60,.18)','--bubble-other-text':'#ffedd5','--dot-color':'rgba(251,146,60,.055)','--ui-modal-backdrop':'rgba(28,8,2,.68)'} },
+            forest:  { key:'forest',  type:'gradient', value:'linear-gradient(135deg,#02110a 0%,#052e16 48%,#15803d 82%,#84cc16 100%)', palette:{'--bg-base':'#020f09','--bg-chat':'#061b11','--sidebar-bg':'#04140c','--nav-bg':'rgba(4,20,12,.94)','--surface':'#0a1d13','--surface-2':'#102b1b','--surface-3':'#163824','--surface-hover':'#13311f','--surface-active':'#1d4d2f','--surface-glass':'rgba(10,29,19,.82)','--text':'#ecfdf5','--muted':'#9cc4ad','--muted-soft':'#63826d','--border':'rgba(134,239,172,.09)','--border-strong':'rgba(134,239,172,.19)','--accent':'#86efac','--accent-strong':'#16a34a','--accent-dim':'rgba(134,239,172,.16)','--accent-text':'#02110a','--bubble-me-bg':'linear-gradient(145deg,#15803d 0%,#22c55e 100%)','--bubble-me-glow':'rgba(34,197,94,.28)','--bubble-other-bg':'rgba(5,46,22,.86)','--bubble-other-border':'rgba(134,239,172,.15)','--bubble-other-text':'#dcfce7','--dot-color':'rgba(134,239,172,.055)','--ui-modal-backdrop':'rgba(2,17,10,.68)'} },
+            purple:  { key:'purple',  type:'gradient', value:'linear-gradient(135deg,#120024 0%,#2e1065 44%,#7e22ce 78%,#f0abfc 100%)', palette:{'--bg-base':'#0b0614','--bg-chat':'#17102a','--sidebar-bg':'#10091e','--nav-bg':'rgba(16,9,30,.94)','--surface':'#181129','--surface-2':'#23183a','--surface-3':'#30204f','--surface-hover':'#2a1d46','--surface-active':'#3f276d','--surface-glass':'rgba(24,17,41,.82)','--text':'#faf5ff','--muted':'#c4afd8','--muted-soft':'#7e6790','--border':'rgba(216,180,254,.10)','--border-strong':'rgba(216,180,254,.20)','--accent':'#d8b4fe','--accent-strong':'#9333ea','--accent-dim':'rgba(216,180,254,.16)','--accent-text':'#120024','--bubble-me-bg':'linear-gradient(145deg,#7e22ce 0%,#c084fc 100%)','--bubble-me-glow':'rgba(192,132,252,.28)','--bubble-other-bg':'rgba(46,16,101,.74)','--bubble-other-border':'rgba(216,180,254,.16)','--bubble-other-text':'#f3e8ff','--dot-color':'rgba(216,180,254,.055)','--ui-modal-backdrop':'rgba(18,0,36,.68)'} }
+        };
+        function normalizeWallpaper(w){
+            if (!w || typeof w !== 'object') return WALLPAPERS.default;
+            if (w.key && WALLPAPERS[w.key]) return WALLPAPERS[w.key];
+            if (w.value === 'default') return WALLPAPERS.default;
+            const hit = Object.values(WALLPAPERS).find(x => x.value === w.value);
+            return hit || w;
+        }
+        function getSavedWallpaper(){
+            try { return normalizeWallpaper(JSON.parse(localStorage.getItem(WALLPAPER_KEY) || localStorage.getItem('index6a_chat_wallpaper_v2') || 'null')); }
+            catch(_) { return WALLPAPERS.default; }
+        }
+        function saveWallpaper(w){ localStorage.setItem(WALLPAPER_KEY, JSON.stringify(normalizeWallpaper(w))); }
+        const UI_THEME_VARS = ['--bg-base','--bg-chat','--sidebar-bg','--nav-bg','--surface','--surface-2','--surface-3','--surface-hover','--surface-active','--surface-glass','--text','--muted','--muted-soft','--border','--border-strong','--accent','--accent-strong','--accent-dim','--accent-text','--bubble-me-bg','--bubble-me-glow','--bubble-other-bg','--bubble-other-border','--bubble-other-text','--dot-color','--ui-modal-backdrop'];
+        function clamp255(n){ return Math.max(0, Math.min(255, Math.round(n))); }
+        function hexToRgb(hex){ const m = String(hex || '').trim().match(/^#?([0-9a-f]{6})$/i); if (!m) return null; const n = parseInt(m[1], 16); return { r:(n >> 16) & 255, g:(n >> 8) & 255, b:n & 255 }; }
+        function rgbToHex(c){ return '#' + [c.r,c.g,c.b].map(v => clamp255(v).toString(16).padStart(2,'0')).join(''); }
+        function mixRgb(a,b,t){ return { r:a.r+(b.r-a.r)*t, g:a.g+(b.g-a.g)*t, b:a.b+(b.b-a.b)*t }; }
+        function luminanceRgb(c){ const f = v => { v/=255; return v <= .03928 ? v/12.92 : Math.pow((v+.055)/1.055, 2.4); }; return .2126*f(c.r)+.7152*f(c.g)+.0722*f(c.b); }
+        function rgba(c,a){ return 'rgba(' + clamp255(c.r) + ',' + clamp255(c.g) + ',' + clamp255(c.b) + ',' + a + ')'; }
+        function derivePaletteFromColor(hex){
+            const c = hexToRgb(hex) || {r:8,g:12,b:21}, dark = {r:2,g:6,b:12}, white = {r:255,g:255,b:255};
+            const l = luminanceRgb(c), textLight = l < .62;
+            const accent = l > .58 ? mixRgb(c, dark, .28) : mixRgb(c, white, .18);
+            const base = mixRgb(c, dark, l > .42 ? .78 : .64), chat = mixRgb(c, dark, l > .42 ? .62 : .44), surface = mixRgb(c, dark, l > .42 ? .72 : .56), surface2 = mixRgb(c, white, l > .42 ? .72 : .08);
+            return {'--bg-base':rgbToHex(base),'--bg-chat':rgbToHex(chat),'--sidebar-bg':rgbToHex(mixRgb(c,dark,.72)),'--nav-bg':rgba(mixRgb(c,dark,.70),.94),'--surface':rgbToHex(surface),'--surface-2':rgbToHex(surface2),'--surface-3':rgbToHex(mixRgb(c,white,textLight?.14:.64)),'--surface-hover':rgbToHex(mixRgb(c,white,textLight?.10:.70)),'--surface-active':rgbToHex(mixRgb(c,white,textLight?.18:.58)),'--surface-glass':rgba(surface,.82),'--text':textLight?'#f8fafc':'#0f172a','--muted':textLight?'#cbd5e1':'#475569','--muted-soft':textLight?'#94a3b8':'#64748b','--border':rgba(accent,textLight?.10:.18),'--border-strong':rgba(accent,textLight?.20:.30),'--accent':rgbToHex(accent),'--accent-strong':rgbToHex(mixRgb(accent,dark,.18)),'--accent-dim':rgba(accent,.17),'--accent-text':textLight?'#020617':'#ffffff','--bubble-me-bg':'linear-gradient(145deg,' + rgbToHex(mixRgb(accent,dark,.18)) + ',' + rgbToHex(accent) + ')','--bubble-me-glow':rgba(accent,.30),'--bubble-other-bg':rgba(mixRgb(c,dark,.62),.86),'--bubble-other-border':rgba(accent,.16),'--bubble-other-text':textLight?'#f1f5f9':'#0f172a','--dot-color':rgba(accent,.055),'--ui-modal-backdrop':rgba(mixRgb(c,dark,.72),.68)};
+        }
+        function clearAdaptiveUiTheme(){ const root=document.documentElement; root.removeAttribute('data-chat-ui-theme'); UI_THEME_VARS.forEach(k => root.style.removeProperty(k)); }
+        function applyAdaptiveUiTheme(w){
+            const root = document.documentElement;
+            const normalized = normalizeWallpaper(w);
+            let palette = normalized && normalized.palette;
+            if (!palette && normalized?.type === 'color') palette = derivePaletteFromColor(normalized.value);
+            if (!palette && normalized?.type === 'image') palette = {'--bg-base':'#05070f','--bg-chat':'#080c15','--sidebar-bg':'rgba(6,10,18,.96)','--nav-bg':'rgba(5,7,15,.92)','--surface':'rgba(15,20,34,.90)','--surface-2':'rgba(20,25,39,.92)','--surface-3':'rgba(26,32,53,.94)','--surface-hover':'rgba(23,30,48,.94)','--surface-active':'rgba(28,42,66,.95)','--surface-glass':'rgba(15,20,34,.78)','--text':'#e8edf8','--muted':'#93a4bd','--muted-soft':'#64748b','--border':'rgba(255,255,255,.07)','--border-strong':'rgba(255,255,255,.13)','--accent':'#63b3ff','--accent-strong':'#4fa8f5','--accent-dim':'rgba(99,179,255,.14)','--accent-text':'#030b18','--bubble-me-bg':'linear-gradient(145deg,#1454a0,#3a8fe6)','--bubble-me-glow':'rgba(58,143,230,.28)','--bubble-other-bg':'rgba(20,25,39,.86)','--bubble-other-border':'rgba(255,255,255,.10)','--bubble-other-text':'#dde4f4','--dot-color':'rgba(99,179,255,.035)','--ui-modal-backdrop':'rgba(0,0,0,.64)'};
+            if (!palette || normalized?.value === 'default') return clearAdaptiveUiTheme();
+            root.setAttribute('data-chat-ui-theme','on');
+            UI_THEME_VARS.forEach(k => root.style.removeProperty(k));
+            Object.entries(palette).forEach(([k,v]) => root.style.setProperty(k, v));
+        }
+        function setWallpaperVars(bg, image, size='24px 24px', position='center', repeat='repeat', attachment='scroll'){
+            if (!tgMain) return;
+            tgMain.style.setProperty('--chat-wallpaper-bg', bg);
+            tgMain.style.setProperty('--chat-wallpaper-image', image);
+            tgMain.style.setProperty('--chat-wallpaper-size', size);
+            tgMain.style.setProperty('--chat-wallpaper-position', position);
+            tgMain.style.setProperty('--chat-wallpaper-repeat', repeat);
+            tgMain.style.setProperty('--chat-wallpaper-attachment', attachment);
+        }
+        function applyChatWallpaper(raw = getSavedWallpaper()){
+            if (!tgMain) return;
+            const w = normalizeWallpaper(raw);
+            applyAdaptiveUiTheme(w);
+            if (!w || w.value === 'default') setWallpaperVars('var(--bg-chat)', 'radial-gradient(var(--dot-color) 1px, transparent 1px)');
+            else if (w.type === 'image') setWallpaperVars('var(--bg-chat)', `linear-gradient(rgba(5,7,15,.38), rgba(5,7,15,.38)), url("${w.value}")`, 'cover', 'center', 'no-repeat', 'fixed');
+            else if (w.type === 'color') setWallpaperVars('var(--bg-chat)', `linear-gradient(135deg, ${w.value}, var(--surface-active)), radial-gradient(var(--dot-color) 1px, transparent 1px)`, 'auto, 24px 24px');
+            else setWallpaperVars('var(--bg-chat)', `${w.value}, radial-gradient(var(--dot-color) 1px, transparent 1px)`, 'auto, 24px 24px');
+            const activeKey = w.key || '';
+            document.querySelectorAll('.wallpaper-preset').forEach(btn => btn.classList.toggle('is-active', btn.dataset.wallpaper === activeKey));
+        }
+        function initWallpaperControls(){
+            applyChatWallpaper();
+            document.querySelectorAll('.wallpaper-preset').forEach(btn => btn.addEventListener('click', () => {
+                const key = btn.dataset.wallpaper || 'default';
+                const w = WALLPAPERS[key] || WALLPAPERS.default;
+                saveWallpaper(w); applyChatWallpaper(w); showToast('Фон применён');
+            }));
+            const colorInp = document.getElementById('chatWallpaperColor');
+            document.getElementById('chatWallpaperColorBtn')?.addEventListener('click', () => {
+                const c = colorInp?.value || '#080c15';
+                const w = { key:'custom-color', type:'color', value:c };
+                saveWallpaper(w); applyChatWallpaper(w); showToast('Цвет фона применён');
+            });
+            const imgInp = document.getElementById('chatWallpaperImageInput');
+            document.getElementById('chatWallpaperImageBtn')?.addEventListener('click', () => { if (imgInp) { imgInp.value=''; imgInp.click(); } });
+            imgInp?.addEventListener('change', () => {
+                const f = imgInp.files && imgInp.files[0]; if (!f) return;
+                if (!f.type.startsWith('image/')) return showToast('Это не картинка');
+                if (f.size > 2.5 * 1024 * 1024) return showToast('Картинка слишком большая, максимум 2.5 МБ');
+                const r = new FileReader();
+                r.onload = () => { const w = { key:'custom-image', type:'image', value:String(r.result) }; saveWallpaper(w); applyChatWallpaper(w); showToast('Картинка фона применена'); };
+                r.readAsDataURL(f);
+            });
+            document.getElementById('chatWallpaperResetBtn')?.addEventListener('click', () => { saveWallpaper(WALLPAPERS.default); applyChatWallpaper(WALLPAPERS.default); showToast('Фон сброшен'); });
+        }
+        // Фоны чата отключены: оформление теперь задаётся расширенными стилями.
+        try { applyUiAppearance(); } catch(_) {}
+
+        /* ── Ник: валидация ── */
+        const NICK_FORBIDDEN = /[<>&"'\/\\]/;
+        function validateNick(v) {
+            if (!v || !v.trim()) return 'Ник не может быть пустым';
+            if (v.trim().length < 2) return 'Минимум 2 символа';
+            if (v.trim().length > 32) return 'Максимум 32 символа';
+            if (NICK_FORBIDDEN.test(v)) return 'Запрещённые символы: < > & " \' / \\';
+            return null;
+        }
+
+        /* ── Превью ника в реальном времени ── */
+        (function(){
+            const inp = document.getElementById('profileName');
+            const prev = document.getElementById('nickPreview');
+            const prevTxt = document.getElementById('nickPreviewText');
+            const errEl = document.getElementById('nickError');
+            if (!inp) return;
+            inp.addEventListener('input', () => {
+                const v = inp.value.trim();
+                const err = validateNick(v);
+                if (err) {
+                    if(errEl){errEl.textContent=err;errEl.style.display='block';}
+                    if(prev) prev.style.display='none';
+                } else {
+                    if(errEl) errEl.style.display='none';
+                    if(prevTxt) prevTxt.textContent=v;
+                    if(prev){
+                        prev.style.display='block';
+                        prevTxt.style.opacity='0';
+                        requestAnimationFrame(()=>{prevTxt.style.transition='opacity .25s';prevTxt.style.opacity='1';});
+                    }
+                }
+            });
+        })();
+
+        /* ── Сохранение профиля (ник → Firestore + Auth, убран localStorage-костыль) ── */
+        let _profileSaveLock = false;
+        document.getElementById('profileSave').addEventListener('click', async ()=>{
+            if (_profileSaveLock) return;
+            const u = auth.currentUser; if (!u) return;
+
+            const inp = document.getElementById('profileName');
+            const rawName = inp ? inp.value.trim() : displayNick(u);
+            const errEl = document.getElementById('nickError');
+            const err = validateNick(rawName);
+            if (err) {
+                if(errEl){errEl.textContent=err;errEl.style.display='block';}
+                if(inp) inp.focus();
+                return;
+            }
+            if(errEl) errEl.style.display='none';
+
+            const profileBioNode = document.getElementById('profileBio');
+            const bio    = profileBioNode ? profileBioNode.value.trim() : (userProfile.bio || '');
+            const status = document.querySelector('.status-chip.is-active')?.dataset.status||'online';
+            const profileThemeNode = document.getElementById('profileTheme');
+            const theme  = profileThemeNode ? profileThemeNode.value : (localStorage.getItem(THEME_KEY) || document.documentElement.getAttribute('data-theme') || 'dark');
+
+            _profileSaveLock = true;
+            const saveBtn = document.getElementById('profileSave');
+            if(saveBtn){saveBtn.disabled=true;saveBtn.textContent='⏳ Сохраняю…';}
+
+            try {
+                // 1. Firebase Auth displayName
+                await updateProfile(u, { displayName: rawName });
+
+                // 2. Firestore — единственный источник правды для ника
+                const firestoreUpdate = { displayName: rawName, bio, status };
+
+                // Music: URL field is the source of truth for profile music.
+                const customTitleInp = document.getElementById('profileMusicCustomTitle');
+                const musicUrlRaw = (_pmUrlInput?.value || '').trim();
+                const musicTitleRaw = (customTitleInp?.value || '').trim();
+                if (_profileMusicAction === 'clear' || !musicUrlRaw) {
+                    firestoreUpdate.musicUrl      = deleteField();
+                    firestoreUpdate.musicBase64   = deleteField();
+                    firestoreUpdate.musicTitle    = deleteField();
+                    firestoreUpdate.musicDuration = deleteField();
+                } else {
+                    if (!/^https:\/\//i.test(musicUrlRaw)) throw new Error('Ссылка на музыку должна начинаться с https://');
+                    firestoreUpdate.musicUrl      = musicUrlRaw;
+                    firestoreUpdate.musicBase64   = deleteField();
+                    firestoreUpdate.musicTitle    = musicTitleRaw || 'Музыка профиля';
+                }
+
+                await setDoc(doc(db,'users',u.uid), firestoreUpdate, {merge:true});
+
+                // 3. Обновляем локальный кеш немедленно — UI меняется без перезагрузки
+                _userNickCache[u.uid] = rawName;
+
+                // 4. Чистим устаревший localStorage-костыль
+                try { localStorage.removeItem('index6a_visual_nick'); } catch(_) {}
+                try { localStorage.removeItem('6a_visual_nick'); } catch(_) {}
+
+                userProfile = {bio, status}; lsSet(PROFILE_KEY, userProfile);
+                _profileMusicAction = null;
+                if (firestoreUpdate.musicUrl && typeof firestoreUpdate.musicUrl === 'string') updateMiniProfilePlayer({ url: firestoreUpdate.musicUrl, title: firestoreUpdate.musicTitle || 'Музыка профиля' });
+                else if (_profileMusicAction === 'clear' || !((_pmUrlInput?.value || '').trim())) updateMiniProfilePlayer(null);
+                setTheme(theme);
+                try { saveUiAppearanceFromControls(); } catch(_) {}
+                renderSidebarUser();
+                try { pingOnline(); } catch(_){}
+                document.getElementById('profileModal')?.classList.remove('is-open');
+                showToast('✅ Ник и профиль обновлены');
+                _dbgLog('profile:save', {nick:rawName, status, theme});
+            } catch(e) {
+                showToast('❌ Ошибка: '+e.message);
+                _dbgLog('profile:save:error', e.message);
+            } finally {
+                _profileSaveLock=false;
+                if(saveBtn){saveBtn.disabled=false;saveBtn.textContent='Сохранить';}
+            }
+        });
+
+        // Open profile on click on sidebar user
+        sidebarUserAv.addEventListener('click', openProfileModal);
+        sidebarUserName.addEventListener('click', openProfileModal);
+        document.getElementById('btnAvatarPicker').addEventListener('click', openProfileModal);
+
+        /* ══════════════════════════════
+           CONFIRM MODAL
+        ══════════════════════════════ */
+        let confirmModalCallback = null;
+        function openConfirmModal(title, text, onConfirm, confirmLabel='Удалить') {
+            document.getElementById('confirmModalTitle').textContent = title;
+            document.getElementById('confirmModalText').textContent  = text;
+            document.getElementById('confirmModalOk').textContent    = confirmLabel;
+            confirmModalCallback = onConfirm;
+            document.getElementById('confirmModal').classList.add('is-open');
+        }
+        document.getElementById('confirmModalCancel').addEventListener('click', ()=>document.getElementById('confirmModal').classList.remove('is-open'));
+        document.getElementById('confirmModalOk').addEventListener('click', ()=>{
+            document.getElementById('confirmModal').classList.remove('is-open');
+            if (confirmModalCallback) { confirmModalCallback(); confirmModalCallback=null; }
+        });
+
+        /* ══════════════════════════════
+           FORWARD MODAL
+        ══════════════════════════════ */
+        let forwardMsgTexts = [];
+        function openForwardModal(texts) {
+            forwardMsgTexts = texts;
+            const list = document.getElementById('forwardChatList');
+            list.innerHTML='';
+            // Build target list: group + DMs
+            const targets = [{id:'group',name:'Основной чат',type:'group'}, ...sidebarItems.filter(x=>x.type==='dm')];
+            targets.forEach(target=>{
+                const btn=document.createElement('button');
+                btn.type='button';
+                btn.style.cssText='display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--surface);color:var(--text);font-family:inherit;font-size:.87rem;cursor:pointer;text-align:left;transition:background var(--transition)';
+                btn.onmouseenter=()=>btn.style.background='var(--surface-hover)';
+                btn.onmouseleave=()=>btn.style.background='var(--surface)';
+                const av=document.createElement('div');
+                av.style.cssText='width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font-size:.8rem;color:#fff;flex-shrink:0;overflow:hidden;font-family:var(--font-display);font-weight:800';
+                if (target.type==='group') { av.style.background='linear-gradient(135deg,#5ec8ff,#a78bfa)'; av.textContent='💬'; }
+                else { av.style.background=avatarGradient(target.peerUid); av.textContent=firstLetter(target.name,target.name); }
+                btn.appendChild(av);
+                btn.appendChild(document.createTextNode(target.name));
+                btn.addEventListener('click', async ()=>{
+                    document.getElementById('forwardModal').classList.remove('is-open');
+                    await sendForwardedMessages(target, texts);
+                });
+                list.appendChild(btn);
+            });
+            document.getElementById('forwardModal').classList.add('is-open');
+        }
+        document.getElementById('forwardCancel').addEventListener('click',()=>document.getElementById('forwardModal').classList.remove('is-open'));
+
+        async function getForwardPayload(src, myUid) {
+            const srcData = (typeof src === 'object' && src !== null) ? (src.data ? src.data() : src) : null;
+            if (!srcData) return { text: String(src || '') };
+
+            const payload = {
+                text: srcData.text ? safeDecrypt(srcData.text) : '',
+                imageUrl: srcData.imageUrl || srcData.imageBase64 || '',
+                voiceUrl: srcData.voiceUrl || srcData.voiceBase64 || '',
+                voiceDuration: srcData.voiceDuration || 0,
+                voiceMime: srcData.voiceMime || 'audio/webm',
+                checklist: srcData.checklist || null,
+                music: srcData.musicUrl ? {
+                    url: srcData.musicUrl,
+                    title: srcData.musicTitle || 'Трек',
+                    duration: srcData.musicDuration || 0,
+                    mime: srcData.musicMime || 'audio/*'
+                } : null
+            };
+
+            if (srcData.e2eForPeer || srcData.e2eForMe) {
+                if (!myPrivateKey) throw new Error('Нет ключа для пересылки E2E-сообщения');
+                payload.text = await decryptDM(srcData, myUid);
+            }
+            if (srcData.e2eImgForPeer || srcData.e2eImgForMe)
+                payload.imageUrl = await decryptE2EField(srcData, myUid, 'e2eImgForPeer', 'e2eImgForMe');
+            if (srcData.e2eVoiceForPeer || srcData.e2eVoiceForMe)
+                payload.voiceUrl = await decryptE2EField(srcData, myUid, 'e2eVoiceForPeer', 'e2eVoiceForMe');
+            if (srcData.e2eChecklistForPeer || srcData.e2eChecklistForMe) {
+                const plain = await decryptE2EField(srcData, myUid, 'e2eChecklistForPeer', 'e2eChecklistForMe');
+                const parsed = JSON.parse(plain);
+                payload.checklist = { title: parsed.title || '', items: parsed.items || [], done: {} };
+            }
+            if (srcData.e2eMusicForPeer || srcData.e2eMusicForMe) {
+                const plain = await decryptE2EField(srcData, myUid, 'e2eMusicForPeer', 'e2eMusicForMe');
+                const parsed = JSON.parse(plain);
+                payload.music = {
+                    url: parsed.url || '',
+                    title: parsed.title || 'Трек',
+                    duration: parsed.duration || 0,
+                    mime: parsed.mime || 'audio/*'
+                };
+            }
+            return payload;
+        }
+
+        function forwardPreviewText(payload) {
+            if (payload.imageUrl) return '🖼 Картинка';
+            if (payload.voiceUrl) return '🎤 Голосовое';
+            if (payload.music?.url) return '🎵 Музыка';
+            if (payload.checklist) return '✅ Чек-лист';
+            return payload.text || '↗️ Переслано';
+        }
+
+        async function sendForwardedMessages(target, srcMessages) {
+            const u = auth.currentUser; if (!u) return;
+            for (const src of srcMessages) {
+                try {
+                    const payload = await getForwardPayload(src, u.uid);
+                    const previewText = forwardPreviewText(payload);
+                    const base = {
+                        uid: u.uid,
+                        author: displayNick(u),
+                        createdAt: serverTimestamp(),
+                        edited: false,
+                        forwarded: true
+                    };
+
+                    if (target.type === 'group') {
+                        const groupMsg = {
+                            ...base,
+                            text: payload.text || '',
+                            ...(payload.imageUrl ? { imageUrl: payload.imageUrl } : {}),
+                            ...(payload.voiceUrl ? { voiceUrl: payload.voiceUrl, voiceDuration: payload.voiceDuration || 0, voiceMime: payload.voiceMime || 'audio/webm' } : {}),
+                            ...(payload.music?.url ? { musicUrl: payload.music.url, musicTitle: payload.music.title, musicDuration: Math.round(payload.music.duration || 0), musicMime: payload.music.mime || 'audio/*' } : {}),
+                            ...(payload.checklist ? { checklist: payload.checklist, text: (payload.checklist.title || 'Чек-лист') + ': ' + (payload.checklist.items || []).join(', ') } : {})
+                        };
+                        await addDoc(messagesCol, groupMsg);
+                    } else {
+                        const convId = dmConvId(u.uid, target.peerUid);
+                        const dmFwdMsg = { ...base, text: '' };
+
+                        if (payload.text) {
+                            const e2e = await encryptDM(payload.text, target.peerUid, u.uid);
+                            dmFwdMsg.e2eForPeer = e2e.forPeer;
+                            dmFwdMsg.e2eForMe = e2e.forMe;
+                        }
+                        if (payload.imageUrl) {
+                            const e2e = await encryptDM(payload.imageUrl, target.peerUid, u.uid);
+                            dmFwdMsg.e2eImgForPeer = e2e.forPeer;
+                            dmFwdMsg.e2eImgForMe = e2e.forMe;
+                        }
+                        if (payload.voiceUrl) {
+                            const e2e = await encryptDM(payload.voiceUrl, target.peerUid, u.uid);
+                            dmFwdMsg.e2eVoiceForPeer = e2e.forPeer;
+                            dmFwdMsg.e2eVoiceForMe = e2e.forMe;
+                            dmFwdMsg.voiceDuration = payload.voiceDuration || 0;
+                            dmFwdMsg.voiceMime = payload.voiceMime || 'audio/webm';
+                        }
+                        if (payload.music?.url) {
+                            const musicJson = JSON.stringify(payload.music);
+                            const e2e = await encryptDM(musicJson, target.peerUid, u.uid);
+                            dmFwdMsg.e2eMusicForPeer = e2e.forPeer;
+                            dmFwdMsg.e2eMusicForMe = e2e.forMe;
+                            dmFwdMsg.musicDuration = Math.round(payload.music.duration || 0);
+                            dmFwdMsg.musicMime = payload.music.mime || 'audio/*';
+                        }
+                        if (payload.checklist) {
+                            const checkJson = JSON.stringify({ title: payload.checklist.title || '', items: payload.checklist.items || [] });
+                            const e2e = await encryptDM(checkJson, target.peerUid, u.uid);
+                            dmFwdMsg.e2eChecklistForPeer = e2e.forPeer;
+                            dmFwdMsg.e2eChecklistForMe = e2e.forMe;
+                        }
+
+                        if (!dmFwdMsg.e2eForPeer && !dmFwdMsg.e2eImgForPeer && !dmFwdMsg.e2eVoiceForPeer && !dmFwdMsg.e2eMusicForPeer && !dmFwdMsg.e2eChecklistForPeer)
+                            throw new Error('Нет содержимого для пересылки');
+
+                        await addDoc(collection(db, 'dmConvs', convId, 'messages'), dmFwdMsg);
+                        const convRef = doc(db, 'dmConvs', convId);
+                        await setDoc(convRef, { members:[u.uid,target.peerUid], names:{[u.uid]:displayNick(u),[target.peerUid]:target.name}, lastText:'↗️ '+previewText, lastAt:serverTimestamp(), [`unread.${target.peerUid}`]:increment(1) }, { merge:true });
+                    }
+                } catch(e) {
+                    showToast('Ошибка пересылки: ' + e.message);
+                    return;
+                }
+            }
+            showToast(`✅ Переслано ${srcMessages.length} сообщ.`);
+        }
+
+        /* ══════════════════════════════
+           SELECTION MODE
+        ══════════════════════════════ */
+        function enterSelectionMode() {
+            isSelectionMode=true;
+            selectedMessages.clear();
+            // Show selection toolbar if needed (simplified — context menu handles it)
+            showToast('Выберите сообщения для действий');
+        }
+        function exitSelectionMode() {
+            isSelectionMode=false;
+            selectedMessages.clear();
+            chatMessages.querySelectorAll('.msg-row.is-selected').forEach(r=>r.classList.remove('is-selected'));
+        }
+
+        /* ══════════════════════════════
+           CHAT INFO / HEADER BUTTON
+        ══════════════════════════════ */
+        document.getElementById('btnChatInfo').addEventListener('click', ()=>{
+            const curId = currentChatMode==='group'?'group':('dm_'+currentDMPeerUid);
+            const items = [
+                { label:'⚙️ Настройки чата', icon:'⚙️', onClick:()=>openChatSettings(curId) },
+            ];
+            if (currentChatMode==='group'&&userIsAdmin) {
+                items.push({label:'---'});
+                items.push({ label:'🗑 Удалить ВСЕ сообщения (ADMIN)', icon:'💣', danger:true, onClick:deleteAllGroupMessages });
+            }
+            if (currentChatMode==='dm') {
+                items.push({label:'---'});
+                items.push({ label:'🗑 Удалить чат', icon:'🗑', danger:true, onClick:()=>deleteChatForMe(currentDMConvId, currentDMPeerName) });
+            }
+            const rect=document.getElementById('btnChatInfo').getBoundingClientRect();
+            openCtxMenu(rect.right,rect.bottom+4, items);
+        });
+
+        /* Admin: delete ALL group messages */
+        async function deleteAllGroupMessages() {
+            openConfirmModal('💣 Удалить все сообщения','Удалить ВСЕ сообщения в основном чате? Это действие нельзя отменить!', async ()=>{
+                try {
+                    const snap = await getDocs(messagesCol);
+                    const batch = writeBatch(db);
+                    snap.docs.forEach(d=>batch.delete(d.ref));
+                    await batch.commit();
+                    showToast('💣 Все сообщения удалены');
+                } catch(e) { showToast('Ошибка: '+e.message); }
+            },'Удалить всё');
+        }
+
+        /* ══════════════════════════════
+           WATCHDM / ONLINE
+        ══════════════════════════════ */
+        let _sidebarDebounceTimer = null;
+        function watchDMBadge() {
+            const u=auth.currentUser; if (!u) return;
+            if (sidebarDMUnsub) sidebarDMUnsub();
+            sidebarDMUnsub = onSnapshot(
+                query(collection(db,'dmConvs'),where('members','array-contains',u.uid)),
+                snap=>{
+                    const items=[];
+                    snap.docs.forEach(d=>{
+                        const data=d.data();
+                        // Skip if deleted by current user
+                        if (data.deleted&&data.deleted[u.uid]) return;
+                        const peerUid=data.members.find(m=>m!==u.uid)||'';
+                        const peerName=data.names?.[peerUid]||'???';
+                        items.push({id:'dm_'+peerUid,type:'dm',name:peerName,peerUid,lastText:data.lastText||'',lastAt:data.lastAt||null,unread:(data.unread||{})[u.uid]||0});
+                    });
+                    items.sort((a,b)=>(b.lastAt?.toMillis?.()??0)-(a.lastAt?.toMillis?.()??0));
+                    sidebarItems=items;
+                    clearTimeout(_sidebarDebounceTimer);
+                    _sidebarDebounceTimer = setTimeout(()=>{
+                        buildSidebarList(sidebarSearch.value);
+                        updatePageBadge(getTotalUnread());
+                    }, 300);
+                }
+            );
+        }
+
+        async function pingOnline() {
+            const u = auth.currentUser; if (!u) return;
+            const customStatus = userProfile.status || 'online';
+            try {
+                await setDoc(ownPresenceRef(u.uid), {
+                    uid: u.uid,
+                    n: displayNick(u),
+                    t: serverTimestamp(),
+                    status: customStatus,
+                    activeChatId: currentChatMode === 'dm' ? currentDMConvId : 'group'
+                }, { merge:true });
+            } catch(e) {
+                console.warn('[presence] ping failed:', e?.message || e);
+            }
+        }
+
+        function startOnlineBar() {
+            if (onlinePingTimer) { clearInterval(onlinePingTimer); onlinePingTimer = null; }
+            if (onlineUnsub) { onlineUnsub(); onlineUnsub = null; }
+            pingOnline();
+            onlinePingTimer = setInterval(pingOnline, 15000);
+            onlineUnsub = onSnapshot(presenceCol, snap => {
+                const now = Date.now();
+                onlineUsers = {};
+                snap.forEach(ds => {
+                    const id = ds.id || '';
+                    if (id === 'typing' || id.startsWith('typing_dm_')) return;
+                    const v = ds.data() || {};
+                    if (!v.uid || !v.t || v.status === 'invisible') return;
+                    const ms = typeof v.t.toMillis === 'function' ? v.t.toMillis() : 0;
+                    if (ms > 0 && (now - ms) < ONLINE_TTL_MS) onlineUsers[String(v.uid)] = v.n || 'Пользователь';
+                });
+                renderOnlineCounter([]);
+                clearTimeout(_sidebarDebounceTimer);
+                _sidebarDebounceTimer = setTimeout(() => buildSidebarList(sidebarSearch.value), 120);
+                updateCurrentDMHeaderStatus();
+            });
+            return () => { if (onlinePingTimer) clearInterval(onlinePingTimer); if (onlineUnsub) onlineUnsub(); };
+        }
+
+        function updateCurrentDMHeaderStatus(){
+            if (currentChatMode !== 'dm' || !currentDMPeerUid) return;
+            const online = !!onlineUsers[String(currentDMPeerUid)];
+            tgHeaderStatus.textContent = online ? 'в сети' : 'не в сети';
+            tgHeaderStatus.classList.toggle('online', online);
+        }
+
+        function renderOnlineCounter(_active) {
+            if (onlineBar) onlineBar.innerHTML = '';
+        }
+
+        /* ══════════════════════════════
+           SIDEBAR SEARCH
+        ══════════════════════════════ */
+        sidebarSearch.addEventListener('input', ()=>buildSidebarList(sidebarSearch.value));
+
+        /* ══════════════════════════════
+           SIDEBAR USER
+        ══════════════════════════════ */
+        function renderSidebarUser() {
+            const u=auth.currentUser; if (!u) return;
+            const name=displayNick(u);
+            renderAvatarCircle(sidebarUserAv,u.uid,u.displayName,name);
+            sidebarUserName.textContent=name;
+        }
+
+        /* ══════════════════════════════
+           AVATAR MODAL
+        ══════════════════════════════ */
+        function openAvatarModal() {
+            const u=auth.currentUser; if (!u) return;
+            const cur=avatarCache[u.uid]||null;
+            applyAvatarToEl(avatarCurrentBig,u.uid,u.displayName,displayNick(u),cur);
+            avatarGrid.innerHTML=''; selectedAvatar=cur?{...cur}:null;
+            document.getElementById('avatarUploadStatus').textContent='';
+            document.getElementById('avatarFileInput').value='';
+
+            AVATAR_SET.forEach((av,i)=>{
+                const opt=document.createElement('div');
+                opt.className='avatar-option'+(selectedAvatar&&selectedAvatar.type==='emoji'&&selectedAvatar.val===av.val?' is-selected':'');
+                opt.style.background=avatarGradient(u.uid+i);
+                if (av.type==='emoji'){opt.style.fontSize='1.5rem';opt.textContent=av.val;}
+                else {const img=document.createElement('img');img.src=av.val;img.alt='';opt.appendChild(img);}
+                opt.addEventListener('click',()=>{
+                    avatarGrid.querySelectorAll('.avatar-option').forEach(o=>o.classList.remove('is-selected'));
+                    opt.classList.add('is-selected'); selectedAvatar=av;
+                    applyAvatarToEl(avatarCurrentBig,u.uid,u.displayName,displayNick(u),av);
+                });
+                avatarGrid.appendChild(opt);
+            });
+            avatarModalBackdrop.classList.add('is-open');
+        }
+
+        // Handle custom photo upload for avatar
+        document.getElementById('avatarFileInput').addEventListener('change', async function() {
+            const file = this.files[0]; if (!file) return;
+            if (!file.type.startsWith('image/')) { showToast('Только картинки!'); return; }
+            if (file.size > 8 * 1024 * 1024) { showToast('❌ Файл больше 8 МБ'); return; }
+            const statusEl = document.getElementById('avatarUploadStatus');
+            statusEl.textContent = '⏳ Обрабатываю…';
+            const u = auth.currentUser; if (!u) return;
+            try {
+                // Compress to small square-ish avatar
+                const b64 = await compressImage(file, 300, 0.82);
+                const av = { type: 'img', val: b64 };
+                selectedAvatar = av;
+                // Show preview in current big avatar
+                applyAvatarToEl(avatarCurrentBig, u.uid, u.displayName, displayNick(u), av);
+                // Deselect grid items
+                avatarGrid.querySelectorAll('.avatar-option').forEach(o=>o.classList.remove('is-selected'));
+                statusEl.textContent = '✅ Фото готово — нажми «Сохранить»';
+                statusEl.style.color = 'var(--accent-3)';
+            } catch(e) {
+                statusEl.textContent = '❌ Ошибка обработки';
+                statusEl.style.color = 'var(--danger)';
+            }
+            this.value = '';
+        });
+
+        avatarModalCancel.addEventListener('click',()=>avatarModalBackdrop.classList.remove('is-open'));
+        avatarModalBackdrop.addEventListener('click',e=>{if(e.target===avatarModalBackdrop)avatarModalBackdrop.classList.remove('is-open');});
+        avatarModalSave.addEventListener('click',async()=>{
+            const u=auth.currentUser; if (!u||!selectedAvatar){avatarModalBackdrop.classList.remove('is-open');return;}
+            try {
+                await updateDoc(doc(db,'users',u.uid),{avatar:selectedAvatar});
+                avatarCache[u.uid]=selectedAvatar;
+                renderSidebarUser();
+                // Also update profile modal preview if open
+                if (document.getElementById('profileModal').classList.contains('is-open'))
+                    applyAvatarToEl(document.getElementById('profileAvBig'),u.uid,u.displayName,displayNick(u),selectedAvatar);
+                avatarModalBackdrop.classList.remove('is-open');
+                showToast('Аватарка обновлена ✓');
+            } catch(e){showToast('Ошибка: '+e.message);}
+        });
+
+        /* ══════════════════════════════
+           REPLY
+        ══════════════════════════════ */
+        function startReply(msgId,author,text){replyingTo={id:msgId,author,text};replyBannerNick.textContent=author;replyBannerText.textContent=text;replyBanner.classList.add('is-on');chatInput.focus();}
+        function cancelReply(){replyingTo=null;replyBanner.classList.remove('is-on');}
+        replyBannerClose.addEventListener('click',cancelReply);
+
+        /* ══════════════════════════════
+           USER PROFILE VIEW
+        ══════════════════════════════ */
+        let _userProfileUnsub = null; // cleanup listener for profile view
+
+        async function openUserProfile(uid, name) {
+    // 1. Сначала находим все элементы
+    const modal = document.getElementById('userProfileModal');
+    const avEl  = document.getElementById('userProfileAv');
+    const nameEl= document.getElementById('userProfileName');
+    const statEl= document.getElementById('userProfileStatus');
+    const bioEl = document.getElementById('userProfileBio');
+    const dmBtn = document.getElementById('userProfileDMBtn');
+    const musicBox = document.getElementById('musicBox');
+    const upmStats = document.getElementById('upmStats');
+    const upmJoinedVal = document.getElementById('upmJoinedVal');
+    const upmStatusVal = document.getElementById('upmStatusVal');
+    const upmBadges = document.getElementById('upmBadges');
+    const upmBannerGrad = document.getElementById('upmBannerGrad');
+
+    // Cleanup previous listener
+    if (_userProfileUnsub) { _userProfileUnsub(); _userProfileUnsub = null; }
+
+    _userProfileUid = uid;
+
+    // 2. Очищаем старые данные
+    if (musicBox) musicBox.innerHTML = '';
+    if (upmBadges) upmBadges.innerHTML = '';
+    nameEl.textContent = name;
+    bioEl.textContent  = '';
+    statEl.textContent = 'Загрузка...';
+    if (upmStats) upmStats.style.display = 'none';
+
+    // Banner gradient based on uid
+    if (upmBannerGrad) {
+        const colors = avatarGradient(uid).replace('linear-gradient(135deg,','').replace(')','').split(',');
+        upmBannerGrad.style.background = `linear-gradient(135deg, ${colors.join(',')})`;
+    }
+
+    // Аватарка из кэша
+    applyAvatarToEl(avEl, uid, name, name, avatarCache[uid]||null);
+    avEl.style.background = avatarCache[uid] ? '' : avatarGradient(uid);
+
+    // Логика кнопки ЛС
+    const me = auth.currentUser;
+    const convId = me ? [me.uid, uid].sort().join('_') : null;
+    let hasDM = false;
+    if (convId) {
+        try {
+            const s = await getDoc(doc(db,'dmConvs',convId));
+            hasDM = s.exists() && !(s.data().deleted?.[me.uid]);
+        } catch(_){}
+    }
+    dmBtn.textContent = hasDM ? '💬 Продолжить переписку' : '💬 Написать';
+    dmBtn.onclick = () => { modal.classList.remove('is-open'); openDMWith(uid, name); };
+
+    // Показываем модалку сразу
+    modal.classList.add('is-open');
+
+    // Admin badge
+    if (ADMIN_UIDS.has(uid) && upmBadges) {
+        const b = document.createElement('div');
+        b.className = 'upm-badge upm-badge-admin';
+        b.innerHTML = '⭐ ADMIN';
+        upmBadges.appendChild(b);
+    }
+
+    // Helper to render music player
+    function renderMusicPlayer(d) {
+        if (!musicBox) return;
+        if (d.musicUrl) {
+            const displayTitle = escapeHtml(d.musicTitle || 'Без названия');
+            musicBox.innerHTML = `
+                <div style="
+                    display:flex;align-items:center;gap:12px;
+                    background:var(--surface-2);
+                    border:1px solid var(--border);
+                    border-radius:16px;padding:12px 14px;
+                    box-sizing:border-box;width:100%;overflow:hidden;">
+                    <button id="p-play" style="
+                        flex-shrink:0;width:40px;height:40px;border-radius:50%;
+                        border:none;background:var(--accent);color:var(--accent-text);
+                        display:flex;align-items:center;justify-content:center;
+                        cursor:pointer;transition:transform .15s,filter .15s;
+                        box-shadow:0 4px 16px rgba(99,179,255,.35)">
+                        <i class="ph ph-play" aria-hidden="true"></i>
+                    </button>
+                    <div style="flex:1;min-width:0;">
+                        <div style="
+                            white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+                            font-size:.82rem;font-weight:700;color:var(--text);
+                            margin-bottom:8px;line-height:1;">
+                            🎵 ${displayTitle}
+                        </div>
+                        <div id="p-track" style="
+                            cursor:pointer;height:4px;
+                            background:var(--border-strong);
+                            border-radius:999px;overflow:hidden;
+                            position:relative;">
+                            <div id="p-bar" style="
+                                height:100%;width:0%;
+                                background:linear-gradient(90deg,var(--accent),var(--accent-2));
+                                border-radius:999px;
+                                transition:width .12s linear;">
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+
+            const pBtn   = musicBox.querySelector('#p-play');
+            const pBar   = musicBox.querySelector('#p-bar');
+            const pTrack = musicBox.querySelector('#p-track');
+
+            pBtn.onclick = () => ChatPlayer.play(d.musicUrl, pBtn, pBar, null, 0);
+
+            pBtn.addEventListener('mouseenter', () => { pBtn.style.transform='scale(1.08)'; pBtn.style.filter='brightness(1.12)'; });
+            pBtn.addEventListener('mouseleave', () => { pBtn.style.transform=''; pBtn.style.filter=''; });
+
+            pTrack.addEventListener('click', e => {
+                if (ChatPlayer._url !== d.musicUrl) return;
+                const rect = pTrack.getBoundingClientRect();
+                ChatPlayer.seek((e.clientX - rect.left) / rect.width);
+            });
+        } else {
+            musicBox.innerHTML = '';
+        }
+    }
+
+    // Helper to format join date
+    function formatJoinDate(ts) {
+        if (!ts || typeof ts.toDate !== 'function') return null;
+        const d = ts.toDate();
+        const now = new Date();
+        const diff = now - d;
+        const days = Math.floor(diff / 86400000);
+        if (days < 1) return 'Сегодня';
+        if (days < 7) return `${days} дн. назад`;
+        if (days < 30) return `${Math.floor(days/7)} нед. назад`;
+        if (days < 365) return `${Math.floor(days/30)} мес. назад`;
+        return `${Math.floor(days/365)} г. назад`;
+    }
+
+    // 3. Реактивный слушатель — onSnapshot вместо getDoc
+    try {
+        _userProfileUnsub = onSnapshot(doc(db,'users',uid), snap => {
+            if (!snap.exists()) return;
+            const d = snap.data();
+
+            // Обновляем ник-кеш из Firestore при просмотре чужого профиля
+            if (d.displayName && d.displayName.trim()) {
+                _userNickCache[uid] = d.displayName.trim();
+                nameEl.textContent = d.displayName.trim();
+            }
+
+            if (d.avatar && !avatarCache[uid]) {
+                avatarCache[uid]=d.avatar;
+                applyAvatarToEl(avEl,uid,name,name,d.avatar);
+            }
+
+            if (d.bio && d.bio.trim()) {
+                bioEl.textContent = d.bio;
+            } else {
+                bioEl.textContent = '';
+            }
+
+            const statusMap = {online:'🟢 В сети', away:'🟡 Отошёл', dnd:'🔴 Не беспокоить', invisible:'⚫ Невидимка'};
+            const isOnline = !!onlineUsers[uid];
+            statEl.textContent = isOnline ? (statusMap[d.status||'online'] || '🟢 В сети') : '⚫ Не в сети';
+
+            // Online badge
+            if (upmBadges && isOnline && !upmBadges.querySelector('.upm-badge-online')) {
+                const ob = document.createElement('div');
+                ob.className = 'upm-badge upm-badge-online';
+                ob.innerHTML = '● Онлайн';
+                upmBadges.appendChild(ob);
+            }
+
+            // Stats — only show join date, no status column
+            if (upmStats) {
+                const joined = formatJoinDate(d.createdAt);
+                if (joined) {
+                    if (upmJoinedVal) upmJoinedVal.textContent = joined;
+                    upmStats.style.display = 'flex';
+                }
+            }
+
+            // Music — reactive
+            renderMusicPlayer(d);
+        });
+    } catch(err) {
+        console.error("Ошибка профиля:", err);
+    }
+        }
+
+        /* ══════════════════════════════
+           VOICE MESSAGES
+        ══════════════════════════════ */
+        const btnVoice     = document.getElementById('btnVoice');
+        const voiceRecBar  = document.getElementById('voiceRecBar');
+        const voiceRecTime = document.getElementById('voiceRecTime');
+        const voiceRecCancel=document.getElementById('voiceRecCancel');
+
+        let mediaRecorder   = null;
+        let voiceChunks     = [];
+        let voiceTimerInt   = null;
+        let voiceSeconds    = 0;
+        let isRecording     = false;
+
+        function fmtVoiceTime(s) { return Math.floor(s/60)+':'+(String(s%60).padStart(2,'0')); }
+
+        function stopVoiceRecording(send=true) {
+            if (!isRecording) return;
+            isRecording = false;
+            clearInterval(voiceTimerInt);
+            if (btnVoice) btnVoice.classList.remove('is-recording');
+            voiceRecBar.classList.remove('is-visible');
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                mediaRecorder._sendOnStop = send;
+                mediaRecorder.stop();
+            }
+        }
+
+        if (btnVoice) btnVoice.addEventListener('click', async () => {
+            if (isRecording) { stopVoiceRecording(true); return; }
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+                const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+                    ? 'audio/webm;codecs=opus' : 'audio/webm';
+                mediaRecorder = new MediaRecorder(stream, {mimeType});
+                voiceChunks = []; voiceSeconds = 0;
+                mediaRecorder.ondataavailable = e => { if(e.data.size>0) voiceChunks.push(e.data); };
+                mediaRecorder.onstop = async () => {
+                    stream.getTracks().forEach(t=>t.stop());
+                    if (!mediaRecorder._sendOnStop) return;
+                    const blob = new Blob(voiceChunks, { type: mimeType });
+                    if (!voiceChunks.length || blob.size < 1000) { showToast('❌ Голосовое пустое. Удержи запись чуть дольше.'); return; }
+                    if (blob.size > UPLOAD_MAX_AUDIO_BYTES) { showToast('❌ Голосовое больше 15 МБ'); return; }
+                    // Convert to base64
+                    // Загружаем голосовое на Cloudinary вместо base64 в Firestore
+                    (async () => {
+                        const u = auth.currentUser; if (!u) return;
+                        const dur = voiceSeconds;
+                        try {
+                            stickToBottom = true;
+                            showToast('⏳ Загружаю голосовое…');
+                            const voiceFile = new File([blob], `voice_${Date.now()}.webm`, {type: mimeType});
+                            if (currentChatMode==='group') {
+                                const voiceUrl = await uploadToCloudinary(voiceFile, percent => {
+                                    showToast(`⏳ Загружаю голосовое ${percent}%...`);
+                                });
+                                if (!voiceUrl || !voiceUrl.startsWith('https://')) throw new Error('Cloudinary не вернул ссылку на голосовое');
+                                const baseMsg = { uid:u.uid, author:displayNick(u), text:'',
+                                    createdAt:serverTimestamp(), edited:false,
+                                    voiceUrl, voiceDuration:dur, voiceMime:mimeType };
+                                await addDoc(messagesCol, baseMsg);
+                            } else {
+                                if (!currentDMConvId || !currentDMPeerUid) throw new Error('ЛС не выбрано');
+                                const ok = await ensureDME2EUnlocked(u.uid);
+                                if (!ok || !myPrivateKey) throw new Error('ЛС не разблокированы мастер-паролем');
+                                await window.E2E.sendDirectMessage({
+                                    convId: currentDMConvId,
+                                    peerUid: currentDMPeerUid,
+                                    myUid: u.uid,
+                                    authorName: displayNick(u),
+                                    myPrivateKey,
+                                    voiceFile,
+                                    voiceDuration: dur,
+                                    voiceMime: mimeType,
+                                    firestoreDb: db,
+                                    fsCollection: collection,
+                                    fsAddDoc: addDoc,
+                                    fsSetDoc: setDoc,
+                                    fsDoc: doc,
+                                    fsGetDoc: getDoc,
+                                    fsServerTimestamp: serverTimestamp,
+                                    fsIncrement: increment,
+                                    uploadToCloudinary: window.E2E.uploadViaBackend
+                                });
+                            }
+                            lastOutboundAt=Date.now();
+                        } catch(e){ showToast('Ошибка: '+e.message); }
+                    })();
+                };
+                mediaRecorder.start(200);
+                isRecording = true;
+                if (btnVoice) btnVoice.classList.add('is-recording');
+                voiceRecBar.classList.add('is-visible');
+                voiceRecTime.textContent = '0:00';
+                voiceTimerInt = setInterval(()=>{
+                    voiceSeconds++;
+                    voiceRecTime.textContent = fmtVoiceTime(voiceSeconds);
+                    if (voiceSeconds >= 90) stopVoiceRecording(true); // auto-stop at 90s
+                }, 1000);
+            } catch(e) {
+                showToast('❌ Нет доступа к микрофону');
+            }
+        });
+        voiceRecCancel.addEventListener('click', ()=>stopVoiceRecording(false));
+
+        /* ══════════════════════════════
+           REACTIONS — FIX: works in both group & DM
+        ══════════════════════════════ */
+        function closeReactionPicker(){reactionPicker.style.display='none';rpActiveFor=null;document.removeEventListener('click',closeReactionPicker,true);}
+        function openReactionPicker(msgId,anchorEl){
+            rpActiveFor=msgId; reactionPicker.innerHTML='';
+            QUICK_REACTIONS.forEach(em=>{
+                const b=document.createElement('button'); b.className='rp-btn'; b.textContent=em;
+                b.addEventListener('click',e=>{e.stopPropagation();toggleReaction(msgId,em);closeReactionPicker();});
+                reactionPicker.appendChild(b);
+            });
+            reactionPicker.style.display='flex';
+            const rect=anchorEl.getBoundingClientRect();
+            let top=rect.top-8-238, left=rect.left;
+            if (top<8) top=rect.bottom+8;
+            if (left+220>innerWidth-8) left=innerWidth-228;
+            reactionPicker.style.top=Math.max(8,top)+'px';
+            reactionPicker.style.left=Math.max(8,left)+'px';
+            setTimeout(()=>document.addEventListener('click',closeReactionPicker,true),10);
+        }
+
+        /** Get the reactions subcollection reference for the current chat */
+        function reactionsRef(msgId) {
+            if (currentChatMode==='group')
+                return collection(db,'messages',msgId,'reactions');
+            return collection(db,'dmConvs',currentDMConvId,'messages',msgId,'reactions');
+        }
+
+        async function toggleReaction(msgId,emoji){
+            const u=auth.currentUser; if (!u) return;
+            const colRef=reactionsRef(msgId);
+            try {
+                // Fetch all existing reactions to find if user already reacted
+                const allSnap=await getDocs(colRef);
+                let existingEmoji=null;
+                allSnap.forEach(d=>{
+                    const data=d.data();
+                    if ((data.uids||[]).includes(u.uid)) existingEmoji=d.id;
+                });
+                // Remove user from previous reaction
+                if (existingEmoji&&existingEmoji!==emoji) {
+                    const oldRef=doc(colRef,existingEmoji);
+                    const oldSnap=await getDoc(oldRef);
+                    if (oldSnap.exists()){
+                        const prev=(oldSnap.data().uids||[]).filter(x=>x!==u.uid);
+                        if (prev.length===0) await deleteDoc(oldRef);
+                        else await updateDoc(oldRef,{uids:prev,count:prev.length});
+                    }
+                }
+                // Toggle target emoji
+                const rRef=doc(colRef,emoji);
+                const snap=await getDoc(rRef);
+                if (snap.exists()){
+                    const uids=snap.data().uids||[];
+                    const mine=uids.includes(u.uid);
+                    if (mine){
+                        // Already reacted with this emoji → remove
+                        const next=uids.filter(x=>x!==u.uid);
+                        if (next.length===0) await deleteDoc(rRef);
+                        else await updateDoc(rRef,{uids:next,count:next.length});
+                    } else {
+                        await updateDoc(rRef,{uids:[...uids,u.uid],count:uids.length+1});
+                    }
+                } else {
+                    if (existingEmoji!==emoji) await setDoc(rRef,{emoji,uids:[u.uid],count:1});
+                }
+            } catch(e){console.warn('reaction error',e);}
+        }
+
+        function loadAndRenderReactions(msgId, containerEl){
+            // snapshot on the correct collection path
+            const colRef = reactionsRef(msgId);
+            onSnapshot(colRef,snap=>{
+                containerEl.querySelectorAll('.reaction-chip').forEach(c=>c.remove());
+                const u=auth.currentUser;
+                const addBtn=containerEl.querySelector('.reaction-add-btn');
+                snap.docs.forEach(d=>{
+                    const data=d.data(); if (!data.count) return;
+                    const chip=document.createElement('button');
+                    chip.className='reaction-chip'+(u&&data.uids?.includes(u.uid)?' is-mine':'');
+                    chip.innerHTML=`${data.emoji}<span class="reaction-chip-count">${data.count}</span>`;
+                    chip.addEventListener('click',e=>{e.stopPropagation();toggleReaction(msgId,data.emoji);});
+                    containerEl.insertBefore(chip,addBtn);
+                });
+            });
+        }
+
+        /* ══════════════════════════════
+           EMOJI PICKER
+        ══════════════════════════════ */
+        function loadRecentEmojis(){try{const r=localStorage.getItem(RECENT_EMOJI_KEY);const a=r?JSON.parse(r):[];return Array.isArray(a)?a:[];}catch(_){return[];}}
+        function saveRecentEmoji(ch){let l=loadRecentEmojis().filter(x=>x!==ch);l.unshift(ch);l=l.slice(0,RECENT_MAX);try{localStorage.setItem(RECENT_EMOJI_KEY,JSON.stringify(l));}catch(_){}}
+        function insertEmoji(ch){saveRecentEmoji(ch);chatInput.value+=ch;chatInput.dispatchEvent(new Event('input'));chatInput.focus();}
+        function buildEmojiPicker(){
+            emojiTabs.innerHTML='';
+            EMOJI_GROUPS.forEach(g=>{
+                const t=document.createElement('button');t.type='button';t.className='emoji-tab'+(g.id===emojiActiveTab?' is-active':'');t.textContent=g.label;t.dataset.tab=g.id;
+                t.addEventListener('click',()=>{emojiActiveTab=g.id;buildEmojiPicker();});emojiTabs.appendChild(t);
+            });
+            emojiGrid.innerHTML='';
+            const group=EMOJI_GROUPS.find(x=>x.id===emojiActiveTab)||EMOJI_GROUPS[1];
+            const list=group.id==='recent'?loadRecentEmojis():group.emojis;
+            if (group.id==='recent'&&list.length===0){const h=document.createElement('div');h.style.cssText='color:var(--muted);font-size:.82rem;padding:16px;text-align:center;width:100%';h.textContent='Выберите эмодзи — они появятся здесь 👆';emojiGrid.appendChild(h);return;}
+            list.forEach(em=>{const b=document.createElement('button');b.type='button';b.className='emoji-cell';b.textContent=em;b.addEventListener('click',()=>{insertEmoji(em);if(emojiActiveTab==='recent')buildEmojiPicker();});emojiGrid.appendChild(b);});
+        }
+        buildEmojiPicker();
+
+        // Исправление дублирования эмодзи: используем mousedown вместо click
+        // чтобы предотвратить потерю фокуса textarea и двойное срабатывание
+        let _emojiToggleLock = false;
+        btnEmoji.addEventListener('mousedown', e=>{
+            e.preventDefault(); // не теряем фокус textarea
+            e.stopPropagation();
+        });
+        btnEmoji.addEventListener('click', e=>{
+            e.stopPropagation();
+            if (_emojiToggleLock) return;
+            _emojiToggleLock = true;
+            setTimeout(()=>{ _emojiToggleLock=false; }, 200); // 200ms debounce
+            const isOpen = emojiPopover.classList.contains('is-open');
+            emojiPopover.classList.toggle('is-open', !isOpen);
+            if (!isOpen) { emojiActiveTab='recent'; buildEmojiPicker(); }
+        });
+        emojiPopover.addEventListener('mousedown', e=>e.preventDefault()); // удержать фокус
+        emojiPopover.addEventListener('click', e=>e.stopPropagation());
+        ctxMenu.addEventListener('click',e=>e.stopPropagation());
+        sheetBackdrop.addEventListener('click',()=>closeCtxMenu());
+        document.addEventListener('click',()=>{emojiPopover.classList.remove('is-open');closeCtxMenu();});
+
+        /* ══════════════════════════════
+           TOAST
+        ══════════════════════════════ */
+        function showToast(msg,ms=2400){toastEl.textContent=msg;toastEl.classList.add('is-visible');clearTimeout(toastTimer);toastTimer=setTimeout(()=>toastEl.classList.remove('is-visible'),ms);}
+
+
+        /* ══════════════════════════════
+           NOTIFICATIONS
+        ══════════════════════════════ */
+        let _notifPermission = 'default';
+        let _lastNotifMsgId = null;
+
+        async function requestNotifPermission() {
+            if (!('Notification' in window)) return;
+            if (Notification.permission === 'granted') { _notifPermission='granted'; return; }
+            if (Notification.permission !== 'denied') {
+                const result = await Notification.requestPermission();
+                _notifPermission = result;
+            } else {
+                _notifPermission = 'denied';
+            }
+        }
+
+        function showBrowserNotif(title, body, iconUrl) {
+            if (_notifPermission !== 'granted') return;
+            if (document.visibilityState === 'visible') return; // don't notify if tab is active
+            try {
+                const n = new Notification(title, {
+                    body: body.slice(0,100),
+                    icon: iconUrl || '/favicon.ico',
+                    tag: 'chat6a',
+                    renotify: true
+                });
+                n.onclick = () => { window.focus(); n.close(); };
+                setTimeout(()=>n.close(), 5000);
+            } catch(_){}
+        }
+
+        function updatePageBadge(count) {
+            if ('setAppBadge' in navigator) {
+                if (count>0) navigator.setAppBadge(Math.min(count,99)).catch(()=>{});
+                else navigator.clearAppBadge().catch(()=>{});
+            }
+            // Update page title
+            const base = 'Чат 6А · 6aclass.online';
+            document.title = count>0 ? `(${count}) ${base}` : base;
+        }
+
+        // Track total unread count across all chats
+        function getTotalUnread() {
+            return sidebarItems.reduce((sum,item)=>sum+(item.unread||0),0);
+        }
+
+        // Called when a new message arrives that isn't ours
+        function tryNotifyNewMessage(msgData, chatName) {
+            if (!msgData || msgData.uid === auth.currentUser?.uid) return;
+            if (_lastNotifMsgId === msgData.id) return;
+            _lastNotifMsgId = msgData.id;
+            const author = msgData.author || 'Кто-то';
+            let body = msgData.text || '';
+            if (msgData.imageBase64 || msgData.imageUrl) body = '🖼 Картинка';
+            else if (msgData.voiceBase64 || msgData.voiceUrl) body = '🎤 Голосовое';
+            showBrowserNotif(`${author} — ${chatName}`, body || '…');
+        }
+
+        // Request permission on first interaction
+        document.addEventListener('click', ()=>requestNotifPermission(), {once:true});
+        /* ══════════════════════════════
+           COPY
+        ══════════════════════════════ */
+        async function copyText(t){
+            try{await navigator.clipboard.writeText(String(t||''));showToast('📋 Скопировано');}
+            catch(_){try{const ta=document.createElement('textarea');ta.value=String(t||'');ta.style.cssText='position:fixed;left:-9999px';document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);showToast('📋 Скопировано');}catch(e){showToast('Не удалось скопировать');}}
+        }
+
+        /* ══════════════════════════════
+           SEARCH
+        ══════════════════════════════ */
+        function applyMessageSearch(){
+            const q=(msgSearchInput?.value.trim().toLowerCase())||'';
+            let hits=0;
+            chatMessages.querySelectorAll('.msg-row').forEach(row=>{
+                const plain=(row.dataset.plain||'').toLowerCase();
+                if (!q){row.classList.remove('msg-row--search-hide','msg-row--search-hit');return;}
+                if (plain.includes(q)){row.classList.remove('msg-row--search-hide');row.classList.add('msg-row--search-hit');hits++;}
+                else{row.classList.add('msg-row--search-hide');row.classList.remove('msg-row--search-hit');}
+            });
+        }
+        msgSearchInput?.addEventListener('input',()=>{clearTimeout(searchDebounceTimer);searchDebounceTimer=setTimeout(applyMessageSearch,200);});
+
+        /* ══════════════════════════════
+           CONTEXT MENU
+        ══════════════════════════════ */
+        function closeCtxMenu(){ctxMenu.classList.remove('is-open');sheetBackdrop.classList.remove('is-on');}
+        function openCtxMenu(x,y,items){
+            ctxMenu.innerHTML='';
+            items.forEach(({label,danger,icon,onClick})=>{
+                if (label==='---'){const d=document.createElement('div');d.className='ctx-menu__divider';ctxMenu.appendChild(d);return;}
+                const b=document.createElement('button');b.type='button';b.className='ctx-menu__btn'+(danger?' danger':'');
+                const ico=document.createElement('span');ico.className='ctx-ico';ico.textContent=icon||'•';b.appendChild(ico);
+                const sp=document.createElement('span');sp.textContent=label;b.appendChild(sp);
+                b.addEventListener('click',ev=>{ev.stopPropagation();onClick();closeCtxMenu();});
+                ctxMenu.appendChild(b);
+            });
+            ctxMenu.classList.add('is-open'); sheetBackdrop.classList.add('is-on');
+            ctxMenu.style.left='0'; ctxMenu.style.top='0';
+            const pad=10, rect=ctxMenu.getBoundingClientRect();
+            let left=x,top=y;
+            if (left+rect.width>innerWidth-pad) left=innerWidth-rect.width-pad;
+            if (top+rect.height>innerHeight-pad) top=innerHeight-rect.height-pad;
+            ctxMenu.style.left=`${Math.max(pad,left)}px`;
+            ctxMenu.style.top=`${Math.max(pad,top)}px`;
+        }
+
+        /* ══════════════════════════════
+           EDIT
+        ══════════════════════════════ */
+        function startEditMessage(msgId,text){
+            editingMessageId=msgId; chatInput.value=text||'';
+            chatInput.style.height='auto'; chatInput.style.height=Math.min(chatInput.scrollHeight,140)+'px';
+            editBanner.classList.add('is-on');
+            chatSend.innerHTML='<i class="ph ph-check" aria-hidden="true"></i>';
+            chatSend.disabled=!chatInput.value.trim(); chatInput.focus();
+            updateSendMicState();
+        }
+        function cancelEditMessage(){
+            editingMessageId=null; chatInput.value=''; chatInput.style.height='auto';
+            editBanner.classList.remove('is-on');
+            chatSend.innerHTML='<i class="ph ph-paper-plane-tilt" aria-hidden="true"></i>';
+            chatSend.disabled=true;
+            updateSendMicState();
+        }
+        editBannerCancel.addEventListener('click',cancelEditMessage);
+
+        /* ══════════════════════════════
+           SCROLL FAB
+        ══════════════════════════════ */
+        function updateScrollFab(){
+            if (unreadBelow>0){scrollDownFab.classList.remove('hidden');scrollDownBadge.textContent=unreadBelow>99?'99+':String(unreadBelow);scrollDownBadge.classList.remove('hidden');}
+            else if (!isNearBottom(chatMessages)){scrollDownFab.classList.remove('hidden');scrollDownBadge.classList.add('hidden');}
+            else{scrollDownFab.classList.add('hidden');scrollDownBadge.classList.add('hidden');}
+        }
+        scrollDownFab.addEventListener('click',()=>{unreadBelow=0;stickToBottom=true;chatMessages.scrollTo({top:chatMessages.scrollHeight,behavior:'smooth'});updateScrollFab();markDMRead();});
+        chatMessages.addEventListener('scroll',()=>{const near=isNearBottom(chatMessages);stickToBottom=near;if(near){unreadBelow=0;markDMRead();}updateScrollFab();});
+        document.addEventListener('visibilitychange',()=>{ if(!document.hidden) markDMRead(); });
+        window.addEventListener('focus',()=>markDMRead());
+
+        /* ══════════════════════════════
+           RENDER MESSAGE ROW
+        ══════════════════════════════ */
+        const GIF_URL=/(https?:\/\/[^\s<]+\.gif)(\b|[?#][^\s<]*)?/gi;
+        const URL_RE=/(https?:\/\/[^\s<>'"]+)/gi;
+
+        function renderMessageBody(raw){
+            const wrap=document.createElement('div'); wrap.className='msg-body';
+            if (!raw) return wrap;
+            let last=0,m; GIF_URL.lastIndex=0;
+            while((m=GIF_URL.exec(raw))!==null){
+                const before=raw.slice(last,m.index);
+                if (before) appendPlainText(wrap,before);
+                const gifUrl = m[1];
+                if (isSafeMediaSrc(gifUrl)) {
+                    const img=document.createElement('img'); img.className='gif-inline'; img.src=gifUrl; img.alt=''; img.loading='lazy'; img.referrerPolicy='no-referrer';
+                    wrap.appendChild(img);
+                } else {
+                    appendPlainText(wrap, gifUrl);
+                }
+                last=m.index+m[0].length;
+            }
+            const rest=raw.slice(last);
+            if (rest) appendPlainText(wrap,rest);
+            return wrap;
+        }
+        function isSafeHttpUrl(rawUrl) {
+            try {
+                const u = new URL(String(rawUrl));
+                return u.protocol === 'https:' || (u.protocol === 'http:' && /^localhost$|^127\.0\.0\.1$/.test(u.hostname));
+            } catch (_) { return false; }
+        }
+        function appendPlainText(container,text){
+            const safe_url_re = /\bhttps?:\/\/[^\s<>"']{2,}/gi;
+            let last = 0, m; safe_url_re.lastIndex = 0;
+            const appendTextWithBreaks = (chunk) => {
+                const parts = String(chunk).split('\n');
+                parts.forEach((part, i) => {
+                    if (i) container.appendChild(document.createElement('br'));
+                    if (part) container.appendChild(document.createTextNode(part));
+                });
+            };
+            while ((m = safe_url_re.exec(String(text))) !== null) {
+                appendTextWithBreaks(String(text).slice(last, m.index));
+                const rawUrl = m[0];
+                if (isSafeHttpUrl(rawUrl)) {
+                    const a = document.createElement('a');
+                    a.href = rawUrl;
+                    a.target = '_blank';
+                    a.rel = 'noopener noreferrer nofollow ugc';
+                    a.style.color = 'inherit';
+                    a.style.textDecoration = 'underline';
+                    a.style.opacity = '.85';
+                    a.textContent = rawUrl;
+                    container.appendChild(a);
+                } else {
+                    appendTextWithBreaks(rawUrl);
+                }
+                last = m.index + rawUrl.length;
+            }
+            appendTextWithBreaks(String(text).slice(last));
+        }
+        function buildUrlPreview(text, bubble){
+            URL_RE.lastIndex=0;
+            const m=URL_RE.exec(text); if (!m) return;
+            const url=m[1];
+            // Simple preview card with URL info
+            const preview=document.createElement('div'); preview.className='msg-url-preview';
+            const title=document.createElement('div'); title.className='msg-url-preview-title';
+            try { title.textContent=new URL(url).hostname; } catch(_){title.textContent=url.slice(0,40);}
+            const desc=document.createElement('div'); desc.className='msg-url-preview-desc'; desc.textContent=url.slice(0,80)+(url.length>80?'…':'');
+            preview.appendChild(title); preview.appendChild(desc);
+            bubble.appendChild(preview);
+        }
+
+        function formatTime2(ts){
+            if (!ts||typeof ts.toDate!=='function') return '';
+            return ts.toDate().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
+        }
+
+        function renderMessageRow(docSnap,prevDocSnap){
+            const id=docSnap.id, d=docSnap.data();
+            const myUid=auth.currentUser?String(auth.currentUser.uid):'';
+            const isMe=String(d.uid||'')===myUid&&myUid!=='';
+            const prevUid=prevDocSnap?(prevDocSnap.data().uid||''):null;
+            const sameAuthor=prevUid&&String(prevUid)===String(d.uid||'');
+            const isAdmin=ADMIN_UIDS.has(d.uid||'');
+
+            // Date separator
+            const rows=[];
+            if (prevDocSnap) {
+                const prevDate=prevDocSnap.data().createdAt?.toDate?.();
+                const curDate=d.createdAt?.toDate?.();
+                if (prevDate&&curDate) {
+                    const pd=new Date(prevDate.getFullYear(),prevDate.getMonth(),prevDate.getDate());
+                    const cd=new Date(curDate.getFullYear(),curDate.getMonth(),curDate.getDate());
+                    if (pd.getTime()!==cd.getTime()) {
+                        const sep=document.createElement('div'); sep.className='msg-date-sep';
+                        sep.innerHTML=`<span>${formatDate(d.createdAt)}</span>`; rows.push(sep);
+                    }
+                }
+            }
+
+            const row=document.createElement('div');
+            row.className='msg-row '+(isMe?'msg-row--me':'msg-row--other');
+            if (!sameAuthor&&prevDocSnap) row.classList.add('msg-row--gap');
+
+            // E2E включается только в личных чатах. Основной чат хранится и читается как обычный plaintext.
+            const hasE2E = currentChatMode === 'dm' && !!(d.e2eForPeer || d.e2eForMe);
+            let decryptedText = hasE2E ? '🔒' : safeDecrypt(d.text || '');
+
+            row.dataset.msgId=id; row.dataset.id=id; row.dataset.plain=decryptedText;
+            row.dataset.renderKey=e2eMessageCacheKey(id,d);
+            row.setAttribute('data-has-e2e', hasE2E ? '1' : '0');
+
+            const av=document.createElement('div');
+            av.className='msg-avatar'+(sameAuthor?' msg-avatar--hidden':'');
+            renderAvatarCircle(av,d.uid||id,d.author||'?',d.author||'?');
+            if (d.uid&&d.uid!==myUid) av.addEventListener('click',()=>openUserProfile(d.uid,d.author||'?'));
+
+            const stack=document.createElement('div'); stack.className='msg-stack';
+
+            if (!isMe&&!sameAuthor){
+                const authorEl=document.createElement('div'); authorEl.className='msg-author';
+                authorEl.textContent=d.author||'Гость';
+                if (isAdmin){const badge=document.createElement('span');badge.className='admin-badge';badge.textContent='ADMIN';authorEl.appendChild(badge);}
+                if (d.uid&&d.uid!==myUid) authorEl.addEventListener('click',()=>openUserProfile(d.uid,d.author||'?'));
+                stack.appendChild(authorEl);
+            }
+
+            const bubble=document.createElement('div');
+            bubble.className='msg-bubble '+(isMe?'msg-bubble--me':'msg-bubble--other');
+            if (isMe) bubble.classList.add('is-own');
+            if (d.pinned) bubble.classList.add('msg-bubble--pinned');
+
+            // Reply quote
+            if (d.replyTo){
+                const quote=document.createElement('div'); quote.className='msg-reply-quote';
+                const quoteNickSpan = document.createElement('span'); quoteNickSpan.className='msg-reply-quote-nick'; quoteNickSpan.textContent=d.replyTo.author||'';
+                const quoteTextSpan = document.createElement('span'); quoteTextSpan.className='msg-reply-quote-text';
+                // Поддержка E2E-зашифрованных цитат в ЛС
+                const hasE2eReply = !!(d.replyTo.e2eForPeer || d.replyTo.e2eForMe);
+                if (hasE2eReply) {
+                    quoteTextSpan.textContent = '🔒';
+                    if (myPrivateKey) {
+                        // Пробуем свой ключ: если я отправитель цитаты — e2eForMe, иначе — e2eForPeer
+                        const myUidNow = auth.currentUser?.uid || '';
+                        const primaryCipher = d.replyTo.e2eForMe || d.replyTo.e2eForPeer;
+                        const fallbackCipher = d.replyTo.e2eForPeer || d.replyTo.e2eForMe;
+                        rsaDecrypt(myPrivateKey, primaryCipher).then(plain => {
+                            quoteTextSpan.textContent = plain;
+                        }).catch(() => {
+                            if (fallbackCipher && fallbackCipher !== primaryCipher)
+                                rsaDecrypt(myPrivateKey, fallbackCipher).then(p => { quoteTextSpan.textContent = p; }).catch(()=>{});
+                        });
+                    }
+                } else {
+                    quoteTextSpan.textContent = safeDecrypt(d.replyTo.text||'');
+                }
+                quote.appendChild(quoteNickSpan); quote.appendChild(quoteTextSpan);
+                quote.addEventListener('click',()=>{
+                    const t=chatMessages.querySelector(`[data-msg-id="${d.replyTo.id}"]`);
+                    if(t){t.scrollIntoView({behavior:'smooth',block:'center'});t.style.outline='2px solid var(--accent)';setTimeout(()=>t.style.outline='',1200);}
+                });
+                bubble.appendChild(quote);
+            }
+
+            // Forwarded badge
+            if (d.forwarded){const fw=document.createElement('div');fw.style.cssText='font-size:.72rem;color:var(--accent);margin-bottom:4px;font-weight:600';fw.textContent='↗️ Переслано';bubble.appendChild(fw);}
+
+            // Image (if any) — E2E: новый формат = JSON { aes, url }, decryptMessage скачивает encrypted blob.
+            if (currentChatMode === 'dm' && (d.e2eImgForPeer || d.e2eImgForMe)) {
+                const msgImg = document.createElement('img');
+                msgImg.className = 'msg-img';
+                msgImg.alt = '🖼 Расшифровка…';
+                msgImg.loading = 'lazy';
+                msgImg.style.cssText = 'min-width:80px;min-height:60px;background:var(--surface-3)';
+                bubble.appendChild(msgImg);
+
+                const applyUrl = (url) => {
+                    if (!isSafeMediaSrc(url)) {
+                        msgImg.removeAttribute('src');
+                        msgImg.alt = '🔒 Изображение не расшифровано';
+                        return;
+                    }
+                    msgImg.src = url;
+                    msgImg.alt = '🖼';
+                    msgImg.style.cssText = '';
+                    msgImg.addEventListener('click', e => { e.stopPropagation(); openLightbox(url); });
+                };
+
+                if (myPrivateKey && window.E2E && typeof window.E2E.decryptMessage === 'function') {
+                    decryptMessageCached(id, d)
+                        .then(res => {
+                            if (res && res.imageObjectUrl) applyUrl(res.imageObjectUrl);
+                            else {
+                                msgImg.removeAttribute('src');
+                                msgImg.alt = '🔒 Изображение не расшифровано';
+                            }
+                        })
+                        .catch(() => {
+                            msgImg.removeAttribute('src');
+                            msgImg.alt = '🔒 Изображение не расшифровано';
+                        });
+                } else {
+                    msgImg.removeAttribute('src');
+                    msgImg.alt = '🔒 Изображение';
+                }
+            } else if (d.imageBase64 || d.imageUrl) {
+                const imgSrc = d.imageUrl || d.imageBase64;
+                const msgImg = document.createElement('img');
+                msgImg.className = 'msg-img';
+                msgImg.src = imgSrc;
+                msgImg.alt = '🖼';
+                msgImg.loading = 'lazy';
+                msgImg.addEventListener('click', e => { e.stopPropagation(); openLightbox(imgSrc); });
+                bubble.appendChild(msgImg);
+            }
+
+            // Voice message (if any) — E2E: новый формат = encrypted blob + E2E AES key.
+            if (currentChatMode === 'dm' && (d.e2eVoiceForPeer || d.e2eVoiceForMe)) {
+                const voiceWrap = document.createElement('div');
+                voiceWrap.className = 'msg-voice';
+                const dur = d.voiceDuration || 0;
+                const playBtn = document.createElement('button');
+                playBtn.className = 'voice-play-btn';
+                playBtn.innerHTML = '🔒';
+                playBtn.title = 'Расшифровка...';
+                playBtn.disabled = true;
+                const durEl = document.createElement('span');
+                durEl.className = 'voice-duration';
+                durEl.textContent = fmtVoiceTime(dur);
+                voiceWrap.appendChild(playBtn);
+                voiceWrap.appendChild(durEl);
+                bubble.appendChild(voiceWrap);
+
+                const activateVoicePlayer = (voiceUrl) => {
+                    if (!isSafeMediaSrc(voiceUrl)) {
+                        playBtn.innerHTML = '🔒';
+                        playBtn.title = 'Голосовое не расшифровано';
+                        return;
+                    }
+                    playBtn.innerHTML = '<i class="ph ph-play" aria-hidden="true"></i>';
+                    playBtn.disabled = false;
+                    playBtn.title = 'Воспроизвести';
+                    const barCount = 28;
+                    const waveEl = document.createElement('div');
+                    waveEl.className = 'voice-waveform';
+                    const bars = [];
+                    for (let i = 0; i < barCount; i++) {
+                        const bar = document.createElement('div');
+                        bar.className = 'voice-waveform-bar';
+                        const seed = (id.charCodeAt(i % id.length) || 5);
+                        bar.style.height = (8 + ((seed * (i + 7)) % 22)) + 'px';
+                        waveEl.appendChild(bar);
+                        bars.push(bar);
+                    }
+                    voiceWrap.insertBefore(waveEl, durEl);
+                    let audio = null, playTimer = null, isPlaying = false;
+                    function updateBars(p) { const pl = Math.floor(p * barCount); bars.forEach((b, i) => b.classList.toggle('played', i < pl)); }
+                    function stopAudio() { if (audio) { audio.pause(); audio = null; } clearInterval(playTimer); isPlaying = false; playBtn.innerHTML = '<i class="ph ph-play" aria-hidden="true"></i>'; durEl.textContent = fmtVoiceTime(dur); updateBars(0); }
+                    playBtn.addEventListener('click', () => {
+                        if (isPlaying) { stopAudio(); return; }
+                        audio = new Audio(voiceUrl);
+                        audio.onended = stopAudio;
+                        audio.play().catch(() => showToast('Не удалось воспроизвести'));
+                        isPlaying = true;
+                        playBtn.innerHTML = '<i class="ph ph-pause" aria-hidden="true"></i>';
+                        playTimer = setInterval(() => { if (!audio) return; const p = dur > 0 ? audio.currentTime / dur : 0; durEl.textContent = fmtVoiceTime(Math.floor(audio.currentTime)); updateBars(p); }, 100);
+                    });
+                    waveEl.addEventListener('click', e => { if (!audio || !dur) return; const rect = waveEl.getBoundingClientRect(); audio.currentTime = ((e.clientX - rect.left) / rect.width) * dur; });
+                };
+
+                if (myPrivateKey && window.E2E && typeof window.E2E.decryptMessage === 'function') {
+                    decryptMessageCached(id, d)
+                        .then(res => {
+                            if (res && res.voiceObjectUrl) activateVoicePlayer(res.voiceObjectUrl);
+                            else { playBtn.innerHTML = '🔒'; playBtn.title = 'Голосовое не расшифровано'; }
+                        })
+                        .catch(() => { playBtn.innerHTML = '🔒'; playBtn.title = 'Голосовое не расшифровано'; });
+                }
+            } else if (d.voiceBase64 || d.voiceUrl) {
+                const voiceWrap = document.createElement('div');
+                voiceWrap.className = 'msg-voice';
+                const dur = d.voiceDuration||0;
+                // Random-ish waveform bars based on msgId
+                const barCount = 28;
+                const playBtn = document.createElement('button');
+                playBtn.className = 'voice-play-btn';
+                playBtn.innerHTML = '<i class="ph ph-play" aria-hidden="true"></i>';
+                playBtn.title = 'Воспроизвести';
+                const waveEl = document.createElement('div');
+                waveEl.className = 'voice-waveform';
+                const bars = [];
+                for (let i=0;i<barCount;i++){
+                    const bar=document.createElement('div'); bar.className='voice-waveform-bar';
+                    // pseudo-random heights using message id chars
+                    const seed=(id.charCodeAt(i%id.length)||5);
+                    const h=8+((seed*(i+7))%22);
+                    bar.style.height=h+'px'; waveEl.appendChild(bar); bars.push(bar);
+                }
+                const durEl = document.createElement('span');
+                durEl.className = 'voice-duration';
+                durEl.textContent = fmtVoiceTime(dur);
+                voiceWrap.appendChild(playBtn);
+                voiceWrap.appendChild(waveEl);
+                voiceWrap.appendChild(durEl);
+                bubble.appendChild(voiceWrap);
+
+                // Playback logic
+                let audio = null; let playTimer = null; let isPlaying = false;
+                function updateBars(progress) {
+                    const played = Math.floor(progress * barCount);
+                    bars.forEach((b,i)=>b.classList.toggle('played', i<played));
+                }
+                function stopAudio() {
+                    if (audio) { audio.pause(); audio=null; }
+                    clearInterval(playTimer);
+                    isPlaying=false;
+                    playBtn.innerHTML='<i class="ph ph-play" aria-hidden="true"></i>';
+                    durEl.textContent=fmtVoiceTime(dur);
+                    updateBars(0);
+                }
+                playBtn.addEventListener('click', ()=>{
+                    if (isPlaying) { stopAudio(); return; }
+                    audio = new Audio(d.voiceUrl || d.voiceBase64);
+                    audio.onended = stopAudio;
+                    audio.play().catch(()=>showToast('Не удалось воспроизвести'));
+                    isPlaying=true;
+                    playBtn.innerHTML='<i class="ph ph-pause" aria-hidden="true"></i>';
+                    playTimer = setInterval(()=>{
+                        if (!audio) return;
+                        const progress = dur>0 ? audio.currentTime/dur : 0;
+                        durEl.textContent = fmtVoiceTime(Math.floor(audio.currentTime));
+                        updateBars(progress);
+                    }, 100);
+                });
+                waveEl.addEventListener('click', e=>{
+                    if (!audio||!dur) return;
+                    const rect=waveEl.getBoundingClientRect();
+                    const ratio=(e.clientX-rect.left)/rect.width;
+                    audio.currentTime=ratio*dur;
+                });
+            }
+
+            // Poll message
+            if (d.pollId) {
+                bubble.style.padding = '0';
+                bubble.style.background = 'none';
+                bubble.style.border = 'none';
+                bubble.style.boxShadow = 'none';
+                const pollEl = buildPollMessageEl(d.pollId);
+                bubble.appendChild(pollEl);
+            }
+
+            // Music message
+            if (currentChatMode === 'dm' && (d.e2eMusicForPeer || d.e2eMusicForMe)) {
+                const musicPlaceholder = document.createElement('div');
+                musicPlaceholder.textContent = '🔒 Музыка (расшифровка...)';
+                musicPlaceholder.style.cssText = 'font-size:.85rem;color:var(--muted);padding:4px 0';
+                bubble.appendChild(musicPlaceholder);
+                if (myPrivateKey && window.E2E && typeof window.E2E.decryptMessage === 'function') {
+                    decryptMessageCached(id, d).then(res => {
+                        if (!res || !res.musicObjectUrl) {
+                            musicPlaceholder.textContent = '🔒 Музыка не расшифрована';
+                            return;
+                        }
+                        const el = buildMusicBubble(id, {
+                            ...d,
+                            musicUrl: res.musicObjectUrl,
+                            musicTitle: 'Музыка',
+                            musicDuration: Math.round(d.musicDuration || 0),
+                            musicMime: d.musicMime || 'audio/*'
+                        });
+                        musicPlaceholder.replaceWith(el);
+                    }).catch(() => { musicPlaceholder.textContent = '🔒 Музыка'; });
+                } else {
+                    musicPlaceholder.textContent = '🔒 Музыка';
+                }
+            } else if (d.musicBase64 || d.musicUrl) {
+                bubble.appendChild(buildMusicBubble(id, d));
+            }
+
+                        // Checklist message — E2E: расшифровываем через общий decryptMessage.
+            if (currentChatMode === 'dm' && (d.e2eChecklistForPeer || d.e2eChecklistForMe)) {
+                const clPlaceholder = document.createElement('div');
+                clPlaceholder.textContent = '🔒 Чек-лист (расшифровка...)';
+                clPlaceholder.style.cssText = 'font-size:.85rem;color:var(--muted);padding:4px 0';
+                bubble.appendChild(clPlaceholder);
+                if (myPrivateKey && window.E2E && typeof window.E2E.decryptMessage === 'function') {
+                    decryptMessageCached(id, d)
+                        .then(res => {
+                            if (res && res.checklist) {
+                                const cl = {
+                                    title: res.checklist.title || '',
+                                    items: Array.isArray(res.checklist.items) ? res.checklist.items : [],
+                                    done: res.checklist.done || {}
+                                };
+                                clPlaceholder.replaceWith(buildChecklistBubble(id, cl, isMe));
+                            } else {
+                                clPlaceholder.textContent = '🔒 Чек-лист не расшифрован';
+                            }
+                        })
+                        .catch(() => { clPlaceholder.textContent = '🔒 Чек-лист не расшифрован'; });
+                }
+            } else if (d.checklist) {
+                bubble.appendChild(buildChecklistBubble(id, d.checklist, isMe));
+            }
+
+            // Text body (skip if empty / poll / music / checklist / E2E-only attachments)
+            const hasE2EAttachment = currentChatMode === 'dm' && !!(d.e2eImgForPeer || d.e2eImgForMe || d.e2eVoiceForPeer || d.e2eVoiceForMe || d.e2eMusicForPeer || d.e2eMusicForMe || d.e2eChecklistForPeer || d.e2eChecklistForMe);
+            if ((d.text || (hasE2E && !hasE2EAttachment)) && !d.pollId && !d.musicBase64 && !d.musicUrl && !d.checklist) {
+                const bodyEl = renderMessageBody(decryptedText);
+                if (hasE2E) bodyEl.setAttribute('data-e2e-text', '1');
+                bubble.appendChild(bodyEl);
+                if (hasE2E && d.e2eSig && window.E2E && typeof window.E2E.verifyEncryptedMessageSignature === 'function') {
+                    const sigBadge = document.createElement('div');
+                    sigBadge.className = 'msg-signature-badge';
+                    sigBadge.style.cssText = 'font-size:.68rem;opacity:.72;margin-top:4px;font-weight:700';
+                    sigBadge.textContent = '… проверка подписи';
+                    bubble.appendChild(sigBadge);
+                    window.E2E.verifyEncryptedMessageSignature(d, db, doc, getDoc).then(sig => {
+                        if (sig && sig.ok === true) sigBadge.textContent = '✓ подпись проверена';
+                        else if (sig && sig.ok === false) sigBadge.textContent = '⚠ подпись не совпала';
+                        else sigBadge.textContent = '• подписи нет/не проверить';
+                    }).catch(() => { sigBadge.textContent = '⚠ ошибка проверки подписи'; });
+                }
+            }
+
+            // URL preview (только для расшифрованных, не для плейсхолдера)
+            if ((d.text||hasE2E)&&!d.pollId&&!d.musicBase64&&!d.musicUrl&&!d.checklist&&!hasE2E&&!decryptedText.match(GIF_URL)) buildUrlPreview(decryptedText, bubble);
+
+            // Footer
+            const foot=document.createElement('div'); foot.className='msg-footer';
+            const timeSpan=document.createElement('span'); timeSpan.textContent=formatTime2(d.createdAt); foot.appendChild(timeSpan);
+            if (d.edited){const ed=document.createElement('span');ed.className='msg-edited';ed.textContent='(изм.)';foot.appendChild(ed);}
+            if (isMe&&currentChatMode==='dm'){
+                const readBy = Array.isArray(d.readBy) ? d.readBy.map(String) : [];
+                const msgReadByPeer = currentDMPeerUid && readBy.includes(String(currentDMPeerUid));
+                const tick=document.createElement('span');
+                tick.className='msg-read-tick' + (msgReadByPeer ? ' is-read' : '');
+                tick.textContent=msgReadByPeer?'✓✓':'✓';
+                tick.title=msgReadByPeer?'Прочитано':'Отправлено';
+                foot.appendChild(tick);
+            }
+            bubble.appendChild(foot);
+            stack.appendChild(bubble);
+
+            // Reactions bar
+            const reactBar=document.createElement('div'); reactBar.className='msg-reactions';
+            const addBtn=document.createElement('button'); addBtn.className='reaction-add-btn'; addBtn.textContent='+'; addBtn.title='Реакция';
+            addBtn.addEventListener('click',e=>{e.stopPropagation();openReactionPicker(id,addBtn);});
+            reactBar.appendChild(addBtn); stack.appendChild(reactBar);
+            loadAndRenderReactions(id,reactBar);
+
+            row.appendChild(av); row.appendChild(stack);
+
+            // Auto-delete schedule (for messages sent by me after setting was applied)
+            const chatId=currentChatMode==='group'?'group':currentDMConvId;
+            const sec=getAutoDelSec(chatId);
+            if (sec>0&&isMe) scheduleAutoDelete(id, sec);
+
+            /* Context menu — right-click or long-press */
+            const showCtx=(x,y)=>{
+                // Читаем dataset.plain — он обновляется асинхронно после E2E-расшифровки
+                const plainText = row.dataset.plain || '';
+                const items=[
+                    {label:'Ответить', icon:'↩️', onClick:()=>startReply(id,d.author||'?',plainText)},
+                    {label:'Копировать', icon:'📋', onClick:()=>copyText(plainText)},
+                    {label:'Переслать', icon:'↗️', onClick:()=>openForwardModal([d])},
+                ];
+                // Pin/unpin (group chat — any user can pin)
+                if (currentChatMode==='group'){
+                    items.push({label:'---'});
+                    items.push({label:d.pinned?'Открепить':'Закрепить', icon:'📌', onClick:()=>togglePinMessage(id,d)});
+                }
+                // Edit/delete own
+                if (isMe){
+                    items.push({label:'---'});
+                    items.push({label:'Изменить', icon:'✏️', onClick:()=>startEditMessage(id,row.dataset.plain||'')});
+                    items.push({label:'Удалить', icon:'🗑', danger:true, onClick:()=>deleteMessage(id)});
+                }
+                // Admin can delete anyone's messages in group
+                if (!isMe&&currentChatMode==='group'&&userIsAdmin){
+                    items.push({label:'---'});
+                    items.push({label:'Удалить (ADMIN)', icon:'🗑', danger:true, onClick:()=>deleteMessage(id)});
+                }
+                openCtxMenu(x,y,items);
+            };
+            bubble.addEventListener('contextmenu',e=>{e.preventDefault();showCtx(e.clientX,e.clientY);});
+            // Double-click to react (TG style)
+            bubble.addEventListener('dblclick',e=>{e.preventDefault();openReactionPicker(id,addBtn);});
+            // Long press mobile
+            let lpTimer;
+            bubble.addEventListener('touchstart',()=>{lpTimer=setTimeout(()=>showCtx(0,innerHeight*.4),500);},{passive:true});
+            bubble.addEventListener('touchend',()=>clearTimeout(lpTimer));
+            bubble.addEventListener('touchmove',()=>clearTimeout(lpTimer));
+
+            rows.push(row);
+            return rows;
+        }
+
+        /* Pin/unpin message in group */
+        async function togglePinMessage(msgId, data) {
+            const pRef = doc(db, 'chatMeta', 'group_pinned');
+            try {
+                // Check if this message is already pinned (toggle logic)
+                const currentSnap = await getDoc(pRef);
+                const alreadyPinned = currentSnap.exists() && currentSnap.data().msgId === msgId;
+                if (alreadyPinned) {
+                    // Unpin: delete chatMeta doc (no need to touch messages collection)
+                    await deleteDoc(pRef);
+                    // pinnedBanner will auto-hide via onSnapshot listener
+                    showToast('📌 Сообщение откреплено');
+                } else {
+                    // Pin: write to chatMeta only — no permission issues
+                    const text = (data.imageBase64||data.imageUrl) ? '🖼 Картинка' : ((data.voiceBase64||data.voiceUrl) ? '🎤 Голосовое' : safeDecrypt(data.text||''));
+                    await setDoc(pRef, {msgId, text, author: data.author||'', pinnedBy: auth.currentUser?.uid||''});
+                    // Banner will show via onSnapshot
+                    showToast('📌 Сообщение закреплено');
+                }
+            } catch(e){ showToast('Ошибка: '+e.message); }
+        }
+
+        /* Delete one message */
+        async function deleteMessage(msgId){
+            openConfirmModal('🗑 Удалить сообщение','Удалить это сообщение? Это действие нельзя отменить.',async()=>{
+                try {
+                    // Stop audio if this message's track is playing
+                    const row = chatMessages.querySelector(`[data-msg-id="${msgId}"]`);
+                    if (row) {
+                        const musicBubble = row.querySelector('.msg-music');
+                        if (musicBubble && ChatPlayer._audio) {
+                            ChatPlayer.stop();
+                        }
+                    }
+                    if (currentChatMode==='group') await deleteDoc(doc(db,'messages',msgId));
+                    else await deleteDoc(doc(db,'dmConvs',currentDMConvId,'messages',msgId));
+                } catch(e){globalStatus.textContent=e.message;globalStatus.classList.add('is-error');}
+            });
+        }
+
+        /* ══════════════════════════════
+           UPDATE DOM
+        ══════════════════════════════ */
+        function updateMessagesDOM(snapshot){
+            const atBottom=isNearBottom(chatMessages);
+            const prevScrollTop=chatMessages.scrollTop, prevScrollHeight=chatMessages.scrollHeight;
+            const newLastId=snapshot.empty?null:snapshot.docs[snapshot.docs.length-1].id;
+            const isNewMsg=lastKnownLastMessageId!==null&&newLastId!==null&&newLastId!==lastKnownLastMessageId;
+            if (isNewMsg&&!atBottom&&!stickToBottom) unreadBelow++;
+            if (atBottom||stickToBottom) unreadBelow=0;
+            // Notify for new incoming messages
+            if (isNewMsg&&!snapshot.empty) {
+                const lastDoc=snapshot.docs[snapshot.docs.length-1];
+                const chatName=currentChatMode==='group'?'Основной чат':(currentDMPeerName||'ЛС');
+                tryNotifyNewMessage({...lastDoc.data(),id:lastDoc.id}, chatName);
+            }
+            lastKnownLastMessageId=newLastId;
+
+            if (snapshot.empty) {
+                chatMessages.querySelectorAll('.msg-row,.msg-date-sep').forEach(n=>n.remove());
+                chatEmpty.style.display='';
+            } else {
+                chatEmpty.style.display='none';
+                const docs=snapshot.docs;
+
+                // Build map of currently rendered msg-rows by data-id.
+                // Важно: не перерисовываем уже расшифрованные E2E-медиа при каждом onSnapshot.
+                // Иначе старые player/blob-URL заменяются свежими placeholder'ами "🔒", а async decrypt
+                // срабатывает на detached fragment. Это и давало "всё стало под замками" после отправки.
+                const existingOrderedBefore=[...chatMessages.querySelectorAll('.msg-row[data-id]')];
+                const existingRows={};
+                existingOrderedBefore.forEach(el=>{ existingRows[el.dataset.id]=el; });
+
+                const newIds=new Set(docs.map(d=>d.id));
+                const canIncrementalAppendOrUpdate = existingOrderedBefore.length <= docs.length &&
+                    existingOrderedBefore.every((el,i)=>docs[i] && docs[i].id===el.dataset.id);
+
+                // Remove rows that no longer exist. If order/deletion changed, the fallback below will rebuild fully.
+                Object.entries(existingRows).forEach(([id,el])=>{
+                    if (!newIds.has(id)) {
+                        const prev=el.previousSibling;
+                        if (prev&&prev.classList&&prev.classList.contains('msg-date-sep')) prev.remove();
+                        el.remove();
+                    }
+                });
+
+                if (canIncrementalAppendOrUpdate) {
+                    docs.forEach((docSnap,i)=>{
+                        const id=docSnap.id;
+                        const d=docSnap.data();
+                        const oldRow=existingRows[id];
+                        const renderKey=e2eMessageCacheKey(id,d);
+
+                        // Полностью пропускаем неизменённые строки. Сохраняются уже расшифрованные
+                        // audio/music/image элементы, objectURL и обработчики плеера.
+                        if (oldRow && oldRow.dataset.renderKey===renderKey) return;
+
+                        const rows=renderMessageRow(docSnap,docs[i-1]||null);
+                        if (oldRow) {
+                            // Меняем именно DOM-ноду, а не innerHTML: async decrypt callbacks остаются привязаны
+                            // к видимой строке, а не к временной строке во фрагменте.
+                            const msgRow=rows.find(r=>r.classList&&r.classList.contains('msg-row'));
+                            if (msgRow) oldRow.replaceWith(msgRow);
+                        } else {
+                            rows.forEach(r=>chatMessages.appendChild(r));
+                        }
+                    });
+                } else {
+                    // Order changed / deletion / non-prefix update — full rebuild.
+                    // Preserve already loaded media srcs where possible to reduce flicker.
+                    const mediaCache={};
+                    chatMessages.querySelectorAll('.msg-row[data-id]').forEach(el=>{
+                        const img=el.querySelector('.msg-img');
+                        const audio=el.querySelector('audio');
+                        if (img&&img.src) mediaCache[el.dataset.id]={ type:'img', src:img.src };
+                        else if (audio&&audio.src) mediaCache[el.dataset.id]={ type:'audio', src:audio.src };
+                    });
+
+                    chatMessages.querySelectorAll('.msg-row,.msg-date-sep').forEach(n=>n.remove());
+                    const frag=document.createDocumentFragment();
+                    docs.forEach((docSnap,i)=>{
+                        const rows=renderMessageRow(docSnap,docs[i-1]||null);
+                        rows.forEach(r=>frag.appendChild(r));
+                    });
+                    frag.querySelectorAll('.msg-row[data-id]').forEach(el=>{
+                        const cached=mediaCache[el.dataset.id];
+                        if (!cached) return;
+                        if (cached.type==='img') {
+                            const img=el.querySelector('.msg-img');
+                            if (img) img.src=cached.src;
+                        } else if (cached.type==='audio') {
+                            const audio=el.querySelector('audio');
+                            if (audio) audio.src=cached.src;
+                        }
+                    });
+                    chatMessages.appendChild(frag);
+                }
+            }
+
+            const shouldStick=atBottom||stickToBottom;
+            requestAnimationFrame(()=>{
+                if (shouldStick) chatMessages.scrollTo({top:chatMessages.scrollHeight,behavior:'smooth'});
+                else chatMessages.scrollTop=prevScrollTop+(chatMessages.scrollHeight-prevScrollHeight);
+                updateScrollFab(); applyMessageSearch();
+            });
+
+            // E2E: асинхронно расшифруем ЛС-сообщения после рендера
+            if (currentChatMode==='dm' && myPrivateKey) {
+                const myUid = auth.currentUser?.uid || '';
+                const e2eRows = chatMessages.querySelectorAll('.msg-row[data-has-e2e="1"]');
+                e2eRows.forEach(async (rowEl) => {
+                    const msgId = rowEl.dataset.id;
+                    const bodyEl = rowEl.querySelector('[data-e2e-text]');
+                    if (!bodyEl) return;
+
+                    // Уже есть в кеше — сразу применяем
+                    if (_e2eDecryptedCache.has(msgId)) {
+                        const plain = _e2eDecryptedCache.get(msgId);
+                        rowEl.dataset.plain = plain;
+                        bodyEl.innerHTML = '';
+                        appendPlainText(bodyEl, plain);
+                        return;
+                    }
+
+                    // Расшифровываем и кешируем
+                    const snap = snapshot.docs.find(d => d.id === msgId);
+                    if (!snap) return;
+                    const dec = await decryptMessageCached(msgId, snap.data());
+                    const plain = (dec && typeof dec.text === 'string') ? dec.text : await decryptDM(snap.data(), myUid);
+                    _e2eDecryptedCache.set(msgId, plain);
+                    rowEl.dataset.plain = plain;
+                    bodyEl.innerHTML = '';
+                    appendPlainText(bodyEl, plain);
+                    // URL preview
+                    const bubble = rowEl.querySelector('.msg-bubble');
+                    if (bubble && !bubble.querySelector('.msg-url-preview')) {
+                        URL_RE.lastIndex = 0;
+                        if (URL_RE.test(plain)) buildUrlPreview(plain, bubble);
+                    }
+                });
+            }
+        }
+
+        /* ══════════════════════════════
+           TYPING
+        ══════════════════════════════ */
+        function getTypingDocRef(){
+            if (currentChatMode==='dm'&&currentDMConvId) return doc(db,'presence','typing_dm_'+currentDMConvId);
+            return typingRef;
+        }
+        function scheduleTypingPing(){
+            const u=auth.currentUser; if (!u||!chatInput.value.trim()) return;
+            const now=Date.now();
+            if (now-lastTypingWrite<900){clearTimeout(typingWriteTimer);typingWriteTimer=setTimeout(()=>writeTypingPing(),400);return;}
+            writeTypingPing();
+        }
+        async function writeTypingPing(){
+            const u=auth.currentUser; if (!u||!chatInput.value.trim()) return;
+            lastTypingWrite=Date.now();
+            try{await setDoc(getTypingDocRef(),{users:{[u.uid]:{t:serverTimestamp(),n:displayNick(u)}}},{merge:true});}catch(_){}
+        }
+        chatInput.addEventListener('blur',async()=>{
+            const u=auth.currentUser; if (!u) return;
+            try{await setDoc(getTypingDocRef(),{users:{[u.uid]:deleteField()}},{merge:true});}catch(_){}
+        });
+        function renderTypingFromData(data){
+            const u=auth.currentUser; if (!u){typingBar.innerHTML='';return;}
+            const users=(data&&data.users)||{};
+            const names=[]; const now=Date.now();
+            Object.entries(users).forEach(([uid,v])=>{
+                if (String(uid)===String(u.uid)||!v||!v.t) return;
+                let ts=0; try{ts=typeof v.t.toMillis==='function'?v.t.toMillis():0;}catch(_){return;}
+                if (now-ts<TYPING_MAX_MS) names.push(v.n||'Кто-то');
+            });
+            if (!names.length){typingBar.innerHTML='';return;}
+            // Экранируем имена из Firestore перед вставкой в DOM
+            const safeNames = names.map(n => escapeHtml(String(n)));
+            typingBar.innerHTML='<span>'+safeNames.join(', ')+' печатает</span><span class="typing-dots" aria-hidden="true"><span></span><span></span><span></span></span>';
+        }
+        function startTypingListeners(){
+            if (typingUnsub) typingUnsub();
+            typingUnsub=onSnapshot(getTypingDocRef(),snap=>renderTypingFromData(snap.data()),()=>{});
+        }
+
+
+
+        /* ══════════════════════════════════════════
+           MUSIC BUBBLE RENDERER
+        ══════════════════════════════════════════ */
+        /* ══════════════════════════════════════════
+           CHAT PLAYER — Singleton (one Audio instance, no overlaps, no leaks)
+        ══════════════════════════════════════════ */
+        const ChatPlayer = {
+            _audio:    null,
+            _url:      null,
+            _playBtn:  null,
+            _bar:      null,
+            _durEl:    null,
+            _totalDur: 0,
+            _PLAY:  '<i class="ph ph-play" aria-hidden="true"></i>',
+            _PAUSE: '<i class="ph ph-pause" aria-hidden="true"></i>',
+
+            _reset() {
+                if (this._audio) {
+                    this._audio.ontimeupdate = null;
+                    this._audio.onended = null;
+                    this._audio.pause();
+                    this._audio.src = '';
+                    this._audio = null;
+                }
+                if (this._playBtn) this._playBtn.innerHTML = this._PLAY;
+                if (this._bar)    this._bar.style.width = '0%';
+                if (this._durEl && this._totalDur)
+                    this._durEl.textContent = fmtVoiceTime(this._totalDur);
+                this._url = null; this._playBtn = null;
+                this._bar = null; this._durEl = null; this._totalDur = 0;
+            },
+
+            play(url, playBtn, bar, durEl, totalDur) {
+                if (!url) { showToast('⚠️ Нет ссылки на аудио'); return; }
+                // Same track → toggle pause/resume
+                if (this._url === url && this._audio) {
+                    if (this._audio.paused) {
+                        this._audio.play().catch(()=>{});
+                        if (playBtn) playBtn.innerHTML = this._PAUSE;
+                    } else {
+                        this._audio.pause();
+                        if (playBtn) playBtn.innerHTML = this._PLAY;
+                    }
+                    return;
+                }
+                // Stop previous
+                this._reset();
+                // Start new
+                this._url = url; this._playBtn = playBtn || null;
+                this._bar = bar || null; this._durEl = durEl || null;
+                this._totalDur = totalDur || 0;
+                this._audio = new Audio(url);
+                if (playBtn) playBtn.innerHTML = this._PAUSE;
+
+                this._audio.play().catch(err => {
+                    console.warn('AudioManager play error:', err);
+                    if (playBtn) playBtn.innerHTML = this._PLAY;
+                    showToast('⚠️ Не удалось воспроизвести. Попробуй ещё раз.');
+                });
+
+                this._audio.ontimeupdate = () => {
+                    if (!this._audio) return;
+                    const pct = (this._audio.currentTime / this._audio.duration) * 100;
+                    if (!isNaN(pct) && this._bar) this._bar.style.width = pct + '%';
+                    if (this._durEl) this._durEl.textContent = fmtVoiceTime(Math.floor(this._audio.currentTime));
+                };
+                this._audio.onended = () => {
+                    if (this._playBtn) this._playBtn.innerHTML = this._PLAY;
+                    if (this._bar)     this._bar.style.width = '0%';
+                    if (this._durEl)   this._durEl.textContent = fmtVoiceTime(this._totalDur);
+                    this._url = null;
+                };
+            },
+
+            /* Воспроизведение без UI-элементов (превью музыки в профиле).
+               Останавливает любой текущий трек перед запуском. */
+            playSimple(url) {
+                if (!url) return;
+                if (this._url === url && this._audio) {
+                    if (this._audio.paused) this._audio.play().catch(()=>{});
+                    else                    this._audio.pause();
+                    return;
+                }
+                this._reset();
+                this._url = url;
+                this._audio = new Audio(url);
+                this._audio.play().catch(err => {
+                    console.warn('AudioManager playSimple error:', err);
+                    showToast('⚠️ Не удалось воспроизвести аудио.');
+                });
+                this._audio.onended = () => { this._url = null; };
+            },
+
+            seek(ratio) {
+                if (this._audio && this._audio.duration)
+                    this._audio.currentTime = Math.max(0, Math.min(1, ratio)) * this._audio.duration;
+            },
+
+            stop() { this._reset(); },
+
+            get isPlaying() {
+                return !!(this._audio && !this._audio.paused);
+            }
+        };
+
+        /* ══════════════════════════════════════════
+           MUSIC BUBBLE RENDERER
+        ══════════════════════════════════════════ */
+        function buildMusicBubble(msgId, d) {
+            const wrap = document.createElement('div');
+            wrap.className = 'msg-music';
+
+            const playBtn = document.createElement('button');
+            playBtn.className = 'music-play-btn';
+            playBtn.innerHTML = ChatPlayer._PLAY;
+
+            const info = document.createElement('div');
+            info.className = 'music-info';
+
+            const title = document.createElement('div');
+            title.className = 'music-title';
+            title.textContent = d.musicTitle || 'Трек';
+
+            const dur = document.createElement('div');
+            dur.className = 'music-duration';
+            dur.textContent = fmtVoiceTime(d.musicDuration || 0);
+
+            const progress = document.createElement('div');
+            progress.className = 'music-progress';
+            const bar = document.createElement('div');
+            bar.className = 'music-progress-bar';
+            progress.appendChild(bar);
+
+            info.appendChild(title); info.appendChild(dur); info.appendChild(progress);
+            wrap.appendChild(playBtn); wrap.appendChild(info);
+
+            playBtn.onclick = () => {
+                if (!d.musicUrl) return showToast('Ошибка: нет ссылки на аудио');
+                ChatPlayer.play(d.musicUrl, playBtn, bar, dur, d.musicDuration || 0);
+            };
+
+            // Seek by clicking the progress track
+            progress.addEventListener('click', e => {
+                if (ChatPlayer._url !== d.musicUrl) return;
+                const r = progress.getBoundingClientRect();
+                ChatPlayer.seek((e.clientX - r.left) / r.width);
+            });
+
+            return wrap;
+        }
+
+
+
+
+
+        /* ══════════════════════════════════════════
+           CHECKLIST BUBBLE RENDERER
+        ══════════════════════════════════════════ */
+        function buildChecklistBubble(msgId, cl, isMe) {
+            const wrap = document.createElement('div');
+            wrap.className = 'msg-checklist';
+
+            if (cl.title) {
+                const t = document.createElement('div');
+                t.className = 'msg-checklist-title';
+                t.textContent = cl.title;
+                wrap.appendChild(t);
+            }
+
+            // done state stored in chatMeta/cl_{msgId}, load async and re-render
+            const done = cl.done || {};
+            // Async load from chatMeta
+            getDoc(doc(db, 'chatMeta', 'cl_' + msgId)).then(snap => {
+                if (snap.exists() && snap.data().done) {
+                    const remoteDone = snap.data().done;
+                    Object.assign(done, remoteDone);
+                    // Update visuals
+                    wrap.querySelectorAll('.msg-checklist-item').forEach((row, i) => {
+                        const isDone = !!remoteDone[i];
+                        row.classList.toggle('done', isDone);
+                        row.querySelector('.msg-checklist-checkbox').innerHTML = isDone
+                            ? '<i class="ph ph-check" aria-hidden="true"></i>'
+                            : '';
+                    });
+                    const doneCount = Object.keys(remoteDone).filter(k=>remoteDone[k]).length;
+                    const f = wrap.querySelector('.msg-checklist-footer');
+                    if (f) f.textContent = doneCount + ' / ' + cl.items.length + ' выполнено';
+                }
+            }).catch(()=>{});
+
+            cl.items.forEach((item, i) => {
+                const row = document.createElement('div');
+                row.className = 'msg-checklist-item' + (done[i] ? ' done' : '');
+
+                const box = document.createElement('div');
+                box.className = 'msg-checklist-checkbox';
+                box.innerHTML = done[i] ? '<i class="ph ph-check" aria-hidden="true"></i>' : '';
+
+                const label = document.createElement('span');
+                label.className = 'msg-checklist-label';
+                label.textContent = item;
+
+                row.appendChild(box);
+                row.appendChild(label);
+
+                // Click to toggle — store done state in chatMeta (no permission issues)
+                row.addEventListener('click', async () => {
+                    const u = auth.currentUser; if (!u) return;
+                    const newDone = {...done};
+                    if (newDone[i]) delete newDone[i];
+                    else newDone[i] = u.uid;
+                    done[i] = newDone[i]; // optimistic local update
+                    // Toggle visual immediately
+                    if (newDone[i]) { row.classList.add('done'); box.innerHTML = '<i class="ph ph-check" aria-hidden="true"></i>'; }
+                    else { row.classList.remove('done'); box.innerHTML = ''; }
+                    const doneCount2 = Object.keys(done).filter(k=>done[k]).length;
+                    footer.textContent = doneCount2 + ' / ' + cl.items.length + ' выполнено';
+                    // Persist to chatMeta/{msgId}_checklist (writable by all auth users)
+                    try {
+                        await setDoc(doc(db, 'chatMeta', 'cl_' + msgId), {done: newDone}, {merge: true});
+                    } catch(e) { showToast('Ошибка: '+e.message); }
+                });
+
+                wrap.appendChild(row);
+            });
+
+            const doneCount = Object.keys(done).length;
+            const footer = document.createElement('div');
+            footer.className = 'msg-checklist-footer';
+            footer.textContent = doneCount + ' / ' + cl.items.length + ' выполнено';
+            wrap.appendChild(footer);
+
+            return wrap;
+        }
+
+        /* ══════════════════════════════════════════
+           POLLS SYSTEM
+        ══════════════════════════════════════════ */
+
+        const pollsCol = collection(db, 'polls');
+
+        // ─── Create modal logic ───
+        function openPollModal() {
+            // Only in group chat
+            if (currentChatMode !== 'group') { showToast('Опросы только в основном чате'); return; }
+            document.getElementById('pollQuestion').value = '';
+            document.getElementById('pollAnonymous').checked = true;
+            // Reset options
+            const list = document.getElementById('pollOptionsList');
+            list.innerHTML = '';
+            addPollOptionRow('');
+            addPollOptionRow('');
+            document.getElementById('pollModal').classList.add('is-open');
+            document.getElementById('pollQuestion').focus();
+        }
+
+        function addPollOptionRow(value) {
+            const list = document.getElementById('pollOptionsList');
+            const row = document.createElement('div');
+            row.className = 'poll-opt-row';
+            const inp = document.createElement('input');
+            inp.type = 'text';
+            inp.maxLength = 100;
+            inp.placeholder = 'Вариант ' + (list.children.length + 1);
+            inp.value = value;
+            const rm = document.createElement('button');
+            rm.type = 'button';
+            rm.className = 'poll-opt-remove';
+            rm.textContent = '✕';
+            rm.addEventListener('click', () => {
+                if (list.children.length > 2) row.remove();
+                else showToast('Минимум 2 варианта');
+            });
+            row.appendChild(inp);
+            row.appendChild(rm);
+            list.appendChild(row);
+            return row;
+        }
+
+        document.getElementById('pollAddOption').addEventListener('click', () => {
+            const list = document.getElementById('pollOptionsList');
+            if (list.children.length >= 10) { showToast('Максимум 10 вариантов'); return; }
+            addPollOptionRow('');
+        });
+
+        document.getElementById('btnPoll')?.addEventListener('click', openPollModal);
+        document.getElementById('pollCancel').addEventListener('click', () => document.getElementById('pollModal').classList.remove('is-open'));
+
+        document.getElementById('pollSubmit').addEventListener('click', async () => {
+            const u = auth.currentUser; if (!u) return;
+            const question = document.getElementById('pollQuestion').value.trim();
+            if (!question) { showToast('Введите вопрос'); return; }
+            const rows = document.getElementById('pollOptionsList').querySelectorAll('input');
+            const options = [...rows].map(r => r.value.trim()).filter(Boolean);
+            if (options.length < 2) { showToast('Нужно минимум 2 варианта'); return; }
+            const anonymous = document.getElementById('pollAnonymous').checked;
+            try {
+                const authorNameForRules = await getAuthorNameForRules(u);
+                const pollRef = await addDoc(pollsCol, {
+                    question,
+                    options,
+                    anonymous,
+                    createdAt: serverTimestamp(),
+                    createdBy: u.uid,
+                    createdByName: authorNameForRules,
+                    closed: false,
+                });
+                // Send a message referencing this poll
+                await addDoc(messagesCol, {
+                    uid: u.uid,
+                    author: authorNameForRules,
+                    text: '📊 ' + question,
+                    pollId: pollRef.id,
+                    createdAt: serverTimestamp(),
+                    edited: false,
+                });
+                document.getElementById('pollModal').classList.remove('is-open');
+                showToast('📊 Опрос создан!');
+            } catch(e) { showToast('Ошибка: ' + e.message); }
+        });
+
+        // ─── Render poll bubble ───
+        function renderPollBubble(pollId, pollData, containerEl) {
+            if (!pollData || !Array.isArray(pollData.options)) {
+                containerEl.textContent = '📊 Опрос недоступен';
+                return;
+            }
+            const u = auth.currentUser;
+            const votes = pollData.votes || {};
+            const anonymous = pollData.anonymous;
+            const closed = pollData.closed;
+
+            // Total vote count
+            let totalVotes = 0;
+            const optionVoteCounts = pollData.options.map((_, i) => {
+                const v = votes[String(i)] || [];
+                totalVotes += v.length;
+                return v.length;
+            });
+
+            // Find user's current vote
+            let userVoteIdx = -1;
+            if (u) {
+                for (let i = 0; i < pollData.options.length; i++) {
+                    if ((votes[String(i)] || []).includes(u.uid)) { userVoteIdx = i; break; }
+                }
+            }
+
+            const bubble = document.createElement('div');
+            bubble.className = 'poll-bubble';
+
+            const q = document.createElement('div');
+            q.className = 'poll-question';
+            q.textContent = '📊 ' + pollData.question;
+            bubble.appendChild(q);
+
+            const optWrap = document.createElement('div');
+            optWrap.className = 'poll-options';
+
+            pollData.options.forEach((optText, i) => {
+                const count = optionVoteCounts[i];
+                const pct = totalVotes ? Math.round(count / totalVotes * 100) : 0;
+                const isVoted = userVoteIdx === i;
+
+                const opt = document.createElement('div');
+                opt.className = 'poll-option' + (isVoted ? ' voted' : '');
+
+                // Background bar
+                const bar = document.createElement('div');
+                bar.className = 'poll-option-bar';
+                bar.style.width = (userVoteIdx >= 0 || closed) ? pct + '%' : '0%';
+                opt.appendChild(bar);
+
+                const body = document.createElement('div');
+                body.className = 'poll-option-body';
+
+                const label = document.createElement('span');
+                label.textContent = optText;
+
+                const right = document.createElement('span');
+                right.style.display = 'flex';
+                right.style.alignItems = 'center';
+                right.style.gap = '6px';
+
+                if (isVoted) {
+                    const check = document.createElement('span');
+                    check.className = 'poll-option-check';
+                    check.textContent = '✓';
+                    right.appendChild(check);
+                }
+
+                if (userVoteIdx >= 0 || closed) {
+                    const pctEl = document.createElement('span');
+                    pctEl.className = 'poll-option-pct';
+                    pctEl.textContent = pct + '%';
+                    right.appendChild(pctEl);
+                }
+
+                body.appendChild(label);
+                body.appendChild(right);
+                opt.appendChild(body);
+
+                // Click to vote
+                if (!closed && u) {
+                    opt.addEventListener('click', () => castPollVote(pollId, pollData, i));
+                } else {
+                    opt.style.cursor = 'default';
+                }
+
+                optWrap.appendChild(opt);
+            });
+
+            bubble.appendChild(optWrap);
+
+            // Footer
+            const footer = document.createElement('div');
+            footer.className = 'poll-footer';
+            footer.textContent = totalVotes + ' ' + pluralVotes(totalVotes);
+            if (anonymous) {
+                const badge = document.createElement('span');
+                badge.className = 'poll-anonymous-badge';
+                badge.textContent = '🔒 Анонимно';
+                footer.appendChild(badge);
+            }
+            if (!closed && u && pollData.createdBy === u.uid) {
+                const closeBtn = document.createElement('button');
+                closeBtn.type = 'button';
+                closeBtn.style.cssText = 'margin-left:auto;background:none;border:none;color:var(--muted);font-size:.72rem;cursor:pointer;padding:0;';
+                closeBtn.textContent = 'Завершить';
+                closeBtn.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    await updateDoc(doc(db,'polls',pollId), {closed: true}).catch(()=>{});
+                });
+                footer.appendChild(closeBtn);
+            }
+            bubble.appendChild(footer);
+
+            containerEl.innerHTML = '';
+            containerEl.appendChild(bubble);
+        }
+
+        function pluralVotes(n) {
+            if (n % 10 === 1 && n % 100 !== 11) return 'голос';
+            if ([2,3,4].includes(n % 10) && ![12,13,14].includes(n % 100)) return 'голоса';
+            return 'голосов';
+        }
+
+        async function castPollVote(pollId, pollData, optionIdx) {
+            const u = auth.currentUser; if (!u) return;
+            if (!pollData || !Array.isArray(pollData.options)) return;
+            if (optionIdx < 0 || optionIdx >= pollData.options.length) return;
+
+            const votes = pollData.votes || {};
+
+            // Определяем текущий голос пользователя по локальному кешу votes subcollection
+            let currentVoteIdx = -1;
+            for (let i = 0; i < pollData.options.length; i++) {
+                if ((votes[String(i)] || []).includes(u.uid)) { currentVoteIdx = i; break; }
+            }
+
+            const voteRef = doc(db, 'polls', pollId, 'votes', u.uid);
+
+            try {
+                // Повторный клик по тому же варианту — снять голос
+                if (currentVoteIdx === optionIdx) {
+                    await deleteDoc(voteRef);
+                    return;
+                }
+
+                // Один пользователь = один vote-документ. Это совпадает с Firestore rules.
+                await setDoc(voteRef, {
+                    uid: u.uid,
+                    optionIndex: optionIdx,
+                    updatedAt: serverTimestamp(),
+                });
+            } catch(e) { showToast('Ошибка голосования: ' + e.message); }
+        }
+
+        // ─── Subscribe to polls in group chat ───
+        let pollsUnsub = null;
+        const _pollCache = {}; // pollId → data, votes берутся из /polls/{pollId}/votes/{uid}
+        const _pollVoteUnsubs = {};
+
+        function rerenderPollById(pollId) {
+            document.querySelectorAll('[data-poll-id="'+pollId+'"]').forEach(el => {
+                renderPollBubble(pollId, _pollCache[pollId], el);
+            });
+        }
+
+        function stopPollVoteListeners() {
+            Object.values(_pollVoteUnsubs).forEach(unsub => {
+                try { unsub(); } catch (_) {}
+            });
+            Object.keys(_pollVoteUnsubs).forEach(k => delete _pollVoteUnsubs[k]);
+        }
+
+        function startPollVotesListener(pollId) {
+            if (_pollVoteUnsubs[pollId]) return;
+            _pollVoteUnsubs[pollId] = onSnapshot(collection(db, 'polls', pollId, 'votes'), snap => {
+                const votes = {};
+                snap.forEach(voteDoc => {
+                    const data = voteDoc.data() || {};
+                    const idx = Number(data.optionIndex);
+                    if (!Number.isInteger(idx) || idx < 0) return;
+                    const uid = String(data.uid || voteDoc.id || '');
+                    if (!uid) return;
+                    const key = String(idx);
+                    if (!votes[key]) votes[key] = [];
+                    if (!votes[key].includes(uid)) votes[key].push(uid);
+                });
+                _pollCache[pollId] = { ...(_pollCache[pollId] || {}), votes };
+                rerenderPollById(pollId);
+            }, err => console.warn('[polls] votes listener error:', err?.message || err));
+        }
+
+        function startPollsListener() {
+            if (pollsUnsub) { pollsUnsub(); pollsUnsub = null; }
+            stopPollVoteListeners();
+            if (currentChatMode !== 'group') return;
+            pollsUnsub = onSnapshot(pollsCol, snap => {
+                snap.docChanges().forEach(change => {
+                    const id = change.doc.id;
+                    if (change.type === 'removed') {
+                        delete _pollCache[id];
+                        if (_pollVoteUnsubs[id]) { try { _pollVoteUnsubs[id](); } catch (_) {} delete _pollVoteUnsubs[id]; }
+                        return;
+                    }
+                    const docData = change.doc.data();
+                    const prevVotes = _pollCache[id]?.votes || docData.votes || {};
+                    _pollCache[id] = { ...docData, votes: prevVotes };
+                    startPollVotesListener(id);
+                    rerenderPollById(id);
+                });
+            }, () => {});
+        }
+
+        // ─── Poll message renderer — called from renderMessage ───
+        function buildPollMessageEl(pollId) {
+            const wrap = document.createElement('div');
+            wrap.setAttribute('data-poll-id', pollId);
+            if (_pollCache[pollId]) {
+                renderPollBubble(pollId, _pollCache[pollId], wrap);
+            } else {
+                wrap.textContent = '📊 Загрузка опроса…';
+                // Fetch once
+                getDoc(doc(db,'polls',pollId)).then(snap => {
+                    if (snap.exists()) {
+                        const docData = snap.data();
+                        _pollCache[snap.id] = { ...docData, votes: _pollCache[snap.id]?.votes || docData.votes || {} };
+                        startPollVotesListener(snap.id);
+                        renderPollBubble(snap.id, _pollCache[snap.id], wrap);
+                    }
+                }).catch(()=>{});
+            }
+            return wrap;
+        }
+
+
+        /* ══════════════════════════════════════════
+           ATTACH SHEET + GALLERY + MUSIC + CHECKLIST
+        ══════════════════════════════════════════ */
+
+        const attachSheet         = document.getElementById('attachSheet');
+        const attachSheetBackdrop = document.getElementById('attachSheetBackdrop');
+        const btnAttach           = document.getElementById('btnAttach');
+        const btnSendWrap         = document.getElementById('btnSendWrap');
+        const btnMicMain          = document.getElementById('btnMicMain');
+
+        // ─── Sheet open/close ───
+        function openAttachSheet() {
+            attachSheet.classList.add('is-open');
+            attachSheetBackdrop.classList.add('is-open');
+        }
+        function closeAttachSheet() {
+            attachSheet.classList.remove('is-open');
+            attachSheetBackdrop.classList.remove('is-open');
+        }
+        btnAttach.addEventListener('click', openAttachSheet);
+        attachSheetBackdrop.addEventListener('click', closeAttachSheet);
+
+        // Swipe down to close sheet
+        let _sheetStartY = 0;
+        attachSheet.addEventListener('touchstart', e => { _sheetStartY = e.touches[0].clientY; }, {passive:true});
+        attachSheet.addEventListener('touchend', e => {
+            if (e.changedTouches[0].clientY - _sheetStartY > 60) closeAttachSheet();
+        }, {passive:true});
+
+        // ─── Tab switching ───
+        document.getElementById('attachTabs').querySelectorAll('.attach-tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.attach-tab').forEach(t => t.classList.remove('is-active'));
+                document.querySelectorAll('.attach-tab-pane').forEach(p => p.classList.remove('is-active'));
+                tab.classList.add('is-active');
+                document.querySelector(`.attach-tab-pane[data-pane="${tab.dataset.tab}"]`).classList.add('is-active');
+            });
+        });
+
+        // ─── Gallery tab ───
+        const galleryOpenBtn      = document.getElementById('galleryOpenBtn');
+        const galleryMultiInput   = document.getElementById('galleryMultiInput');
+        const galleryGrid         = document.getElementById('galleryGrid');
+        const gallerySendBar      = document.getElementById('gallerySendBar');
+        const gallerySendBtn      = document.getElementById('gallerySendBtn');
+        const gallerySelectedCount = document.getElementById('gallerySelectedCount');
+
+        let _galleryFiles  = [];  // FileList items
+        let _gallerySelected = new Set(); // indices
+
+        galleryOpenBtn.addEventListener('click', () => { galleryMultiInput.value = ''; galleryMultiInput.click(); });
+
+        galleryMultiInput.addEventListener('change', () => {
+            _galleryFiles  = [...galleryMultiInput.files];
+            _gallerySelected.clear();
+            galleryGrid.innerHTML = '';
+            gallerySendBar.classList.remove('is-visible');
+
+            _galleryFiles.forEach((file, i) => {
+                const url = URL.createObjectURL(file);
+                const item = document.createElement('div');
+                item.className = 'gallery-item';
+                const img = document.createElement('img');
+                img.src = url; img.loading = 'lazy';
+                item.appendChild(img);
+                item.addEventListener('click', () => {
+                    if (_gallerySelected.has(i)) {
+                        _gallerySelected.delete(i);
+                        item.classList.remove('selected');
+                    } else {
+                        _gallerySelected.add(i);
+                        item.classList.add('selected');
+                    }
+                    const cnt = _gallerySelected.size;
+                    gallerySendBar.classList.toggle('is-visible', cnt > 0);
+                    gallerySelectedCount.textContent = cnt + ' фото выбрано';
+                });
+                galleryGrid.appendChild(item);
+            });
+        });
+
+        gallerySendBtn.addEventListener('click', async () => {
+            const u = auth.currentUser; if (!u) return;
+            const selected = [..._gallerySelected].map(i => _galleryFiles[i]);
+            if (!selected.length) return;
+            closeAttachSheet();
+            let sentCount = 0;
+            for (const file of selected) {
+                try {
+                    showToast(`⏳ Загружаю фото ${sentCount+1}/${selected.length}…`);
+                    const baseMsg = { uid: u.uid, author: displayNick(u), text: '', createdAt: serverTimestamp(), edited: false };
+                    if (currentChatMode === 'group') {
+                        // В общем чате медиа остаётся обычным moderated media, без E2EE.
+                        const imageUrl = await uploadToCloudinary(file);
+                        if (!imageUrl) { showToast('❌ Ошибка загрузки фото'); continue; }
+                        await addDoc(messagesCol, { ...baseMsg, imageUrl });
+                    } else {
+                        if (!currentDMConvId || !currentDMPeerUid) throw new Error('ЛС не выбрано');
+                        const ok = await ensureDME2EUnlocked(u.uid);
+                        if (!ok || !myPrivateKey) throw new Error('ЛС не разблокированы мастер-паролем');
+                        await window.E2E.sendDirectMessage({
+                            convId: currentDMConvId,
+                            peerUid: currentDMPeerUid,
+                            myUid: u.uid,
+                            authorName: displayNick(u),
+                            myPrivateKey,
+                            imageFile: file,
+                            firestoreDb: db,
+                            fsCollection: collection,
+                            fsAddDoc: addDoc,
+                            fsSetDoc: setDoc,
+                            fsDoc: doc,
+                            fsGetDoc: getDoc,
+                            fsServerTimestamp: serverTimestamp,
+                            fsIncrement: increment,
+                            uploadToCloudinary: window.E2E.uploadViaBackend
+                        });
+                    }
+                    sentCount++;
+                } catch(e) { showToast('Ошибка: '+e.message); }
+            }
+            if (sentCount > 0) showToast(`✅ Отправлено ${sentCount} фото`);
+            // reset
+            galleryGrid.innerHTML = '';
+            _galleryFiles = []; _gallerySelected.clear();
+            gallerySendBar.classList.remove('is-visible');
+            galleryMultiInput.value = '';
+        });
+
+        // ─── Music tab ───
+        const musicUploadBtn     = document.getElementById('musicUploadBtn');
+        const musicFileInput     = document.getElementById('musicFileInput');
+        const musicPreviewCard   = document.getElementById('musicPreviewCard');
+        const musicPreviewTitle  = document.getElementById('musicPreviewTitle');
+        const musicPreviewSize   = document.getElementById('musicPreviewSize');
+        const musicPreviewRemove = document.getElementById('musicPreviewRemove');
+        const musicSendBtn       = document.getElementById('musicSendBtn');
+        musicFileInput.onchange = async () => {
+            const file = musicFileInput.files[0];
+            if (!file) return;
+            
+            _pendingMusicFile = file;
+            // Clean up Cloudinary/SoundCloud garbage names like "soundcloud-http_mp3_1_0"
+            let rawTitle = file.name.replace(/\.[^.]+$/, ''); // remove extension
+            rawTitle = rawTitle.replace(/^soundcloud[-_]https?[-_][^\s]*/i, ''); // remove soundcloud prefix
+            rawTitle = rawTitle.replace(/[-_]+/g, ' ').trim(); // underscores/hyphens → spaces
+            rawTitle = rawTitle.replace(/\s+/g, ' ').trim();
+            _pendingMusicTitle = rawTitle || 'Трек';
+            
+            musicPreviewTitle.textContent = _pendingMusicTitle;
+            musicPreviewSize.textContent = (file.size / 1024 / 1024).toFixed(2) + ' MB';
+            musicPreviewCard.classList.add('is-visible');
+            musicSendBtn.disabled = false;
+            
+            const tA = new Audio(URL.createObjectURL(file));
+            tA.onloadedmetadata = () => { _pendingMusicDur = tA.duration; };
+        };
+        let _pendingMusicFile    = null;
+        let _pendingMusicB64     = null;
+        let _pendingMusicTitle   = '';
+        let _pendingMusicDur     = 0;
+
+        musicUploadBtn.addEventListener('click', () => { musicFileInput.value = ''; musicFileInput.click(); });
+
+        musicPreviewRemove.addEventListener('click', () => {
+            _pendingMusicFile = null; _pendingMusicB64 = null;
+            _pendingMusicTitle = ''; _pendingMusicDur = 0;
+            musicPreviewCard.classList.remove('is-visible');
+            musicSendBtn.disabled = true;
+            musicFileInput.value = '';
+        });
+
+musicSendBtn.addEventListener('click', async () => {
+    const u = auth.currentUser;
+    if (!u) { showToast('Нужно войти в аккаунт'); return; }
+    if (!_pendingMusicFile) { showToast('Выбери файл'); return; }
+    if (!_pendingMusicFile.type.startsWith('audio/')) { showToast('Это не аудиофайл'); return; }
+    if (_pendingMusicFile.size > UPLOAD_MAX_AUDIO_BYTES) { showToast('Аудио больше 15 МБ'); return; }
+
+    musicSendBtn.disabled = true;
+    musicSendBtn.textContent = '⏳ Загружаю 0%...';
+    try {
+        const authorNameForRules = await getAuthorNameForRules(u);
+
+        if (currentChatMode === 'group') {
+            const url = await uploadToCloudinary(_pendingMusicFile, percent => {
+                musicSendBtn.textContent = `⏳ Загружаю ${percent}%...`;
+            });
+            if (!url || !url.startsWith('https://')) throw new Error('Cloudinary не вернул ссылку на музыку');
+
+            await addDoc(messagesCol, {
+                uid: u.uid,
+                author: authorNameForRules,
+                text: '',
+                musicUrl: url,
+                musicTitle: _pendingMusicTitle || _pendingMusicFile.name.replace(/\.[^.]+$/, ''),
+                musicDuration: Math.round(_pendingMusicDur || 0),
+                musicMime: _pendingMusicFile.type,
+                createdAt: serverTimestamp(),
+                edited: false,
+            });
+        } else {
+            musicSendBtn.textContent = '⏳ Шифрую музыку…';
+            if (!currentDMConvId || !currentDMPeerUid) throw new Error('ЛС не выбрано');
+            const ok = await ensureDME2EUnlocked(u.uid);
+            if (!ok || !myPrivateKey) throw new Error('ЛС не разблокированы мастер-кодом');
+            const e2e = window.E2E;
+            if (!e2e || typeof e2e.sendDirectMessage !== 'function') throw new Error('E2E-модуль не загружен');
+            await e2e.sendDirectMessage({
+                convId: currentDMConvId,
+                peerUid: currentDMPeerUid,
+                myUid: u.uid,
+                authorName: authorNameForRules,
+                myPrivateKey,
+                text: '',
+                musicFile: _pendingMusicFile,
+                musicDuration: Math.round(_pendingMusicDur || 0),
+                musicMime: _pendingMusicFile.type || 'audio/webm',
+                firestoreDb: db,
+                fsCollection: collection,
+                fsAddDoc: addDoc,
+                fsSetDoc: setDoc,
+                fsDoc: doc,
+                fsGetDoc: getDoc,
+                fsServerTimestamp: serverTimestamp,
+                fsIncrement: increment,
+                uploadToCloudinary: e2e.uploadViaBackend || uploadToCloudinary
+            });
+        }
+
+                _pendingMusicFile = null;
+        _pendingMusicB64 = null;
+        _pendingMusicTitle = '';
+        _pendingMusicDur = 0;
+        musicPreviewCard.classList.remove('is-visible');
+        musicFileInput.value = '';
+        closeAttachSheet();
+        showToast('🎵 Музыка отправлена!');
+    } catch (e) {
+        console.error('[music upload]', e);
+        showToast('Ошибка музыки: ' + e.message);
+    } finally {
+        musicSendBtn.disabled = false;
+        musicSendBtn.textContent = 'Отправить музыку';
+    }
+});
+
+        // ─── Checklist tab ───
+        const checklistTitle    = document.getElementById('checklistTitle');
+        const checklistItemsList = document.getElementById('checklistItemsList');
+        const checklistAddItem  = document.getElementById('checklistAddItem');
+        const checklistSendBtn  = document.getElementById('checklistSendBtn');
+
+        function addChecklistItemRow(val) {
+            const row = document.createElement('div');
+            row.className = 'checklist-item-row';
+            const inp = document.createElement('input');
+            inp.type = 'text'; inp.maxLength = 200;
+            inp.placeholder = 'Пункт ' + (checklistItemsList.children.length + 1);
+            inp.value = val || '';
+            const rm = document.createElement('button');
+            rm.type = 'button'; rm.className = 'checklist-item-remove'; rm.textContent = '✕';
+            rm.addEventListener('click', () => {
+                if (checklistItemsList.children.length > 1) row.remove();
+                else showToast('Минимум 1 пункт');
+            });
+            row.appendChild(inp); row.appendChild(rm);
+            checklistItemsList.appendChild(row);
+        }
+
+        // Init with 3 empty rows
+        function initChecklistRows() {
+            checklistItemsList.innerHTML = '';
+            checklistTitle.value = '';
+            for (let i = 0; i < 3; i++) addChecklistItemRow('');
+        }
+        initChecklistRows();
+
+        checklistAddItem.addEventListener('click', () => {
+            if (checklistItemsList.children.length >= 20) { showToast('Максимум 20 пунктов'); return; }
+            addChecklistItemRow('');
+        });
+
+        checklistSendBtn.addEventListener('click', async () => {
+            const u = auth.currentUser; if (!u) return;
+            const items = [...checklistItemsList.querySelectorAll('input')].map(i=>i.value.trim()).filter(Boolean);
+            if (!items.length) { showToast('Добавьте хотя бы один пункт'); return; }
+            const title = checklistTitle.value.trim();
+            closeAttachSheet();
+            const msg = {
+                uid: u.uid, author: displayNick(u),
+                text: (title || 'Чек-лист') + ': ' + items.join(', '),
+                checklist: { title, items, done: {} },
+                createdAt: serverTimestamp(), edited: false,
+            };
+            try {
+                if (currentChatMode === 'group') await addDoc(messagesCol, msg);
+                else {
+                    if (!currentDMConvId || !currentDMPeerUid) throw new Error('ЛС не выбрано');
+                    const ok = await ensureDME2EUnlocked(u.uid);
+                    if (!ok || !myPrivateKey) throw new Error('ЛС не разблокированы мастер-паролем');
+                    await window.E2E.sendDirectMessage({
+                        convId: currentDMConvId,
+                        peerUid: currentDMPeerUid,
+                        myUid: u.uid,
+                        authorName: displayNick(u),
+                        myPrivateKey,
+                        checklist: { title, items, done: {} },
+                        firestoreDb: db,
+                        fsCollection: collection,
+                        fsAddDoc: addDoc,
+                        fsSetDoc: setDoc,
+                        fsDoc: doc,
+                        fsGetDoc: getDoc,
+                        fsServerTimestamp: serverTimestamp,
+                        fsIncrement: increment,
+                        uploadToCloudinary: window.E2E.uploadViaBackend
+                    });
+                }
+                initChecklistRows();
+                showToast('✅ Чек-лист отправлен!');
+            } catch(e) { showToast('Ошибка: '+e.message); }
+        });
+
+        // Poll button in sheet → open poll modal
+        document.getElementById('attachPollOpenBtn').addEventListener('click', () => {
+            closeAttachSheet();
+            setTimeout(() => openPollModal(), 200);
+        });
+        // Keep old poll button working too
+        document.getElementById('btnPoll') && (document.getElementById('btnPoll').style.display='none');
+
+        // ─── Mic/Send swap ───
+        // (updateSendMicState defined earlier as stub, already wired)
+
+
+        // btnMicMain (синяя кнопка в idle) запускает запись напрямую
+        btnMicMain.addEventListener('click', async () => {
+            if (isRecording) { stopVoiceRecording(true); return; }
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({audio: true});
+                const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+                    ? 'audio/webm;codecs=opus' : 'audio/webm';
+                mediaRecorder = new MediaRecorder(stream, {mimeType});
+                voiceChunks = []; voiceSeconds = 0;
+                mediaRecorder.ondataavailable = e => { if (e.data.size > 0) voiceChunks.push(e.data); };
+                mediaRecorder.onstop = async () => {
+                    stream.getTracks().forEach(t => t.stop());
+                    if (!mediaRecorder._sendOnStop) return;
+                    const blob = new Blob(voiceChunks, { type: mimeType });
+                    if (!voiceChunks.length || blob.size < 1000) { showToast('❌ Голосовое пустое. Удержи запись чуть дольше.'); return; }
+                    if (blob.size > UPLOAD_MAX_AUDIO_BYTES) { showToast('❌ Голосовое больше 15 МБ'); return; }
+                    // Загружаем голосовое на Cloudinary
+                    (async () => {
+                        const u = auth.currentUser; if (!u) return;
+                        const dur = voiceSeconds;
+                        try {
+                            stickToBottom = true;
+                            showToast('⏳ Загружаю голосовое…');
+                            const voiceFile = new File([blob], `voice_${Date.now()}.webm`, {type: mimeType});
+                            if (currentChatMode === 'group') {
+                                const voiceUrl = await uploadToCloudinary(voiceFile, percent => {
+                                    showToast(`⏳ Загружаю голосовое ${percent}%...`);
+                                });
+                                if (!voiceUrl || !voiceUrl.startsWith('https://')) throw new Error('Cloudinary не вернул ссылку на голосовое');
+                                const baseMsg = { uid:u.uid, author:displayNick(u), text:'',
+                                    createdAt:serverTimestamp(), edited:false,
+                                    voiceUrl, voiceDuration:dur, voiceMime:mimeType };
+                                await addDoc(messagesCol, baseMsg);
+                            } else {
+                                if (!currentDMConvId || !currentDMPeerUid) throw new Error('ЛС не выбрано');
+                                const ok = await ensureDME2EUnlocked(u.uid);
+                                if (!ok || !myPrivateKey) throw new Error('ЛС не разблокированы мастер-паролем');
+                                await window.E2E.sendDirectMessage({
+                                    convId: currentDMConvId,
+                                    peerUid: currentDMPeerUid,
+                                    myUid: u.uid,
+                                    authorName: displayNick(u),
+                                    myPrivateKey,
+                                    voiceFile,
+                                    voiceDuration: dur,
+                                    voiceMime: mimeType,
+                                    firestoreDb: db,
+                                    fsCollection: collection,
+                                    fsAddDoc: addDoc,
+                                    fsSetDoc: setDoc,
+                                    fsDoc: doc,
+                                    fsGetDoc: getDoc,
+                                    fsServerTimestamp: serverTimestamp,
+                                    fsIncrement: increment,
+                                    uploadToCloudinary: window.E2E.uploadViaBackend
+                                });
+                            }
+                        } catch(e) { showToast('Ошибка: ' + e.message); }
+                    })();
+                };
+                mediaRecorder.start(200);
+                isRecording = true;
+                voiceRecBar.classList.add('is-visible');
+                voiceRecTime.textContent = '0:00';
+                voiceTimerInt = setInterval(() => {
+                    voiceSeconds++;
+                    voiceRecTime.textContent = fmtVoiceTime(voiceSeconds);
+                    if (voiceSeconds >= 90) stopVoiceRecording(true);
+                }, 1000);
+            } catch(e) {
+                showToast('❌ Нет доступа к микрофону');
+            }
+        });
+
+        // ─── Utility: compress image to base64 ───
+        async function compressImageFile(file, maxKB) {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                const url = URL.createObjectURL(file);
+                img.onload = () => {
+                    URL.revokeObjectURL(url);
+                    let w = img.width, h = img.height;
+                    const MAX = 1200;
+                    if (w > MAX || h > MAX) {
+                        if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+                        else       { w = Math.round(w * MAX / h); h = MAX; }
+                    }
+                    const canvas = document.createElement('canvas');
+                    canvas.width = w; canvas.height = h;
+                    canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+                    let q = 0.82;
+                    let result = canvas.toDataURL('image/jpeg', q);
+                    while (result.length > maxKB * 1024 * 1.37 && q > 0.3) {
+                        q -= 0.08;
+                        result = canvas.toDataURL('image/jpeg', q);
+                    }
+                    resolve(result);
+                };
+                img.onerror = reject;
+                img.src = url;
+            });
+        }
+
+        // ─── Utility: compress audio to ~1MB ───
+        async function compressMusicFile(file, targetBytes) {
+            // Decode audio, re-encode at lower sample rate / mono via AudioContext
+            const arrayBuf = await file.arrayBuffer();
+            const ctx = new (window.AudioContext || window.webkitAudioContext)({sampleRate: 22050});
+            const decoded = await ctx.decodeAudioData(arrayBuf);
+            // Mix down to mono
+            const monoLen = decoded.length;
+            const monoData = new Float32Array(monoLen);
+            for (let c = 0; c < decoded.numberOfChannels; c++) {
+                const ch = decoded.getChannelData(c);
+                for (let i = 0; i < monoLen; i++) monoData[i] += ch[i] / decoded.numberOfChannels;
+            }
+            // Encode as WAV (simple PCM)
+            const wavBuf = pcmToWav(monoData, 22050);
+            const blob = new Blob([wavBuf], {type:'audio/wav'});
+            // If still too big, trim
+            const finalBlob = blob.size > targetBytes
+                ? blob.slice(0, targetBytes)
+                : blob;
+            return fileToBase64(finalBlob);
+        }
+
+        function pcmToWav(samples, sampleRate) {
+            const buf = new ArrayBuffer(44 + samples.length * 2);
+            const view = new DataView(buf);
+            const writeStr = (o, s) => { for (let i=0;i<s.length;i++) view.setUint8(o+i, s.charCodeAt(i)); };
+            writeStr(0, 'RIFF');
+            view.setUint32(4, 36 + samples.length * 2, true);
+            writeStr(8, 'WAVE');
+            writeStr(12, 'fmt ');
+            view.setUint32(16, 16, true);
+            view.setUint16(20, 1, true);
+            view.setUint16(22, 1, true);
+            view.setUint32(24, sampleRate, true);
+            view.setUint32(28, sampleRate * 2, true);
+            view.setUint16(32, 2, true);
+            view.setUint16(34, 16, true);
+            writeStr(36, 'data');
+            view.setUint32(40, samples.length * 2, true);
+            for (let i = 0; i < samples.length; i++) {
+                const s = Math.max(-1, Math.min(1, samples[i]));
+                view.setInt16(44 + i * 2, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+            }
+            return buf;
+        }
+
+        function fileToBase64(file) {
+            return new Promise((res, rej) => {
+                const r = new FileReader();
+                r.onload = () => res(r.result);
+                r.onerror = rej;
+                r.readAsDataURL(file);
+            });
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes < 1024) return bytes + ' Б';
+            if (bytes < 1048576) return (bytes/1024).toFixed(1) + ' КБ';
+            return (bytes/1048576).toFixed(1) + ' МБ';
+        }
+
+        /* ══════════════════════════════
+           SUBMIT MESSAGE
+        ══════════════════════════════ */
+        async function submitComposer(){
+            const u=auth.currentUser; if (!u) return;
+            let text=cleanContent(chatInput.value).trim();
+            const hasImg = !!(pendingImageFile || pendingImageUrl);
+            if (!text && !hasImg){globalStatus.textContent='Введите текст или выберите картинку';globalStatus.classList.add('is-error');return;}
+            // Если есть файл но ещё не загружен на Cloudinary — загружаем сейчас
+            if (currentChatMode === 'group' && pendingImageFile && !pendingImageUrl) {
+                globalStatus.textContent = '⏳ Загружаю фото…';
+                try {
+                    pendingImageUrl = await uploadToCloudinary(pendingImageFile, pct => {
+                        globalStatus.textContent = `⏳ Загружаю фото… ${pct}%`;
+                    });
+                    if (!pendingImageUrl) throw new Error('Не удалось загрузить фото');
+                    globalStatus.textContent = '';
+                } catch(uploadErr) {
+                    globalStatus.textContent = uploadErr.message;
+                    globalStatus.classList.add('is-error');
+                    chatSend.disabled = false;
+                    return;
+                }
+            }
+            if (!editingMessageId){
+                if (Date.now()-lastOutboundAt<SPAM_INTERVAL_MS){showToast('⏳ Не спамь!');return;}
+            }
+            chatSend.disabled=true; stickToBottom=true;
+            globalStatus.textContent=''; globalStatus.classList.remove('is-error');
+            try {
+                if (editingMessageId){
+                    // Editing — text only, no image change
+                    if (currentChatMode==='group') await updateDoc(doc(db,'messages',editingMessageId),{text:text,edited:true});
+                    else {
+                        // E2E: шифруем отредактированный текст для обоих участников
+                        const e2e = await encryptDM(text, currentDMPeerUid, u.uid);
+                        await updateDoc(doc(db,'dmConvs',currentDMConvId,'messages',editingMessageId),{
+                            text: '', e2eForPeer: e2e.forPeer, e2eForMe: e2e.forMe, edited:true,
+                            ...(e2e.sig ? { e2eSig: e2e.sig, e2eSigAlg: e2e.alg || 'ECDSA-P384-SHA384' } : {})
+                        });
+                    }
+                    cancelEditMessage();
+                } else {
+                    let msgData;
+                    if (currentChatMode==='group'){
+                        // ── Модерация: проверяем токсичность для обычных пользователей ──
+                        if (!userIsAdmin && text) {
+                            globalStatus.textContent = '🔍 Проверка…';
+                            const moderation = await checkToxicity(text);
+
+                            if (!moderation.ok) {
+                                globalStatus.textContent = moderationErrorText(moderation);
+                                globalStatus.classList.add('is-error');
+                                showToast('⚠️ ' + moderationErrorText(moderation));
+                                return; // не отправляем, но НЕ называем это токсичностью и НЕ выдаём варн
+                            }
+
+                            if (moderation.toxic) {
+                                globalStatus.textContent = '';
+                                showToast('⛔ Сообщение слишком токсично и не отправлено');
+
+                                if (typeof moderation.warns === 'number') {
+                                    const maxWarns = moderation.maxWarns || MAX_WARNS;
+                                    const remaining = Math.max(0, maxWarns - moderation.warns);
+                                    if (moderation.warns >= maxWarns) {
+                                        showToast(`🚫 Вы получили ${moderation.warns}/${maxWarns} варнов — отправка сообщений заблокирована`);
+                                        applyWarnsBan(moderation.warns);
+                                    } else {
+                                        showToast(`⚠️ Предупреждение ${moderation.warns}/${maxWarns}. Ещё ${remaining} — и бан`);
+                                    }
+                                }
+                                return; // не отправляем
+                            }
+                            globalStatus.textContent = '';
+                        }
+                        msgData={
+                            uid:u.uid, author:displayNick(u),
+                            text: text || '',
+                            createdAt:serverTimestamp(), edited:false,
+                            ...(hasImg && pendingImageUrl ? {imageUrl: pendingImageUrl} : {}),
+                            ...(replyingTo?{replyTo:{id:replyingTo.id,author:replyingTo.author,text:replyingTo.text.slice(0,100)}}:{})
+                        };
+                        await addDoc(messagesCol,msgData);
+                    } else {
+                        // ЛС — единый E2E-путь. Медиа шифруется локально как encrypted blob,
+                        // затем грузится как raw. Plaintext URL/файл в Firestore не сохраняется.
+                        if (!currentDMConvId || !currentDMPeerUid) throw new Error('ЛС не выбрано');
+                        const ok = await ensureDME2EUnlocked(u.uid);
+                        if (!ok || !myPrivateKey) throw new Error('ЛС не разблокированы мастер-паролем');
+                        await window.E2E.sendDirectMessage({
+                            convId: currentDMConvId,
+                            peerUid: currentDMPeerUid,
+                            myUid: u.uid,
+                            authorName: displayNick(u),
+                            myPrivateKey,
+                            text,
+                            imageFile: pendingImageFile || null,
+                            replyTo: replyingTo ? { id: replyingTo.id, author: replyingTo.author, text: replyingTo.text || '' } : null,
+                            firestoreDb: db,
+                            fsCollection: collection,
+                            fsAddDoc: addDoc,
+                            fsSetDoc: setDoc,
+                            fsDoc: doc,
+                            fsGetDoc: getDoc,
+                            fsServerTimestamp: serverTimestamp,
+                            fsIncrement: increment,
+                            uploadToCloudinary: window.E2E.uploadViaBackend
+                        });
+                    }
+                    cancelReply(); lastOutboundAt=Date.now();
+                    chatInput.value=''; chatInput.style.height='auto';
+                    clearImagePreview();
+                    chatSend.disabled=true;
+                }
+            } catch(e){globalStatus.textContent=e.message||String(e);globalStatus.classList.add('is-error');}
+            finally{chatSend.disabled=!chatInput.value.trim()&&!pendingImageFile;}
+        }
+        chatSend.addEventListener('click',submitComposer);
+        chatInput.addEventListener('keydown',e=>{
+            if (e.key==='Enter'&&!e.shiftKey){e.preventDefault();if(!chatSend.disabled)submitComposer();}
+            // ↑ arrow key — edit last own message (TG style)
+            if (e.key==='ArrowUp'&&!chatInput.value.trim()){
+                e.preventDefault();
+                const rows=[...chatMessages.querySelectorAll('.msg-row--me')];
+                const last=rows[rows.length-1];
+                if (last) {const msgId=last.dataset.msgId; const plain=last.dataset.plain; if(msgId&&plain)startEditMessage(msgId,plain);}
+            }
+        });
+        chatInput.addEventListener('input',()=>{
+            chatInput.style.height='auto';
+            chatInput.style.height=Math.min(chatInput.scrollHeight,140)+'px';
+            chatSend.disabled=!chatInput.value.trim()&&!pendingImageFile;
+            scheduleTypingPing();
+            updateSendMicState();
+        });
+
+        /* ══════════════════════════════
+           HOTKEYS
+        ══════════════════════════════ */
+        document.addEventListener('keydown',e=>{
+            if (e.key==='Escape'){cancelEditMessage();cancelReply();exitSelectionMode();document.querySelectorAll('.modal-overlay.is-open').forEach(m=>m.classList.remove('is-open'));return;}
+            if (e.ctrlKey||e.metaKey){
+                if (e.key==='k'){e.preventDefault();msgSearchInput?.focus();}
+                if (e.key==='p'){e.preventDefault();openProfileModal();}
+                if (e.key==='/'){e.preventDefault();document.getElementById('hotkeysModal').classList.add('is-open');}
+                if (e.key==='a'&&isSelectionMode){e.preventDefault();/* select all */chatMessages.querySelectorAll('.msg-row').forEach(r=>{r.classList.add('is-selected');selectedMessages.add(r.dataset.msgId);});}
+            }
+        });
+        document.getElementById('hotkeysClose').addEventListener('click',()=>document.getElementById('hotkeysModal').classList.remove('is-open'));
+
+        /* ══════════════════════════════════════════════════════════════
+           §8 · SECURITY MONITORING — аномалии и подозрительная активность
+        ══════════════════════════════════════════════════════════════ */
+        (function initSecurityMonitoring() {
+            // ── Счётчики подозрительных действий ─────────────────────
+            const _sec = {
+                failedAuths: 0,
+                failedAuthWindow: 0,
+                MAX_FAILED_AUTH: 5,
+                AUTH_WINDOW_MS: 5 * 60_000,       // 5 минут
+                xssAttempts: 0,
+                uploadBlocked: 0,
+            };
+
+            // ── Мониторинг неудачных попыток авторизации ──────────────
+            // Перехватываем ошибки Firebase Auth
+            window.addEventListener('unhandledrejection', (e) => {
+                const msg = e?.reason?.message || '';
+                if (msg.includes('auth/') || msg.includes('wrong-password') || msg.includes('user-not-found')) {
+                    const now = Date.now();
+                    if (now - _sec.failedAuthWindow > _sec.AUTH_WINDOW_MS) {
+                        _sec.failedAuths = 0;
+                        _sec.failedAuthWindow = now;
+                    }
+                    _sec.failedAuths++;
+                    console.warn('[SECURITY] Failed auth attempt', _sec.failedAuths);
+                    if (_sec.failedAuths >= _sec.MAX_FAILED_AUTH) {
+                        console.error('[SECURITY ALERT] Слишком много неудачных попыток входа за 5 минут!');
+                        // Отправляем сигнал на бэкенд (не блокируем UI, просто логируем)
+                        try {
+                            navigator.sendBeacon(window.BACKEND_URL + '/security-alert', JSON.stringify({
+                                type: 'brute_force',
+                                count: _sec.failedAuths,
+                                ts: new Date().toISOString(),
+                            }));
+                        } catch (_) {}
+                    }
+                }
+            });
+
+            // ── §6 · Мониторинг заблокированных загрузок ─────────────
+            // Отслеживаем через аудит-лог
+            Object.defineProperty(window, '_uploadAuditLog', {
+                get() { return this.__uploadAuditLog || []; },
+                set(v) { this.__uploadAuditLog = v; },
+                configurable: true,
+            });
+
+            // ── §8 · Отчёт о нарушениях CSP (report-uri не нужен — логируем через JS) ──
+            document.addEventListener('securitypolicyviolation', (e) => {
+                console.error('[SECURITY CSP VIOLATION]', {
+                    blockedURI: e.blockedURI,
+                    violatedDirective: e.violatedDirective,
+                    originalPolicy: e.originalPolicy?.slice(0, 100),
+                });
+                try {
+                    navigator.sendBeacon(window.BACKEND_URL + '/security-alert', JSON.stringify({
+                        type: 'csp_violation',
+                        blockedURI: e.blockedURI,
+                        directive: e.violatedDirective,
+                        ts: new Date().toISOString(),
+                    }));
+                } catch (_) {}
+            });
+
+            // ── §9 · Перехват console.error для сокрытия стека от Production ──
+            const _origError = console.error.bind(console);
+            console.error = (...args) => {
+                // Скрываем полные стек-трейсы в продакшне (не localhost)
+                if (location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+                    const sanitized = args.map(a =>
+                        a instanceof Error ? `[Error] ${a.message}` :
+                        typeof a === 'string' ? a.replace(/at\s+\S+\s+\([^)]+\)/g, '') : a
+                    );
+                    _origError(...sanitized);
+                } else {
+                    _origError(...args);
+                }
+            };
+
+            // ── §7 · Регулярная проверка целостности зависимостей (dev-хелпер) ──
+            // Логируем внешние скрипты на странице для аудита
+            if (location.hostname === 'localhost') {
+                const scripts = [...document.querySelectorAll('script[src]')].map(s => s.src);
+                console.info('[SECURITY DEPS AUDIT]', scripts);
+            }
+
+            console.info('[SECURITY] Monitoring module initialized');
+        })();
+        /* ══════════════════════════════════════════════════════════════
+           КОНЕЦ SECURITY MONITORING MODULE
+        ══════════════════════════════════════════════════════════════ */
+
+        // Close modals on overlay click
+        document.querySelectorAll('.modal-overlay').forEach(overlay=>{
+            overlay.addEventListener('click',e=>{
+                if(e.target===overlay){
+                    overlay.classList.remove('is-open');
+                }
+            });
+        });
+
+        /* ══════════════════════════════
+           TEARDOWN
+        ══════════════════════════════ */
+        function tearDownChat(){
+            if (messagesUnsub){messagesUnsub();messagesUnsub=null;}
+            if (typingUnsub){typingUnsub();typingUnsub=null;}
+            if (typingInterval){clearInterval(typingInterval);typingInterval=null;}
+            if (peerReadUnsub){peerReadUnsub();peerReadUnsub=null;}
+            if (_pinnedUnsub){_pinnedUnsub();_pinnedUnsub=null;}
+            if (pollsUnsub){pollsUnsub();pollsUnsub=null;}
+            stopPollVoteListeners();
+            peerHasRead=false;
+            _e2eDecryptedCache.clear();
+            _e2eMessageDecryptCache.clear(); // сбрасываем кеш расшифровки при смене чата
+            pinnedMsgId=null; _pinnedBannerLastText=''; _pinnedBannerDismissed=null;
+            pinnedBanner.classList.remove('is-on');
+            clearImagePreview();
+            // Clear auto-delete timers
+            Object.values(autodelTimers).forEach(t=>clearTimeout(t));
+            Object.keys(autodelTimers).forEach(k=>delete autodelTimers[k]);
+            chatMessages.querySelectorAll('.msg-row,.msg-date-sep').forEach(n=>n.remove());
+            chatEmpty.style.display=''; typingBar.innerHTML='';
+            lastKnownLastMessageId=null; unreadBelow=0;
+            cancelEditMessage(); cancelReply();
+            scrollDownFab.classList.add('hidden');
+            if (msgSearchInput) msgSearchInput.value='';
+        }
+
+        function startChatForUser(){
+            tearDownChat();
+            globalStatus.textContent=''; globalStatus.classList.remove('is-error');
+            renderSidebarUser();
+            refreshMiniProfilePlayer();
+            currentChatMode='group';
+            tgHeaderAv.style.background='linear-gradient(135deg,#5ec8ff,#a78bfa)';
+            tgHeaderAv.textContent='💬'; tgHeaderName.textContent='Основной чат'; tgHeaderStatus.textContent='Чат класса 6А'; tgHeaderStatus.classList.remove('online');
+            startGroupListeners();
+            startOnlineBar();
+            watchDMBadge();
+            updateAutodelBanner('group');
+        }
+
+        /* ══════════════════════════════
+           BAN
+        ══════════════════════════════ */
+        let _banUnsub=null;
+        function showBanned(){
+            if (_banUnsub){_banUnsub();_banUnsub=null;}
+            authGate.classList.add('hidden'); appRoot.classList.add('hidden'); authPass.value=''; tearDownChat();
+            const bannedScreen=document.getElementById('bannedScreen');
+            const bannedSub=document.getElementById('bannedSubText');
+            const bannedLogout=document.getElementById('bannedLogoutBtn');
+            const bannedReg=document.getElementById('bannedRegisterBtn');
+            bannedScreen.classList.add('is-visible');
+            bannedLogout.onclick=async()=>{await signOut(auth).catch(()=>{});bannedSub.innerHTML='Ты вышел из аккаунта.<br>Можешь создать новый.';bannedLogout.style.display='none';bannedReg.style.display='block';};
+            bannedReg.onclick=()=>{bannedScreen.classList.remove('is-visible');authGate.classList.remove('hidden');const b=document.getElementById('btnRegisterMode');if(b)b.click();else registerMode(true);};
+        }
+
+        /* ══════════════════════════════
+           AUTH STATE
+        ══════════════════════════════ */
+        onAuthStateChanged(auth, async user=>{
+            clearTimeout(window._authTimeoutId);
+            authChecking.classList.add('hidden');
+            if (_banUnsub){_banUnsub();_banUnsub=null;}
+            if (!user){
+                resetDME2ESession();
+                authFormBlock.classList.remove('hidden'); authGate.classList.remove('hidden');
+                appRoot.classList.add('hidden'); authPass.value=''; tearDownChat(); return;
+            }
+            _dbgLog('auth:stateChanged', user.uid);
+            // Save/ensure user doc FIRST — before any ban check that reads Firestore
+            try{
+                const u=auth.currentUser;
+                if(u){
+                    const realName = (u.displayName&&u.displayName.trim()) || u.email?.split('@')[0] || '?';
+                    const snap=await getDoc(doc(db,'users',u.uid));
+                    if(!snap.exists()){
+                        // Create full doc — all required fields for Firestore rules
+                        await setDoc(doc(db,'users',u.uid),{
+                            displayName: realName,
+                            uid: u.uid,
+                            email: u.email||'',
+                            stars: 0,
+                            createdAt: serverTimestamp(),
+                            lastSeen: serverTimestamp(),
+                            banned: false,
+                        });
+                    } else {
+                        // Update only safe fields — never overwrite banned/admin/uid/stars
+                        // NOTE: 'uid' field is blocked by Firestore rules on update, so don't include it
+                        if (u.email) {
+                            await setDoc(doc(db,'users',u.uid),{email:u.email},{merge:true});
+                        }
+                    }
+                }
+            }catch(e){_dbgLog('auth:saveDoc:error',e.message);}
+            // Ban check AFTER doc is guaranteed to exist
+            try{const s=await getDoc(doc(db,'users',user.uid));if(s.exists()&&s.data().banned===true){showBanned();return;}}catch(e){console.warn('ban check',e);}
+            _banUnsub=onSnapshot(doc(db,'users',user.uid),snap=>{
+                if(!snap.exists()) return;
+                const d = snap.data();
+                // Хард-бан (banned===true) → полный экран блокировки
+                if(d.banned===true){showBanned();return;}
+                // Варны — блокируем только инпут группового чата
+                applyWarnsBan(d.warns || 0);
+            });
+            // Check admin
+            userIsAdmin = ADMIN_UIDS.has(user.uid);
+            // Load avatar + bio + status from Firestore
+            try{
+                const s=await getDoc(doc(db,'users',user.uid));
+                if(s.exists()){
+                    const d=s.data();
+                    // Заполняем кеш ника из Firestore — источник правды
+                    if(d.displayName && d.displayName.trim()) _userNickCache[user.uid]=d.displayName.trim();
+                    if(d.avatar) avatarCache[user.uid]=d.avatar;
+                    if(d.bio!==undefined||d.status!==undefined){
+                        userProfile.bio    = d.bio    ?? userProfile.bio    ?? '';
+                        userProfile.status = d.status ?? userProfile.status ?? 'online';
+                        lsSet(PROFILE_KEY, userProfile);
+                    }
+                }
+            }catch(e){_dbgLog('auth:loadProfile:error',e.message);}
+            // Apply saved theme (could be 'system')
+            setTheme(localStorage.getItem(THEME_KEY)||'dark');
+            // E2E для ЛС больше не инициализируется при обычном входе.
+            // Мастер-код запрашивается только при первом открытии личного чата.
+            resetDME2ESession();
+            authFormBlock.classList.add('hidden'); authGate.classList.add('hidden'); appRoot.classList.remove('hidden');
+            try { startChatForUser(); } catch(e){ _dbgLog('startChat:error',e.message); }
+            try { applyUiAppearance(); } catch(_) {}
+            try { buildSidebarList(); } catch(e){ _dbgLog('buildSidebar:error',e.message); }
+        });

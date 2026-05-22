@@ -1967,23 +1967,59 @@ async function decryptMessage(msgData, myUid, myPrivateKey, firestoreDb = null, 
  * @returns {Promise<boolean>}  true = токсично
  */
 async function checkToxicity(text) {
-  if (!text || text.trim().length < 3) return false;
+  const cleanText = String(text || '').trim();
+  if (cleanText.length < 3) {
+    return { ok: true, toxic: false, score: 0, reason: 'too_short' };
+  }
+
   try {
     const resp = await fetch(`${BACKEND_URL}/moderate`, {
       method: 'POST',
       headers: await authJsonHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ text: text.trim() }),
-      signal: AbortSignal.timeout(8000)  // 8 сек таймаут
+      body: JSON.stringify({ text: cleanText }),
+      signal: AbortSignal.timeout(8000)
     });
-    if (!resp.ok) {
-      console.warn('[moderation] Бэкенд вернул:', resp.status);
-      return true; // fail-closed: если проверка сломалась, блокируем отправку
+
+    let data = {};
+    try {
+      data = await resp.json();
+    } catch (_) {
+      data = {};
     }
-    const { toxic } = await resp.json();
-    return !!toxic;
+
+    if (!resp.ok) {
+      const detail = data.detail || data.error || `HTTP ${resp.status}`;
+      console.warn('[moderation] Бэкенд вернул ошибку:', resp.status, detail);
+      return {
+        ok: false,
+        toxic: false,
+        score: null,
+        status: resp.status,
+        reason: 'backend_error',
+        message: String(detail)
+      };
+    }
+
+    return {
+      ok: true,
+      toxic: !!data.toxic,
+      score: typeof data.score === 'number' ? data.score : 0,
+      warnIssued: !!data.warnIssued,
+      warns: Number.isFinite(Number(data.warns)) ? Number(data.warns) : null,
+      maxWarns: Number.isFinite(Number(data.maxWarns)) ? Number(data.maxWarns) : null
+    };
   } catch (e) {
-    console.warn('[moderation] Недоступен бэкенд:', e.message);
-    return true;
+    const name = e?.name || '';
+    const isTimeout = name === 'AbortError' || name === 'TimeoutError';
+    console.warn('[moderation] Недоступен бэкенд:', e?.message || e);
+    return {
+      ok: false,
+      toxic: false,
+      score: null,
+      status: 0,
+      reason: isTimeout ? 'timeout' : 'network_error',
+      message: isTimeout ? 'Модерация не ответила за 8 секунд' : 'Бэкенд модерации недоступен'
+    };
   }
 }
 
