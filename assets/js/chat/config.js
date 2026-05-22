@@ -21,10 +21,13 @@ window.E2E_CLOUDINARY_CLOUD_NAME = window.CLOUDINARY_CLOUD_NAME;
     'дебил', 'дебилка', 'дебилы', 'дегенерат', 'кретин', 'идиот', 'идиотка',
     'даун', 'дауны',
     'урод', 'уродка', 'уроды', 'уебище',
-    'никчемный', 'никчемная', 'ничтожество',
+    'никчемный', 'никчемная', 'никчемное', 'никчемные', 'ничтожество', 'ничтожный', 'ничтожная', 'ничтожное',
+    'животное', 'скотина', 'свинья', 'обезьяна',
 
     // Threats / self-harm baiting
     'сдохни', 'умри', 'убейся', 'сдох', 'подохни',
+    'убью', 'зарежу', 'порежу', 'сломаю', 'изобью', 'побью', 'ударю',
+    'разорву', 'раздроблю', 'разроблю', 'разнесу', 'вырежу',
 
     // Russian profanity / obscene insults
     'сука', 'сучка', 'сучара',
@@ -36,8 +39,27 @@ window.E2E_CLOUDINARY_CLOUD_NAME = window.CLOUDINARY_CLOUD_NAME;
     'шлюха', 'шалава',
 
     // Homophobic / identity slurs often used as school insults
-    'пидор', 'пидорас', 'пидар', 'пидрас', 'пидрила', 'пидрила',
+    'пидор', 'пидорас', 'пидар', 'пидрас', 'пидрила',
     'гомик', 'петух'
+  ];
+
+  const LOCAL_TOXIC_PATTERNS = [
+    {
+      label: 'family_threat',
+      test: (normalized) => {
+        const hasFamilyTarget = /(^|\s)(семь[яюеи]|мам[ауые]|пап[ауые]|родител[ьяей]|брат[ауе]?|сестр[ауые])($|\s)/u.test(normalized);
+        const hasViolence = /(^|\s)(убью|зарежу|порежу|изобью|побью|сломаю|разорву|раздроблю|разроблю|вырежу|разнесу)($|\s)/u.test(normalized);
+        return hasFamilyTarget && hasViolence;
+      }
+    },
+    {
+      label: 'direct_family_threat_phrase',
+      test: (normalized) => /(^|\s)(твою|твоих|твоей|твой)\s+(семь[яюеи]|мам[ауые]|пап[ауые]|родител[ьяей])/u.test(normalized)
+    },
+    {
+      label: 'direct_dehumanization',
+      test: (normalized) => /(^|\s)(ты|вы|он|она)\s+(животное|скотина|свинья|обезьяна|ничтожество)($|\s)/u.test(normalized)
+    }
   ];
 
   function normalizeModerationText(value) {
@@ -73,6 +95,12 @@ window.E2E_CLOUDINARY_CLOUD_NAME = window.CLOUDINARY_CLOUD_NAME;
     const normalized = normalizeModerationText(text);
     if (!normalized) return '';
     const compact = normalized.replace(/\s+/g, '');
+
+    for (const pattern of LOCAL_TOXIC_PATTERNS) {
+      try {
+        if (pattern.test(normalized, compact)) return pattern.label;
+      } catch (_) {}
+    }
 
     for (const word of LOCAL_TOXIC_WORDS) {
       const w = normalizeModerationText(word).replace(/\s+/g, '');
