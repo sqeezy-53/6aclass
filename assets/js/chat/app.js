@@ -557,19 +557,28 @@ function dataUrlToFile(dataUrl, filename) {
         const MAX_WARNS            = 3;
 
         async function checkToxicity(text) {
-            return window.E2E.checkToxicity(text);
+            const result = await window.E2E.checkToxicity(text);
+            // Backward compatibility: old E2E module returned boolean.
+            if (typeof result === 'boolean') {
+                return { ok: true, toxic: result, score: null, warns: null, legacy: true };
+            }
+            return result || { ok: false, toxic: false, score: null, reason: 'empty_moderation_result' };
+        }
+
+        function moderationErrorText(result) {
+            if (!result) return 'Модерация временно недоступна. Сообщение не отправлено.';
+            if (result.status === 401) return 'Нет авторизации для модерации. Перезайдите в аккаунт.';
+            if (result.status === 429) return 'Слишком много сообщений подряд. Подождите минуту.';
+            if (result.status === 503) return 'Модерация временно недоступна на сервере. Попробуйте позже.';
+            if (result.reason === 'timeout') return 'Модерация не ответила вовремя. Попробуйте ещё раз.';
+            if (result.reason === 'network_error') return 'Нет связи с бэкендом модерации. Сообщение не отправлено.';
+            return result.message || 'Модерация временно недоступна. Сообщение не отправлено.';
         }
 
         /**
-         * Добавляет варн пользователю в Firestore.
-         * Возвращает новое количество варнов.
+         * Варны выдаются только бэкендом через Firebase Admin SDK.
+         * Клиент не имеет права сам увеличивать users/{uid}.warns: Firestore rules это блокируют.
          */
-        async function warnUser(uid) {
-            const userRef = doc(db, 'users', uid);
-            await updateDoc(userRef, { warns: increment(1) });
-            const snap = await getDoc(userRef);
-            return snap.exists() ? (snap.data().warns || 1) : 1;
-        }
 
         /**
          * Применяет UI-блокировку отправки при >= MAX_WARNS варнов.
@@ -4104,20 +4113,20 @@ function dataUrlToFile(dataUrl, filename) {
             if (options.length < 2) { showToast('Нужно минимум 2 варианта'); return; }
             const anonymous = document.getElementById('pollAnonymous').checked;
             try {
+                const authorNameForRules = await getAuthorNameForRules(u);
                 const pollRef = await addDoc(pollsCol, {
                     question,
                     options,
                     anonymous,
                     createdAt: serverTimestamp(),
                     createdBy: u.uid,
-                    createdByName: displayNick(u),
-                    votes: {}, // votes[optionIndex] = [uid, uid, ...]
+                    createdByName: authorNameForRules,
                     closed: false,
                 });
                 // Send a message referencing this poll
                 await addDoc(messagesCol, {
                     uid: u.uid,
-                    author: displayNick(u),
+                    author: authorNameForRules,
                     text: '📊 ' + question,
                     pollId: pollRef.id,
                     createdAt: serverTimestamp(),
@@ -4130,6 +4139,10 @@ function dataUrlToFile(dataUrl, filename) {
 
         // ─── Render poll bubble ───
         function renderPollBubble(pollId, pollData, containerEl) {
+            if (!pollData || !Array.isArray(pollData.options)) {
+                containerEl.textContent = '📊 Опрос недоступен';
+                return;
+            }
             const u = auth.currentUser;
             const votes = pollData.votes || {};
             const anonymous = pollData.anonymous;
@@ -4252,51 +4265,89 @@ function dataUrlToFile(dataUrl, filename) {
 
         async function castPollVote(pollId, pollData, optionIdx) {
             const u = auth.currentUser; if (!u) return;
+            if (!pollData || !Array.isArray(pollData.options)) return;
+            if (optionIdx < 0 || optionIdx >= pollData.options.length) return;
+
             const votes = pollData.votes || {};
 
-            // Определяем текущий голос пользователя
+            // Определяем текущий голос пользователя по локальному кешу votes subcollection
             let currentVoteIdx = -1;
             for (let i = 0; i < pollData.options.length; i++) {
                 if ((votes[String(i)] || []).includes(u.uid)) { currentVoteIdx = i; break; }
             }
 
-            // Повторный клик по тому же варианту — снять голос
-            if (currentVoteIdx === optionIdx) {
-                try {
-                    await updateDoc(doc(db, 'polls', pollId), {
-                        ['votes.' + optionIdx]: arrayRemove(u.uid)
-                    });
-                } catch(e) { showToast('Ошибка: ' + e.message); }
-                return;
-            }
+            const voteRef = doc(db, 'polls', pollId, 'votes', u.uid);
 
-            // Атомарно: убрать из старого + добавить в новый (без race condition)
             try {
-                const batch = {};
-                if (currentVoteIdx !== -1) {
-                    batch['votes.' + currentVoteIdx] = arrayRemove(u.uid);
+                // Повторный клик по тому же варианту — снять голос
+                if (currentVoteIdx === optionIdx) {
+                    await deleteDoc(voteRef);
+                    return;
                 }
-                batch['votes.' + optionIdx] = arrayUnion(u.uid);
-                await updateDoc(doc(db, 'polls', pollId), batch);
+
+                // Один пользователь = один vote-документ. Это совпадает с Firestore rules.
+                await setDoc(voteRef, {
+                    uid: u.uid,
+                    optionIndex: optionIdx,
+                    updatedAt: serverTimestamp(),
+                });
             } catch(e) { showToast('Ошибка голосования: ' + e.message); }
         }
 
         // ─── Subscribe to polls in group chat ───
         let pollsUnsub = null;
-        const _pollCache = {}; // pollId → data
+        const _pollCache = {}; // pollId → data, votes берутся из /polls/{pollId}/votes/{uid}
+        const _pollVoteUnsubs = {};
+
+        function rerenderPollById(pollId) {
+            document.querySelectorAll('[data-poll-id="'+pollId+'"]').forEach(el => {
+                renderPollBubble(pollId, _pollCache[pollId], el);
+            });
+        }
+
+        function stopPollVoteListeners() {
+            Object.values(_pollVoteUnsubs).forEach(unsub => {
+                try { unsub(); } catch (_) {}
+            });
+            Object.keys(_pollVoteUnsubs).forEach(k => delete _pollVoteUnsubs[k]);
+        }
+
+        function startPollVotesListener(pollId) {
+            if (_pollVoteUnsubs[pollId]) return;
+            _pollVoteUnsubs[pollId] = onSnapshot(collection(db, 'polls', pollId, 'votes'), snap => {
+                const votes = {};
+                snap.forEach(voteDoc => {
+                    const data = voteDoc.data() || {};
+                    const idx = Number(data.optionIndex);
+                    if (!Number.isInteger(idx) || idx < 0) return;
+                    const uid = String(data.uid || voteDoc.id || '');
+                    if (!uid) return;
+                    const key = String(idx);
+                    if (!votes[key]) votes[key] = [];
+                    if (!votes[key].includes(uid)) votes[key].push(uid);
+                });
+                _pollCache[pollId] = { ...(_pollCache[pollId] || {}), votes };
+                rerenderPollById(pollId);
+            }, err => console.warn('[polls] votes listener error:', err?.message || err));
+        }
 
         function startPollsListener() {
             if (pollsUnsub) { pollsUnsub(); pollsUnsub = null; }
+            stopPollVoteListeners();
             if (currentChatMode !== 'group') return;
             pollsUnsub = onSnapshot(pollsCol, snap => {
                 snap.docChanges().forEach(change => {
                     const id = change.doc.id;
-                    if (change.type === 'removed') { delete _pollCache[id]; return; }
-                    _pollCache[id] = change.doc.data();
-                    // Re-render any visible poll bubble with this id
-                    document.querySelectorAll('[data-poll-id="'+id+'"]').forEach(el => {
-                        renderPollBubble(id, _pollCache[id], el);
-                    });
+                    if (change.type === 'removed') {
+                        delete _pollCache[id];
+                        if (_pollVoteUnsubs[id]) { try { _pollVoteUnsubs[id](); } catch (_) {} delete _pollVoteUnsubs[id]; }
+                        return;
+                    }
+                    const docData = change.doc.data();
+                    const prevVotes = _pollCache[id]?.votes || docData.votes || {};
+                    _pollCache[id] = { ...docData, votes: prevVotes };
+                    startPollVotesListener(id);
+                    rerenderPollById(id);
                 });
             }, () => {});
         }
@@ -4312,8 +4363,10 @@ function dataUrlToFile(dataUrl, filename) {
                 // Fetch once
                 getDoc(doc(db,'polls',pollId)).then(snap => {
                     if (snap.exists()) {
-                        _pollCache[snap.id] = snap.data();
-                        renderPollBubble(snap.id, snap.data(), wrap);
+                        const docData = snap.data();
+                        _pollCache[snap.id] = { ...docData, votes: _pollCache[snap.id]?.votes || docData.votes || {} };
+                        startPollVotesListener(snap.id);
+                        renderPollBubble(snap.id, _pollCache[snap.id], wrap);
                     }
                 }).catch(()=>{});
             }
@@ -4870,21 +4923,29 @@ musicSendBtn.addEventListener('click', async () => {
                         // ── Модерация: проверяем токсичность для обычных пользователей ──
                         if (!userIsAdmin && text) {
                             globalStatus.textContent = '🔍 Проверка…';
-                            const toxic = await checkToxicity(text);
-                            if (toxic) {
-                                // Блокируем отправку, выдаём варн
+                            const moderation = await checkToxicity(text);
+
+                            if (!moderation.ok) {
+                                globalStatus.textContent = moderationErrorText(moderation);
+                                globalStatus.classList.add('is-error');
+                                showToast('⚠️ ' + moderationErrorText(moderation));
+                                return; // не отправляем, но НЕ называем это токсичностью и НЕ выдаём варн
+                            }
+
+                            if (moderation.toxic) {
                                 globalStatus.textContent = '';
                                 showToast('⛔ Сообщение слишком токсично и не отправлено');
-                                try {
-                                    const newWarns = await warnUser(u.uid);
-                                    const remaining = MAX_WARNS - newWarns;
-                                    if (newWarns >= MAX_WARNS) {
-                                        showToast(`🚫 Вы получили ${newWarns}/${MAX_WARNS} варнов — отправка сообщений заблокирована`);
-                                        applyWarnsBan(newWarns);
+
+                                if (typeof moderation.warns === 'number') {
+                                    const maxWarns = moderation.maxWarns || MAX_WARNS;
+                                    const remaining = Math.max(0, maxWarns - moderation.warns);
+                                    if (moderation.warns >= maxWarns) {
+                                        showToast(`🚫 Вы получили ${moderation.warns}/${maxWarns} варнов — отправка сообщений заблокирована`);
+                                        applyWarnsBan(moderation.warns);
                                     } else {
-                                        showToast(`⚠️ Предупреждение ${newWarns}/${MAX_WARNS}. Ещё ${remaining} — и бан`);
+                                        showToast(`⚠️ Предупреждение ${moderation.warns}/${maxWarns}. Ещё ${remaining} — и бан`);
                                     }
-                                } catch(warnErr) { console.warn('[moderation] warnUser error:', warnErr); }
+                                }
                                 return; // не отправляем
                             }
                             globalStatus.textContent = '';
@@ -5076,6 +5137,7 @@ musicSendBtn.addEventListener('click', async () => {
             if (peerReadUnsub){peerReadUnsub();peerReadUnsub=null;}
             if (_pinnedUnsub){_pinnedUnsub();_pinnedUnsub=null;}
             if (pollsUnsub){pollsUnsub();pollsUnsub=null;}
+            stopPollVoteListeners();
             peerHasRead=false;
             _e2eDecryptedCache.clear();
             _e2eMessageDecryptCache.clear(); // сбрасываем кеш расшифровки при смене чата
