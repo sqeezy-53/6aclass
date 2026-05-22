@@ -1,56 +1,74 @@
-/* Chat UI hotfixes: keep popups inside viewport and make attachment UI readable */
+/* CSS-only chat UI hotfixes. No MutationObserver, no JS monkey-patches. */
+*, *::before, *::after { box-sizing: border-box; }
+
+/* Context menu: never leave viewport; scroll internally if it is tall. */
 .ctx-menu {
-  max-height: min(78vh, 520px) !important;
+  max-width: min(320px, calc(100vw - 20px)) !important;
+  max-height: calc(100vh - 20px) !important;
   overflow-y: auto !important;
   overscroll-behavior: contain !important;
   scrollbar-width: thin !important;
+  padding-block: 8px !important;
 }
 .ctx-menu__btn {
-  min-height: 44px !important;
+  min-height: 42px !important;
   flex-shrink: 0 !important;
+  white-space: nowrap !important;
 }
-.ctx-menu__divider {
-  flex-shrink: 0 !important;
-}
+.ctx-menu__divider { flex-shrink: 0 !important; }
 
+/* Reaction and emoji popups: bounded boxes instead of off-screen panels. */
 .reaction-picker,
 .emoji-popover {
   max-width: calc(100vw - 24px) !important;
-  max-height: min(70vh, 420px) !important;
+  max-height: min(70vh, 430px) !important;
   overflow: auto !important;
+  overscroll-behavior: contain !important;
 }
+.emoji-popover { left: max(8px, env(safe-area-inset-left)) !important; }
 
+/* Attachment sheet: compact and readable on desktop/mobile. */
 .attach-sheet {
   max-height: min(86vh, 620px) !important;
-  left: max(0px, env(safe-area-inset-left)) !important;
-  right: max(0px, env(safe-area-inset-right)) !important;
+  overflow: hidden !important;
 }
 .attach-sheet-tabs {
   display: grid !important;
   grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
   gap: 4px !important;
-  overflow: visible !important;
   padding: 10px 10px 0 !important;
+  overflow: visible !important;
 }
 .attach-tab {
   min-width: 0 !important;
-  padding: 8px 6px 10px !important;
+  padding: 8px 5px 10px !important;
   font-size: .76rem !important;
-  line-height: 1.1 !important;
+  line-height: 1.12 !important;
+  text-align: center !important;
+  overflow: hidden !important;
 }
 .attach-tab .tab-icon {
-  width: 28px !important;
-  height: 28px !important;
+  width: 30px !important;
+  height: 30px !important;
+  margin: 0 auto 4px !important;
   display: grid !important;
   place-items: center !important;
-  font-size: 1.22rem !important;
+  font-size: 0 !important;
   line-height: 1 !important;
+  filter: none !important;
 }
-.attach-tab .tab-icon .ph {
-  font-size: 22px !important;
+.attach-tab .tab-icon::before {
+  font-size: 23px !important;
+  line-height: 1 !important;
+  display: block !important;
 }
+.attach-tab[data-tab="gallery"] .tab-icon::before { content: "📷"; }
+.attach-tab[data-tab="checklist"] .tab-icon::before { content: "✅"; }
+.attach-tab[data-tab="music"] .tab-icon::before { content: "🎵"; }
+.attach-tab[data-tab="poll"] .tab-icon::before { content: "📊"; }
+
 .attach-sheet-body {
-  max-height: calc(86vh - 92px) !important;
+  max-height: calc(min(86vh, 620px) - 86px) !important;
   overflow-y: auto !important;
   -webkit-overflow-scrolling: touch !important;
 }
@@ -63,9 +81,10 @@
 #checklistSendBtn,
 #attachPollOpenBtn,
 #musicSendBtn {
-  min-height: 46px !important;
+  min-height: 44px !important;
 }
 
+/* Large screens: do not stretch the sheet across the whole page. */
 @media (min-width: 740px) {
   .attach-sheet {
     left: 50% !important;
@@ -75,14 +94,12 @@
     border-radius: 24px !important;
     transform: translate(-50%, calc(100% + 42px)) !important;
   }
-  .attach-sheet.is-open {
-    transform: translate(-50%, 0) !important;
-  }
+  .attach-sheet.is-open { transform: translate(-50%, 0) !important; }
 }
 
 @media (max-width: 520px) {
   .ctx-menu {
-    min-width: 190px !important;
+    min-width: 188px !important;
     max-width: calc(100vw - 20px) !important;
   }
   .ctx-menu__btn {
@@ -95,5 +112,6 @@
   }
   .attach-tab {
     font-size: .68rem !important;
+    padding-inline: 3px !important;
   }
 }
