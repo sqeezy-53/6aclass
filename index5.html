@@ -1,79 +1,34 @@
 <!DOCTYPE html>
-
-<html data-theme="dark" lang="ru">
+<html lang="ru">
 <head>
-<meta charset="utf-8"/>
-<meta content="width=device-width, initial-scale=1, viewport-fit=cover" name="viewport"/>
-<title>Чат 6А · 6aclass.online</title>
-<meta content="Чат класса 6А — общайся, делись, будь в курсе!" name="description"/>
-<link href="logo.png" rel="icon" type="image/png"/>
-<!-- §1 · Безопасность транспорта: строгая политика HTTPS и контента -->
-<!-- HSTS задаётся на сервере; здесь — CSP и дополнительные защитные заголовки -->
-<meta content="
-            default-src 'self';
-            script-src  'self' 'sha256-r+u0okChkaq7hSOl6ctiyvMWhoLiQ3YcSu3HJvU9maI=' 'sha256-7hpVw28Zo+5INU8LMyhs3E1LhBVrBLS3vHyEqe3Ustk=' 'sha256-c+UcrSOvVy+Guhz5azKL1WWvDOx4EScqRjbGB+XD22c=' 'sha256-n1QTSTMOK5He+QNmK/qiMtUWaRsqTAHWkLviscTY5dY=' https://www.gstatic.com https://apis.google.com;
-            script-src-attr 'none';
-            style-src   'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com https://cdn.jsdelivr.net;
-            font-src    'self' https://fonts.gstatic.com https://cdn.jsdelivr.net;
-            img-src     'self' data: blob: https://res.cloudinary.com;
-            media-src   'self' data: blob: https://res.cloudinary.com;
-            connect-src 'self' https://sixaclass.onrender.com https://res.cloudinary.com https://*.firebaseio.com https://*.googleapis.com https://www.gstatic.com wss://*.firebaseio.com;
-            object-src  'none';
-            base-uri    'self';
-            form-action 'self';
-            upgrade-insecure-requests;
-          " http-equiv="Content-Security-Policy"/>
-<!-- §1 · Clickjacking protection: frame-ancestors должен задаваться серверным CSP-заголовком, не meta-тегом -->
-<!-- §1 · Запрет MIME-sniffing -->
-<meta content="nosniff" http-equiv="X-Content-Type-Options"/>
-<!-- §1 · Referrer минимизация -->
-<meta content="strict-origin-when-cross-origin" name="referrer"/>
-<!-- §1 · Permissions Policy — ограничение API-доступа -->
-<meta content="camera=(), microphone=(self), geolocation=(), payment=(), usb=(), interest-cohort=()" http-equiv="Permissions-Policy"/>
-<link href="https://fonts.googleapis.com" rel="preconnect"/>
-<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&amp;family=Outfit:wght@500;600;700;800;900&amp;display=swap" rel="stylesheet"/>
-<link href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.2/src/regular/style.css" rel="stylesheet"/>
-<!-- Apply theme before render to avoid flash -->
-<script src="assets/js/chat/theme-bootstrap.js"></script>
-<!-- E2E Security Module + Backend -->
-<script src="assets/js/chat/config.js"></script>
-<script src="assets/js/chat/e2e-security-refactor.js"></script>
-<script src="assets/js/chat/e2e-media-compat.js"></script>
-<link href="assets/css/chat.css" rel="stylesheet"/>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Чат 6А · восстановление</title>
+<style>
+  html,body{margin:0;min-height:100%;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#050505;color:#fff}
+  body{display:grid;place-items:center}
+  .card{width:min(360px,calc(100vw - 32px));padding:22px;border-radius:22px;background:#111;border:1px solid rgba(255,255,255,.12);box-shadow:0 20px 70px rgba(0,0,0,.45);text-align:center}
+  .spin{width:28px;height:28px;margin:0 auto 12px;border:3px solid rgba(255,255,255,.18);border-top-color:#60a5fa;border-radius:50%;animation:s 1s linear infinite}@keyframes s{to{transform:rotate(360deg)}}
+  .muted{color:#aaa;font-size:.9rem;line-height:1.45}
+</style>
 </head>
 <body>
-<!-- BAN SCREEN -->
-<div id="bannedScreen">
-<div class="banned-skull">☠️</div>
-<div class="banned-title">Аккаунт ликвидирован</div>
-<div class="banned-sub" id="bannedSubText">Твой аккаунт был уничтожен.<br/>Ты можешь выйти и создать новый.</div>
-<button class="banned-btn banned-btn-logout" id="bannedLogoutBtn">🚪 Выйти из аккаунта</button>
-<button class="banned-btn banned-btn-register" id="bannedRegisterBtn">✨ Создать новый аккаунт</button>
-</div>
-<!-- AUTH -->
-<div class="auth-gate" id="authGate">
-<div aria-hidden="true" class="auth-orb auth-orb--1"></div>
-<div aria-hidden="true" class="auth-orb auth-orb--2"></div>
-<div class="auth-card">
-<div class="spinner-wrap" id="authChecking"><div class="spinner"></div><span>Проверка входа…</span></div>
-<div class="hidden" id="authFormBlock">
-<div class="auth-logo">6<span>А</span></div>
-<p class="auth-sub" id="authSub">Вход по нику класса. Пароль — не короче 6 символов.</p>
-<input autocomplete="username" class="auth-input" id="authNick" maxlength="32" placeholder="Ник"/>
-<input autocomplete="current-password" class="auth-input" id="authPass" maxlength="64" placeholder="Пароль" type="password"/>
-<div class="auth-actions">
-<button class="auth-btn primary" id="btnLogin">Войти</button>
-<button class="auth-btn" id="btnRegisterMode">Создать аккаунт</button>
-<button class="auth-btn primary hidden" id="btnRegister">Зарегистрироваться</button>
-<button class="auth-btn hidden" id="btnBackLogin">Назад ко входу</button>
-</div>
-<div class="auth-error" id="authError"></div>
-</div>
-</div>
-</div>
-<div class="tg-app hidden" id="appRoot">
-<!-- остальной HTML сохранён в репозитории; этот аварийный патч не должен был заменять весь файл -->
-</div>
+<div class="card" id="restoreCard"><div class="spin"></div><b>Восстановление чата…</b><div class="muted">Загружаю рабочую полную страницу.</div></div>
+<script>
+(async function(){
+  var stableIndex = 'https://raw.githubusercontent.com/sqeezy-53/6aclass/7b76e25f9dc6529e327edc81ccb9bfadff5f3ca9/index5.html';
+  try {
+    var resp = await fetch(stableIndex, { cache: 'no-store' });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    var html = await resp.text();
+    document.open();
+    document.write(html);
+    document.close();
+  } catch (e) {
+    console.error('[index5 restore loader]', e);
+    document.getElementById('restoreCard').innerHTML = '<b>Не удалось восстановить страницу</b><div class="muted">Нажми Ctrl+Shift+R. Если не помогло — очисти кэш сайта.</div>';
+  }
+})();
+</script>
 </body>
 </html>
