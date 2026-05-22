@@ -15,7 +15,6 @@
         })();
 
 // Voice recorder fix.
-// Chrome likes audio/webm;codecs=opus. The backend/browser validators are happier with plain audio/webm.
 (function () {
   if (window.__chat6aVoiceMimeFix) return;
   window.__chat6aVoiceMimeFix = true;
@@ -69,16 +68,14 @@
   console.log('[chat6a] voice MIME fix enabled');
 })();
 
-// Upload token refresh patch for /api/upload.
 setTimeout(function () {
-  import('/assets/js/chat/upload-auth-refresh.js').catch(function (err) {
-    console.warn('[upload-auth-refresh] load failed:', err && (err.message || err));
+  import('/assets/js/chat/voice-upload-fix-v4.js?v=20260522-1').catch(function (err) {
+    console.warn('[voice-upload-fix-v4] load failed:', err && (err.message || err));
   });
 }, 0);
 
-// Extra chat moderation/report UI is loaded dynamically so index5.html stays unchanged.
 setTimeout(function () {
-  import('/assets/js/chat/reports-admin.js').catch(function (err) {
+  import('/assets/js/chat/reports-admin.js?v=20260522-1').catch(function (err) {
     console.warn('[reports-admin] load failed:', err && (err.message || err));
   });
 }, 0);
