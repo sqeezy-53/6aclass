@@ -1,6 +1,7 @@
 // Chat6A E2E device-local unlock.
 // Removes the daily master-password UX by using a per-device random secret stored locally.
-// No browser API monkey-patches. Only wraps window.E2E.initE2EForUser.
+// No browser API monkey-patches. No persistent document-wide observers.
+// This layer wraps window.E2E.initE2EForUser and adds device/recovery helpers.
 (function () {
   'use strict';
   if (window.__chat6aE2EDeviceLocal) return;
@@ -11,6 +12,7 @@
   const PBKDF2_ITERATIONS = 600000;
   const LEGACY_ITERATIONS = [310000];
   const HASH = 'SHA-256';
+  const RECOVERY_PREFIX = 'CHAT6A-RECOVERY-';
   let dbPromise = null;
 
   function openDB() {
@@ -47,6 +49,16 @@
     });
   }
 
+  async function idbDelete(key) {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readwrite');
+      const req = tx.objectStore(STORE).delete(key);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  }
+
   function bytesToB64(bytes) {
     let s = '';
     const chunk = 0x8000;
@@ -54,9 +66,23 @@
     return btoa(s);
   }
 
+  function b64ToBytes(b64) {
+    return Uint8Array.from(atob(String(b64 || '')), c => c.charCodeAt(0));
+  }
+
+  function b64urlFromBytes(bytes) {
+    return bytesToB64(bytes).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+  }
+
+  function bytesFromB64url(value) {
+    let s = String(value || '').replace(/-/g, '+').replace(/_/g, '/');
+    while (s.length % 4) s += '=';
+    return b64ToBytes(s);
+  }
+
   function randomSecret() {
     const bytes = crypto.getRandomValues(new Uint8Array(48));
-    return 'chat6a-device-' + bytesToB64(bytes).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+    return 'chat6a-device-' + b64urlFromBytes(bytes);
   }
 
   async function getOrCreateDeviceSecret(uid) {
@@ -147,14 +173,13 @@
     el.dispatchEvent(new Event('change', { bubbles: true }));
   }
 
-  function startAutoPrompt(secret, capture) {
+  // Temporary polling only while the original E2E prompt is visible. No MutationObserver.
+  function startAutoPrompt(secret) {
     let stopped = false;
     let clicked = false;
-    let observer = null;
-    let timer = null;
-
-    const tick = () => {
-      if (stopped || clicked) return;
+    const startedAt = Date.now();
+    const timer = setInterval(() => {
+      if (stopped || clicked || Date.now() - startedAt > 12000) return;
       const input = document.getElementById('mp-input');
       const ok = document.getElementById('mp-ok');
       if (!input || !ok) return;
@@ -163,32 +188,21 @@
       if (input2) fillInput(input2, secret);
       clicked = true;
       setTimeout(() => ok.click(), 20);
-    };
-
-    const start = () => {
-      observer = new MutationObserver(tick);
-      observer.observe(document.body || document.documentElement, { childList: true, subtree: true });
-      timer = setInterval(tick, 80);
-      tick();
-    };
-
-    if (document.body) start();
-    else document.addEventListener('DOMContentLoaded', start, { once: true });
+    }, 80);
 
     return {
       stop() {
         stopped = true;
-        if (observer) observer.disconnect();
-        if (timer) clearInterval(timer);
+        clearInterval(timer);
       }
     };
   }
 
   function captureManualPasswordOnce() {
     let password = '';
-    let observer = null;
-    let timer = null;
-    const tick = () => {
+    const startedAt = Date.now();
+    const timer = setInterval(() => {
+      if (Date.now() - startedAt > 180000) return;
       const input = document.getElementById('mp-input');
       const ok = document.getElementById('mp-ok');
       if (input) password = input.value || password;
@@ -197,14 +211,10 @@
         ok.addEventListener('pointerdown', () => { const i = document.getElementById('mp-input'); if (i) password = i.value || password; }, true);
         ok.addEventListener('click', () => { const i = document.getElementById('mp-input'); if (i) password = i.value || password; }, true);
       }
-    };
-    observer = new MutationObserver(tick);
-    observer.observe(document.body || document.documentElement, { childList: true, subtree: true });
-    timer = setInterval(tick, 120);
-    tick();
+    }, 120);
     return {
       getPassword: () => password,
-      stop() { if (observer) observer.disconnect(); if (timer) clearInterval(timer); }
+      stop() { clearInterval(timer); }
     };
   }
 
@@ -219,9 +229,25 @@
     const key = `e2e_device_id_${uid}`;
     let id = await idbGet(key);
     if (typeof id === 'string' && id.length > 8) return id;
-    id = 'dev_' + bytesToB64(crypto.getRandomValues(new Uint8Array(18))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+    id = 'dev_' + b64urlFromBytes(crypto.getRandomValues(new Uint8Array(18)));
     await idbSet(key, id);
     return id;
+  }
+
+  async function sha256HexText(text) {
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(text || '')));
+    return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('').toUpperCase();
+  }
+
+  async function getLocalFingerprint(uid) {
+    const parts = [
+      await idbGet(`e2e_pubkey_${uid}`),
+      await idbGet(`e2e_ecdh_pub_${uid}`),
+      await idbGet(`e2e_sign_pub_${uid}`)
+    ].filter(v => typeof v === 'string' && v.length > 20);
+    if (!parts.length) return '';
+    const hex = await sha256HexText(parts.join('|'));
+    return (hex.match(/.{1,4}/g) || []).slice(0, 6).join('-');
   }
 
   async function registerDevice(uid, args) {
@@ -235,12 +261,78 @@
         userAgent: (navigator.userAgent || '').slice(0, 180),
         e2eMode: 'device-local-key',
         trusted: true,
+        fingerprint: await getLocalFingerprint(uid),
         lastSeenAtMs: Date.now(),
         createdAtMs: Number(await idbGet(`e2e_device_secret_created_${uid}`)) || Date.now()
       }, { merge: true });
     } catch (e) {
       console.warn('[e2e-device] device registry skipped:', e?.message || e);
     }
+  }
+
+  async function exportRecoveryKey(uid) {
+    uid = String(uid || '');
+    if (!uid) throw new Error('uid_required');
+    const secret = await getOrCreateDeviceSecret(uid);
+    const payload = {
+      v: 1,
+      app: 'chat6a',
+      kind: 'device-local-e2e-recovery',
+      uid,
+      deviceId: await getDeviceId(uid),
+      deviceName: deviceLabel(),
+      deviceSecret: secret,
+      fingerprint: await getLocalFingerprint(uid),
+      createdAtMs: Number(await idbGet(`e2e_device_secret_created_${uid}`)) || Date.now(),
+      exportedAtMs: Date.now(),
+      warning: 'This recovery key unlocks local E2E keys. Keep it private.'
+    };
+    const bytes = new TextEncoder().encode(JSON.stringify(payload));
+    return RECOVERY_PREFIX + b64urlFromBytes(bytes);
+  }
+
+  async function importRecoveryKey(uid, recoveryText) {
+    uid = String(uid || '');
+    if (!uid) throw new Error('uid_required');
+    let raw = String(recoveryText || '').trim();
+    if (!raw) throw new Error('empty_recovery_key');
+    if (raw.startsWith(RECOVERY_PREFIX)) raw = raw.slice(RECOVERY_PREFIX.length);
+    let payload;
+    try {
+      if (raw.trim().startsWith('{')) payload = JSON.parse(raw);
+      else payload = JSON.parse(new TextDecoder().decode(bytesFromB64url(raw)));
+    } catch (_) {
+      throw new Error('invalid_recovery_key');
+    }
+    if (payload?.kind !== 'device-local-e2e-recovery' || payload?.app !== 'chat6a') throw new Error('invalid_recovery_key_kind');
+    if (payload.uid && String(payload.uid) !== uid) throw new Error('recovery_key_for_another_user');
+    if (typeof payload.deviceSecret !== 'string' || payload.deviceSecret.length < 32) throw new Error('recovery_key_missing_secret');
+    await idbSet(`e2e_device_secret_${uid}`, payload.deviceSecret);
+    if (payload.deviceId) await idbSet(`e2e_device_id_${uid}`, String(payload.deviceId));
+    await idbSet(`e2e_device_secret_created_${uid}`, Number(payload.createdAtMs) || Date.now());
+    await idbSet(`e2e_device_imported_${uid}`, Date.now());
+    return { ok: true, deviceId: await getDeviceId(uid), label: deviceLabel() };
+  }
+
+  async function resetLocalE2E(uid) {
+    uid = String(uid || '');
+    if (!uid) throw new Error('uid_required');
+    const keys = [
+      `e2e_device_secret_${uid}`,
+      `e2e_device_secret_created_${uid}`,
+      `e2e_device_migrated_${uid}`,
+      `e2e_device_imported_${uid}`,
+      `e2e_device_id_${uid}`,
+      `e2e_privkey_${uid}`,
+      `e2e_sign_priv_${uid}`,
+      `e2e_ecdh_priv_${uid}`,
+      `e2e_pubkey_${uid}`,
+      `e2e_sign_pub_${uid}`,
+      `e2e_ecdh_pub_${uid}`,
+      `e2e_salt_${uid}`
+    ];
+    await Promise.all(keys.map(k => idbDelete(k).catch(() => {})));
+    return { ok: true };
   }
 
   function waitForE2E() {
@@ -296,17 +388,25 @@
     };
 
     wrapped.getDeviceLocalStatus = async function(uid) {
+      uid = String(uid || '');
       return {
-        enabled: await hasDeviceSecret(String(uid || '')),
-        hasStoredKey: await hasStoredPrivateKey(String(uid || '')),
-        deviceId: await getDeviceId(String(uid || '')),
-        label: deviceLabel()
+        enabled: await hasDeviceSecret(uid),
+        hasStoredKey: await hasStoredPrivateKey(uid),
+        deviceId: await getDeviceId(uid),
+        label: deviceLabel(),
+        fingerprint: await getLocalFingerprint(uid),
+        migratedAtMs: Number(await idbGet(`e2e_device_migrated_${uid}`)) || null,
+        importedAtMs: Number(await idbGet(`e2e_device_imported_${uid}`)) || null,
+        warning: 'If site data/IndexedDB is cleared, old encrypted DMs may require a recovery key.'
       };
     };
+    wrapped.exportRecoveryKey = exportRecoveryKey;
+    wrapped.importRecoveryKey = importRecoveryKey;
+    wrapped.resetLocalE2E = resetLocalE2E;
 
     Object.defineProperty(wrapped, '__deviceLocalWrapped', { value: true });
     try { window.E2E = Object.freeze(wrapped); }
     catch (_) { window.E2E = wrapped; }
-    console.info('[chat6a] E2E device-local unlock loaded');
+    console.info('[chat6a] E2E device-local unlock loaded v2 recovery');
   });
 })();
