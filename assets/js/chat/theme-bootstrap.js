@@ -69,6 +69,13 @@
   console.log('[chat6a] voice MIME fix enabled');
 })();
 
+// Upload token refresh patch for /api/upload.
+setTimeout(function () {
+  import('./upload-auth-refresh.js').catch(function (err) {
+    console.warn('[upload-auth-refresh] load failed:', err && (err.message || err));
+  });
+}, 0);
+
 // Extra chat moderation/report UI is loaded dynamically so index5.html stays unchanged.
 setTimeout(function () {
   import('./reports-admin.js').catch(function (err) {
