@@ -23,6 +23,8 @@ import { initializeApp }          from 'https://www.gstatic.com/firebasejs/10.14
         const auth = getAuth(app);
         window.chat6aAuth = auth;
         const db   = getFirestore(app);
+        window.CHAT6A_APP_BUILD_ID = '20260522-v2-uncached';
+        console.info('[chat6a] app build', window.CHAT6A_APP_BUILD_ID);
 
         /* ══════════════════════════════
            LEGACY AES DISABLED
@@ -4934,7 +4936,7 @@ musicSendBtn.addEventListener('click', async () => {
 
                             if (moderation.toxic) {
                                 globalStatus.textContent = '';
-                                showToast('⛔ Сообщение слишком токсично и не отправлено');
+                                showToast('⛔ Заблокировано модерацией: реальная токсичность.');
 
                                 if (typeof moderation.warns === 'number') {
                                     const maxWarns = moderation.maxWarns || MAX_WARNS;
