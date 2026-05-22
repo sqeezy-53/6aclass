@@ -1,3 +1,16 @@
+// Load device-local E2E before media compatibility when this file is parser-loaded.
+// This avoids editing the huge restored index5.html directly.
+(function(){
+  if (!window.__chat6aE2EDeviceLocalLoader) {
+    window.__chat6aE2EDeviceLocalLoader = true;
+    try {
+      document.write('<script src="assets/js/chat/e2e-device-local.js?v=20260522-p2"><\/script>');
+    } catch (e) {
+      console.warn('[e2e-device] loader skipped:', e && (e.message || e));
+    }
+  }
+})();
+
 // E2E media compatibility layer.
 // Purpose: DM media must decrypt on the other device even when ratchet local state is missing/out of sync.
 // This wraps only the app-level E2E.sendDirectMessage; it does NOT patch browser APIs.
