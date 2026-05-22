@@ -15,7 +15,7 @@
         })();
 
 (function () {
-  var href = '/assets/css/chat-ui-hotfix.css?v=20260522-css-only-2';
+  var href = '/assets/css/chat-ui-hotfix.css?v=20260522-css-only-3';
   if (document.querySelector('link[data-chat6a-ui-hotfix]')) return;
   var link = document.createElement('link');
   link.rel = 'stylesheet';
@@ -25,9 +25,6 @@
 })();
 
 (function () {
-  // Firebase WebChannel sometimes tries to load Google's cleardot tracking GIF.
-  // Our CSP intentionally blocks it; this is not a chat failure. Stop the app's
-  // own security logger from spamming the console for this known non-critical URL.
   document.addEventListener('securitypolicyviolation', function (e) {
     var blocked = String(e.blockedURI || '');
     if (blocked.indexOf('https://www.google.com/images/cleardot.gif') === 0) {
@@ -35,6 +32,12 @@
     }
   }, true);
 })();
+
+setTimeout(function () {
+  import('/assets/js/chat/reports-admin.js?v=20260522-safe-1').catch(function (err) {
+    console.warn('[reports-admin] load failed:', err && (err.message || err));
+  });
+}, 1200);
 
 // Runtime monkey-patches for Blob/File/XMLHttpRequest/FormData are intentionally disabled.
 // Upload fixes must be made directly in app.js/server.py, not by overriding browser APIs.
