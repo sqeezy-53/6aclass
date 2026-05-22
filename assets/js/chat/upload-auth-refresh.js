@@ -7,9 +7,19 @@
     var append0 = FD.prototype.append;
     FD.prototype.append = function(name, value, fileName) {
       var key = String(name || '');
-      if (key === 'file' && value && String(value.type || '').indexOf('audio/') === 0) this.__chat6aHasAudioFile = true;
-      if (key === 'type' && value === 'raw' && this.__chat6aHasAudioFile) value = 'video';
-      return append0.call(this, name, value, fileName);
+      if (key === 'file' && value && String(value.type || '').indexOf('audio/') === 0) {
+        this.__chat6aHasAudioFile = true;
+      }
+      if (key === 'type' && value === 'raw' && this.__chat6aHasAudioFile) {
+        value = 'video';
+      }
+
+      // Native FormData.append(name, string, filename) throws:
+      // "Argument 2 is not an object". Pass filename only for Blob/File values.
+      if (arguments.length >= 3 && value instanceof Blob) {
+        return append0.call(this, name, value, fileName);
+      }
+      return append0.call(this, name, value);
     };
     FD.prototype.__chat6aAudioTypePatch = true;
   }
@@ -49,5 +59,5 @@
       send0.call(xhr, body);
     });
   };
-  console.log('[chat6a] upload token refresh + audio form type patch enabled');
+  console.log('[chat6a] upload token refresh + audio form type patch enabled v2');
 })();
