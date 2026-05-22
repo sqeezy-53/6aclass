@@ -56,8 +56,6 @@ const DM_ALLOWED_FIELDS = new Set([
 
 /* URL Python-бэкенда (server.py) */
 const BACKEND_URL = window.BACKEND_URL || '/api';
-window.CHAT6A_E2E_BUILD_ID = '20260522-v2-uncached';
-console.info('[chat6a] e2e build', window.CHAT6A_E2E_BUILD_ID);
 
 /* Конкретный Cloudinary cloud-name, которому доверяется расшифровка медиа.
    Значение можно переопределить до загрузки модуля: window.E2E_CLOUDINARY_CLOUD_NAME = '...'. */
