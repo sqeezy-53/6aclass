@@ -21,6 +21,10 @@
     var resp = await fetch(stableIndex, { cache: 'no-store' });
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
     var html = await resp.text();
+    html = html.replace(
+      '<script src="assets/js/chat/e2e-security-refactor.js"><\/script>',
+      '<script src="assets/js/chat/e2e-security-refactor.js"><\/script>\n<script src="assets/js/chat/e2e-media-compat.js"><\/script>'
+    );
     document.open();
     document.write(html);
     document.close();
