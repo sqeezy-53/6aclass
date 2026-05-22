@@ -1,0 +1,99 @@
+/* Chat UI hotfixes: keep popups inside viewport and make attachment UI readable */
+.ctx-menu {
+  max-height: min(78vh, 520px) !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain !important;
+  scrollbar-width: thin !important;
+}
+.ctx-menu__btn {
+  min-height: 44px !important;
+  flex-shrink: 0 !important;
+}
+.ctx-menu__divider {
+  flex-shrink: 0 !important;
+}
+
+.reaction-picker,
+.emoji-popover {
+  max-width: calc(100vw - 24px) !important;
+  max-height: min(70vh, 420px) !important;
+  overflow: auto !important;
+}
+
+.attach-sheet {
+  max-height: min(86vh, 620px) !important;
+  left: max(0px, env(safe-area-inset-left)) !important;
+  right: max(0px, env(safe-area-inset-right)) !important;
+}
+.attach-sheet-tabs {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 4px !important;
+  overflow: visible !important;
+  padding: 10px 10px 0 !important;
+}
+.attach-tab {
+  min-width: 0 !important;
+  padding: 8px 6px 10px !important;
+  font-size: .76rem !important;
+  line-height: 1.1 !important;
+}
+.attach-tab .tab-icon {
+  width: 28px !important;
+  height: 28px !important;
+  display: grid !important;
+  place-items: center !important;
+  font-size: 1.22rem !important;
+  line-height: 1 !important;
+}
+.attach-tab .tab-icon .ph {
+  font-size: 22px !important;
+}
+.attach-sheet-body {
+  max-height: calc(86vh - 92px) !important;
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+}
+.gallery-grid {
+  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)) !important;
+  gap: 6px !important;
+}
+.gallery-open-btn,
+.music-upload-btn,
+#checklistSendBtn,
+#attachPollOpenBtn,
+#musicSendBtn {
+  min-height: 46px !important;
+}
+
+@media (min-width: 740px) {
+  .attach-sheet {
+    left: 50% !important;
+    right: auto !important;
+    bottom: 18px !important;
+    width: min(560px, calc(100vw - 32px)) !important;
+    border-radius: 24px !important;
+    transform: translate(-50%, calc(100% + 42px)) !important;
+  }
+  .attach-sheet.is-open {
+    transform: translate(-50%, 0) !important;
+  }
+}
+
+@media (max-width: 520px) {
+  .ctx-menu {
+    min-width: 190px !important;
+    max-width: calc(100vw - 20px) !important;
+  }
+  .ctx-menu__btn {
+    padding: 9px 11px !important;
+    font-size: .84rem !important;
+  }
+  .attach-sheet-tabs {
+    gap: 2px !important;
+    padding-inline: 6px !important;
+  }
+  .attach-tab {
+    font-size: .68rem !important;
+  }
+}
