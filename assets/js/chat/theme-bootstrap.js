@@ -14,7 +14,15 @@
             root.setAttribute('data-ui-performance', localStorage.getItem('index6a_ui_performance_v1') || 'auto');
         })();
 
-// Emergency note:
-// Runtime monkey-patches for Blob/File/XMLHttpRequest/FormData were removed from bootstrap.
-// They could freeze Firefox before auth finished, leaving the app stuck on "Проверка входа...".
-// Future fixes must be applied directly in app.js/server.py, not by global browser API overrides here.
+(function () {
+  var href = '/assets/css/chat-ui-hotfix.css?v=20260522-css-only-1';
+  if (document.querySelector('link[data-chat6a-ui-hotfix]')) return;
+  var link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = href;
+  link.setAttribute('data-chat6a-ui-hotfix', '1');
+  document.head.appendChild(link);
+})();
+
+// Runtime monkey-patches for Blob/File/XMLHttpRequest/FormData are intentionally disabled.
+// Upload fixes must be made directly in app.js/server.py, not by overriding browser APIs.
