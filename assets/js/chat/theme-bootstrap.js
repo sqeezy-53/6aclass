@@ -14,7 +14,20 @@
             root.setAttribute('data-ui-performance', localStorage.getItem('index6a_ui_performance_v1') || 'auto');
         })();
 
-// Voice recorder fix.
+(function () {
+  var stamp = '20260522-2';
+  function loadCss(href) {
+    if (document.querySelector('link[data-chat6a-hotfix="' + href + '"]')) return;
+    var link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = href + '?v=' + stamp;
+    link.setAttribute('data-chat6a-hotfix', href);
+    document.head.appendChild(link);
+  }
+  loadCss('/assets/css/chat-ui-hotfix.css');
+})();
+
+// Voice recorder MIME fix.
 (function () {
   if (window.__chat6aVoiceMimeFix) return;
   window.__chat6aVoiceMimeFix = true;
@@ -69,13 +82,19 @@
 })();
 
 setTimeout(function () {
-  import('/assets/js/chat/voice-upload-fix-v4.js?v=20260522-1').catch(function (err) {
-    console.warn('[voice-upload-fix-v4] load failed:', err && (err.message || err));
+  import('/assets/js/chat/upload-voice-fix-v4.js?v=20260522-2').catch(function (err) {
+    console.warn('[upload-voice-fix-v4] load failed:', err && (err.message || err));
   });
 }, 0);
 
 setTimeout(function () {
-  import('/assets/js/chat/reports-admin.js?v=20260522-1').catch(function (err) {
+  import('/assets/js/chat/ui-hotfix.js?v=20260522-2').catch(function (err) {
+    console.warn('[ui-hotfix] load failed:', err && (err.message || err));
+  });
+}, 0);
+
+setTimeout(function () {
+  import('/assets/js/chat/reports-admin.js?v=20260522-2').catch(function (err) {
     console.warn('[reports-admin] load failed:', err && (err.message || err));
   });
 }, 0);
