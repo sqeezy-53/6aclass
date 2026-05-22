@@ -13,15 +13,31 @@ window.E2E_CLOUDINARY_CLOUD_NAME = window.CLOUDINARY_CLOUD_NAME;
   const MODERATION_SOFT_TIMEOUT_MS = 3500;
 
   const LOCAL_TOXIC_WORDS = [
+    // School insults / direct harassment
     'чмо', 'чмошник', 'чмошница',
-    'тупой', 'тупая', 'тупое', 'тупые', 'тупица',
+    'тупой', 'тупая', 'тупое', 'тупые', 'тупица', 'тупорылый', 'тупорылая',
     'жирный', 'жирная', 'жирное', 'жирдяй', 'жируха',
-    'лох', 'лошара',
-    'дебил', 'дебилка', 'дебилы',
+    'лох', 'лошара', 'лохушка',
+    'дебил', 'дебилка', 'дебилы', 'дегенерат', 'кретин', 'идиот', 'идиотка',
     'даун', 'дауны',
-    'урод', 'уродка', 'уроды',
-    'сдохни', 'умри', 'убейся',
-    'никчемный', 'никчемная', 'ничтожество'
+    'урод', 'уродка', 'уроды', 'уебище',
+    'никчемный', 'никчемная', 'ничтожество',
+
+    // Threats / self-harm baiting
+    'сдохни', 'умри', 'убейся', 'сдох', 'подохни',
+
+    // Russian profanity / obscene insults
+    'сука', 'сучка', 'сучара',
+    'блять', 'блядь', 'блядина',
+    'хуй', 'хуи', 'хуевый', 'хуевая', 'хуесос',
+    'пизда', 'пиздец', 'пиздатый', 'пизданутый', 'пиздюк',
+    'еблан', 'ебанат', 'ебаный', 'ебанутая', 'ебнутый', 'ебнутая',
+    'мразь', 'тварь', 'гнида', 'гандон', 'мудак', 'мудила',
+    'шлюха', 'шалава',
+
+    // Homophobic / identity slurs often used as school insults
+    'пидор', 'пидорас', 'пидар', 'пидрас', 'пидрила', 'пидрила',
+    'гомик', 'петух'
   ];
 
   function normalizeModerationText(value) {
@@ -33,6 +49,12 @@ window.E2E_CLOUDINARY_CLOUD_NAME = window.CLOUDINARY_CLOUD_NAME;
       .replace(/[3]/g, 'з')
       .replace(/[4]/g, 'ч')
       .replace(/[6]/g, 'б')
+      .replace(/[a]/g, 'а')
+      .replace(/[e]/g, 'е')
+      .replace(/[o]/g, 'о')
+      .replace(/[p]/g, 'р')
+      .replace(/[c]/g, 'с')
+      .replace(/[x]/g, 'х')
       .replace(/[^\p{L}\p{N}]+/gu, ' ')
       .trim();
   }
@@ -59,8 +81,8 @@ window.E2E_CLOUDINARY_CLOUD_NAME = window.CLOUDINARY_CLOUD_NAME;
       const wordBoundaryRe = new RegExp('(^|\\s)' + w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '($|\\s)', 'u');
       if (wordBoundaryRe.test(normalized)) return word;
 
-      // Catches simple bypasses like "ч.м.о" or "т у п о й" after compacting.
-      if (w.length >= 4 && compact.includes(w)) return word;
+      // Catches simple bypasses like "ч.м.о", "т у п о й", or mixed separators.
+      if (w.length >= 3 && compact.includes(w)) return word;
     }
 
     return '';
