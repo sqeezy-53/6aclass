@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Чат 6А · восстановление</title>
+<title>Чат 6А · загрузка</title>
 <style>
   html,body{margin:0;min-height:100%;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#050505;color:#fff}
   body{display:grid;place-items:center}
@@ -14,31 +14,57 @@
 </style>
 </head>
 <body>
-<div class="card" id="restoreCard"><div class="spin"></div><b>Восстановление чата…</b><div class="muted">Загружаю рабочую полную страницу.</div></div>
+<div class="card" id="restoreCard"><div class="spin"></div><b>Загрузка чата…</b><div class="muted">Загружаю проверенную полную страницу.</div></div>
 <script>
 (async function(){
-  window.CHAT6A_APP_VERSION = 'package1-safe-base-2026-05-22';
+  window.CHAT6A_APP_VERSION = 'package1-stable-loader-2026-05-22';
   var stableSources = [
     'https://raw.githubusercontent.com/sqeezy-53/6aclass/7b76e25f9dc6529e327edc81ccb9bfadff5f3ca9/index5.html',
     'https://cdn.jsdelivr.net/gh/sqeezy-53/6aclass@7b76e25f9dc6529e327edc81ccb9bfadff5f3ca9/index5.html'
   ];
   var lastError = null;
+
+  function injectOnce(html, needle, insertion) {
+    if (html.indexOf(insertion) !== -1) return html;
+    if (html.indexOf(needle) === -1) throw new Error('Не найден обязательный script marker: ' + needle);
+    return html.replace(needle, needle + '\n' + insertion);
+  }
+
+  function validateFullHtml(html) {
+    var required = [
+      'id="appRoot"',
+      'id="authGate"',
+      'id="chatMessages"',
+      'id="chatInput"',
+      'id="btnMicMain"',
+      'assets/js/chat/theme-bootstrap.js',
+      'assets/js/chat/config.js',
+      'assets/js/chat/e2e-security-refactor.js',
+      'assets/js/chat/app.js'
+    ];
+    for (var i = 0; i < required.length; i++) {
+      if (html.indexOf(required[i]) === -1) throw new Error('Источник вернул неполный HTML: нет ' + required[i]);
+    }
+  }
+
   for (var i = 0; i < stableSources.length; i++) {
     try {
       var resp = await fetch(stableSources[i], { cache: 'no-store' });
       if (!resp.ok) throw new Error('HTTP ' + resp.status + ' from ' + stableSources[i]);
       var html = await resp.text();
-      if (!html || html.indexOf('id="appRoot"') === -1 || html.indexOf('assets/js/chat/app.js') === -1) {
-        throw new Error('Источник вернул неполный HTML');
-      }
-      html = html.replace(
+      validateFullHtml(html);
+
+      html = injectOnce(
+        html,
         '<script src="assets/js/chat/theme-bootstrap.js"><\/script>',
-        '<script src="assets/js/chat/theme-bootstrap.js"><\/script>\n<script src="assets/js/chat/app-version.js"><\/script>'
+        '<script src="assets/js/chat/app-version.js"><\/script>'
       );
-      html = html.replace(
+      html = injectOnce(
+        html,
         '<script src="assets/js/chat/e2e-security-refactor.js"><\/script>',
-        '<script src="assets/js/chat/e2e-security-refactor.js"><\/script>\n<script src="assets/js/chat/e2e-media-compat.js"><\/script>'
+        '<script src="assets/js/chat/e2e-device-local.js"><\/script>\n<script src="assets/js/chat/e2e-media-compat.js"><\/script>'
       );
+
       console.log('[chat6a] restored full index5 from stable source', stableSources[i]);
       document.open();
       document.write(html);
@@ -46,10 +72,11 @@
       return;
     } catch (e) {
       lastError = e;
-      console.warn('[index5 restore loader] source failed', stableSources[i], e);
+      console.warn('[index5 stable loader] source failed', stableSources[i], e);
     }
   }
-  document.getElementById('restoreCard').innerHTML = '<b>Не удалось восстановить страницу</b><div class="muted">Нажми Ctrl+Shift+R. Если не помогло — очисти кэш сайта или временно отключи блокировщики.</div><div class="err"></div>';
+
+  document.getElementById('restoreCard').innerHTML = '<b>Не удалось загрузить чат</b><div class="muted">Нажми Ctrl+Shift+R. Если не помогло — очисти кэш сайта или временно отключи блокировщики.</div><div class="err"></div>';
   document.querySelector('.err').textContent = String(lastError && (lastError.message || lastError) || 'unknown error');
 })();
 </script>
