@@ -14,6 +14,26 @@
             root.setAttribute('data-ui-performance', localStorage.getItem('index6a_ui_performance_v1') || 'auto');
         })();
 
+// Voice recorder fix: Chrome creates blobs as audio/webm;codecs=opus.
+// The upload validator expects a clean MIME like audio/webm, so normalize File().
+(function () {
+  if (window.__chat6aVoiceMimeFix) return;
+  window.__chat6aVoiceMimeFix = true;
+  var NativeFile = window.File;
+  if (typeof NativeFile !== 'function') return;
+  window.File = function Chat6AFile(parts, fileName, options) {
+    var opts = options ? Object.assign({}, options) : {};
+    var type = String(opts.type || '').toLowerCase();
+    if (type.indexOf('audio/webm') === 0) opts.type = 'audio/webm';
+    else if (type.indexOf('audio/ogg') === 0) opts.type = 'audio/ogg';
+    else if (type.indexOf('audio/mp4') === 0) opts.type = 'audio/mp4';
+    return new NativeFile(parts, fileName, opts);
+  };
+  window.File.prototype = NativeFile.prototype;
+  Object.setPrototypeOf(window.File, NativeFile);
+  console.log('[chat6a] voice MIME fix enabled');
+})();
+
 // Extra chat moderation/report UI is loaded dynamically so index5.html stays unchanged.
 setTimeout(function () {
   import('./reports-admin.js').catch(function (err) {
